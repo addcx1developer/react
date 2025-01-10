@@ -12,6 +12,10 @@
 
 "use strict";
 require("ReactFeatureFlags");
-var REACT_FRAGMENT_TYPE = Symbol.for("react.fragment");
-exports.Fragment = REACT_FRAGMENT_TYPE;
-exports.jsxDEV = void 0;
+exports.ConcurrentRoot = 1;
+exports.ContinuousEventPriority = 8;
+exports.DefaultEventPriority = 32;
+exports.DiscreteEventPriority = 2;
+exports.IdleEventPriority = 268435456;
+exports.LegacyRoot = 0;
+exports.NoEventPriority = 0;
