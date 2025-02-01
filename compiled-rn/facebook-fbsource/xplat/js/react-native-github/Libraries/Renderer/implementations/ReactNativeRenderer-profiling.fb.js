@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<0af6714e9f8a6a973165d05c5f276ca8>>
+ * @generated SignedSource<<87f8085ae4b261d5a91ca21860b3d4a4>>
  */
 
 "use strict";
@@ -2356,11 +2356,7 @@ function invalidateContextProvider(workInProgress, type, didChange) {
     : pop(didPerformWorkStackCursor);
   push(didPerformWorkStackCursor, didChange);
 }
-function is(x, y) {
-  return (x === y && (0 !== x || 1 / x === 1 / y)) || (x !== x && y !== y);
-}
-var objectIs = "function" === typeof Object.is ? Object.is : is,
-  CapturedStacks = new WeakMap();
+var CapturedStacks = new WeakMap();
 function createCapturedValueAtFiber(value, source) {
   if ("object" === typeof value && null !== value) {
     var existing = CapturedStacks.get(value);
@@ -2433,7 +2429,11 @@ function upgradeHydrationErrorsToRecoverable() {
     (hydrationErrors = null));
   return queuedErrors;
 }
-var valueCursor = createCursor(null),
+function is(x, y) {
+  return (x === y && (0 !== x || 1 / x === 1 / y)) || (x !== x && y !== y);
+}
+var objectIs = "function" === typeof Object.is ? Object.is : is,
+  valueCursor = createCursor(null),
   currentlyRenderingFiber$1 = null,
   lastContextDependency = null;
 function pushProvider(providerFiber, context, nextValue) {
@@ -7745,7 +7745,7 @@ function completeWork(current, workInProgress, renderLanes) {
         ReactNativePrivateInterface.UIManager.createView(
           current,
           type.uiViewClassName,
-          renderLanes,
+          renderLanes.containerTag,
           updatePayload
         );
         renderLanes = new ReactNativeFiberHostComponent(
@@ -7795,7 +7795,7 @@ function completeWork(current, workInProgress, renderLanes) {
         ReactNativePrivateInterface.UIManager.createView(
           renderLanes,
           "RCTRawText",
-          current,
+          current.containerTag,
           { text: newProps }
         );
         instanceCache.set(renderLanes, workInProgress);
@@ -8525,7 +8525,7 @@ function insertOrAppendPlacementNodeIntoContainer(node, before, parent) {
       if ("number" === typeof parent)
         throw Error("Container does not support insertBefore operation");
     } else
-      ReactNativePrivateInterface.UIManager.setChildren(parent, [
+      ReactNativePrivateInterface.UIManager.setChildren(parent.containerTag, [
         "number" === typeof node ? node : node._nativeTag
       ]);
   else if (4 !== tag && ((node = node.child), null !== node))
@@ -8767,8 +8767,8 @@ function commitLayoutEffectOnFiber(finishedRoot, current, finishedWork) {
       }
       finishedRoot.effectDuration += popNestedEffectDurations(current);
       break;
-    case 26:
     case 27:
+    case 26:
     case 5:
       recursivelyTraverseLayoutEffects(finishedRoot, finishedWork);
       flags & 512 && safelyAttachRef(finishedWork, finishedWork.return);
@@ -8888,7 +8888,7 @@ function commitDeletionEffectsOnFiber(
             (finishedRoot = hostParent),
               recursivelyUncacheFiberNode(deletedFiber.stateNode),
               ReactNativePrivateInterface.UIManager.manageChildren(
-                finishedRoot,
+                finishedRoot.containerTag,
                 [],
                 [],
                 [],
@@ -9072,9 +9072,6 @@ function recursivelyTraverseMutationEffects(root$jscomp$0, parentFiber) {
             hostParentIsContainer = !1;
             break a;
           case 3:
-            hostParent = parent.stateNode.containerInfo;
-            hostParentIsContainer = !0;
-            break a;
           case 4:
             hostParent = parent.stateNode.containerInfo;
             hostParentIsContainer = !0;
@@ -9267,10 +9264,10 @@ function commitMutationEffectsOnFiber(finishedWork, root) {
           ? root._visibility & -2
           : root._visibility | 1),
         instance &&
-          ((root = offscreenSubtreeIsHidden || offscreenSubtreeWasHidden),
-          null === current ||
+          (null === current ||
             viewConfig ||
-            root ||
+            offscreenSubtreeIsHidden ||
+            offscreenSubtreeWasHidden ||
             (0 !== (finishedWork.mode & 1) &&
               recursivelyTraverseDisappearLayoutEffects(finishedWork))),
         null === finishedWork.memoizedProps ||
@@ -9452,8 +9449,8 @@ function recursivelyTraverseDisappearLayoutEffects(parentFiber) {
           );
         recursivelyTraverseDisappearLayoutEffects(finishedWork);
         break;
-      case 26:
       case 27:
+      case 26:
       case 5:
         safelyDetachRef(finishedWork, finishedWork.return);
         recursivelyTraverseDisappearLayoutEffects(finishedWork);
@@ -9528,8 +9525,8 @@ function recursivelyTraverseReappearLayoutEffects(
           commitClassCallbacks(finishedWork);
         safelyAttachRef(finishedWork, finishedWork.return);
         break;
-      case 26:
       case 27:
+      case 26:
       case 5:
         recursivelyTraverseReappearLayoutEffects(
           finishedRoot,
@@ -10111,7 +10108,6 @@ var DefaultAsyncDispatcher = {
   workInProgressSuspendedRetryLanes = 0,
   workInProgressRootConcurrentErrors = null,
   workInProgressRootRecoverableErrors = null,
-  workInProgressAppearingViewTransitions = null,
   workInProgressRootDidIncludeRecursiveRenderUpdate = !1,
   globalMostRecentFallbackTime = 0,
   workInProgressRootRenderTargetTime = Infinity,
@@ -10309,7 +10305,6 @@ function performWorkOnRoot(root$jscomp$0, lanes, forceSync) {
               forceSync,
               workInProgressRootRecoverableErrors,
               workInProgressTransitions,
-              workInProgressAppearingViewTransitions,
               workInProgressRootDidIncludeRecursiveRenderUpdate,
               lanes,
               workInProgressDeferredLane,
@@ -10330,7 +10325,6 @@ function performWorkOnRoot(root$jscomp$0, lanes, forceSync) {
           forceSync,
           workInProgressRootRecoverableErrors,
           workInProgressTransitions,
-          workInProgressAppearingViewTransitions,
           workInProgressRootDidIncludeRecursiveRenderUpdate,
           lanes,
           workInProgressDeferredLane,
@@ -10348,7 +10342,6 @@ function commitRootWhenReady(
   finishedWork,
   recoverableErrors,
   transitions,
-  appearingViewTransitions,
   didIncludeRenderPhaseUpdate,
   lanes,
   spawnedLane,
@@ -10357,9 +10350,7 @@ function commitRootWhenReady(
 ) {
   root.timeoutHandle = -1;
   var subtreeFlags = finishedWork.subtreeFlags;
-  (subtreeFlags =
-    subtreeFlags & 8192 || 16785408 === (subtreeFlags & 16785408)) &&
-    subtreeFlags &&
+  (subtreeFlags & 8192 || 16785408 === (subtreeFlags & 16785408)) &&
     accumulateSuspenseyCommitOnFiber(finishedWork);
   commitRoot(
     root,
@@ -10367,7 +10358,6 @@ function commitRootWhenReady(
     lanes,
     recoverableErrors,
     transitions,
-    appearingViewTransitions,
     didIncludeRenderPhaseUpdate,
     spawnedLane,
     updatedLanes,
@@ -10474,7 +10464,6 @@ function prepareFreshStack(root, lanes) {
   workInProgressRootRecoverableErrors = workInProgressRootConcurrentErrors =
     null;
   workInProgressRootDidIncludeRecursiveRenderUpdate = !1;
-  workInProgressAppearingViewTransitions = null;
   0 !== (lanes & 8) && (lanes |= lanes & 32);
   var allEntangledLanes = root.entangledLanes;
   if (0 !== allEntangledLanes)
@@ -10994,7 +10983,6 @@ function commitRoot(
   lanes,
   recoverableErrors,
   transitions,
-  appearingViewTransitions,
   didIncludeRenderPhaseUpdate,
   spawnedLane,
   updatedLanes,
@@ -11052,12 +11040,7 @@ function commitRoot(
       spawnedLane = executionContext;
       executionContext |= 4;
       try {
-        commitBeforeMutationEffects(
-          root,
-          finishedWork,
-          lanes,
-          appearingViewTransitions
-        );
+        commitBeforeMutationEffects(root, finishedWork, lanes);
       } finally {
         (executionContext = spawnedLane),
           (currentUpdatePriority = transitions),
@@ -11826,11 +11809,11 @@ function updateContainer(element, container, parentComponent, callback) {
   return lane;
 }
 var isomorphicReactPackageVersion = React.version;
-if ("19.1.0-native-fb-0bf1f39e-20250110" !== isomorphicReactPackageVersion)
+if ("19.1.0-native-fb-152bfe37-20250131" !== isomorphicReactPackageVersion)
   throw Error(
     'Incompatible React versions: The "react" and "react-native-renderer" packages must have the exact same version. Instead got:\n  - react:                  ' +
       (isomorphicReactPackageVersion +
-        "\n  - react-native-renderer:  19.1.0-native-fb-0bf1f39e-20250110\nLearn more: https://react.dev/warnings/version-mismatch")
+        "\n  - react-native-renderer:  19.1.0-native-fb-152bfe37-20250131\nLearn more: https://react.dev/warnings/version-mismatch")
   );
 if (
   "function" !==
@@ -11877,16 +11860,16 @@ batchedUpdatesImpl = function (fn, a) {
   }
 };
 var roots = new Map(),
-  internals$jscomp$inline_1383 = {
+  internals$jscomp$inline_1382 = {
     bundleType: 0,
-    version: "19.1.0-native-fb-0bf1f39e-20250110",
+    version: "19.1.0-native-fb-152bfe37-20250131",
     rendererPackageName: "react-native-renderer",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.1.0-native-fb-0bf1f39e-20250110"
+    reconcilerVersion: "19.1.0-native-fb-152bfe37-20250131"
   };
 null !== extraDevToolsConfig &&
-  (internals$jscomp$inline_1383.rendererConfig = extraDevToolsConfig);
-internals$jscomp$inline_1383.getLaneLabelMap = function () {
+  (internals$jscomp$inline_1382.rendererConfig = extraDevToolsConfig);
+internals$jscomp$inline_1382.getLaneLabelMap = function () {
   for (
     var map = new Map(), lane = 1, index$159 = 0;
     31 > index$159;
@@ -11898,20 +11881,20 @@ internals$jscomp$inline_1383.getLaneLabelMap = function () {
   }
   return map;
 };
-internals$jscomp$inline_1383.injectProfilingHooks = function (profilingHooks) {
+internals$jscomp$inline_1382.injectProfilingHooks = function (profilingHooks) {
   injectedProfilingHooks = profilingHooks;
 };
 if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
-  var hook$jscomp$inline_1682 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
+  var hook$jscomp$inline_1681 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
   if (
-    !hook$jscomp$inline_1682.isDisabled &&
-    hook$jscomp$inline_1682.supportsFiber
+    !hook$jscomp$inline_1681.isDisabled &&
+    hook$jscomp$inline_1681.supportsFiber
   )
     try {
-      (rendererID = hook$jscomp$inline_1682.inject(
-        internals$jscomp$inline_1383
+      (rendererID = hook$jscomp$inline_1681.inject(
+        internals$jscomp$inline_1382
       )),
-        (injectedHook = hook$jscomp$inline_1682);
+        (injectedHook = hook$jscomp$inline_1681);
     } catch (err) {}
 }
 exports.createPortal = function (children, containerTag) {
@@ -11988,7 +11971,7 @@ exports.render = function (element, containerTag, callback, options) {
       void 0 !== options.onRecoverableError &&
       (onRecoverableError = options.onRecoverableError);
     options = new FiberRootNode(
-      containerTag,
+      { containerTag: containerTag, publicInstance: null },
       0,
       !1,
       "",

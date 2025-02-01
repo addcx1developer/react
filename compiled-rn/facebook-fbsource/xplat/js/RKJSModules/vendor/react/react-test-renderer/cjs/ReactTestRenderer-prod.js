@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<b311a9f203156fc6c997ad8f20578f0e>>
+ * @generated SignedSource<<fea4b5009d4c160bfe48097c76a4b655>>
  */
 
 "use strict";
@@ -676,12 +676,7 @@ function invalidateContextProvider(workInProgress, type, didChange) {
     : pop(didPerformWorkStackCursor);
   push(didPerformWorkStackCursor, didChange);
 }
-function is(x, y) {
-  return (x === y && (0 !== x || 1 / x === 1 / y)) || (x !== x && y !== y);
-}
-var objectIs = "function" === typeof Object.is ? Object.is : is,
-  prefix,
-  suffix;
+var prefix, suffix;
 function describeBuiltInComponentFrame(name) {
   if (void 0 === prefix)
     try {
@@ -928,7 +923,11 @@ function upgradeHydrationErrorsToRecoverable() {
     (hydrationErrors = null));
   return queuedErrors;
 }
-var valueCursor = createCursor(null),
+function is(x, y) {
+  return (x === y && (0 !== x || 1 / x === 1 / y)) || (x !== x && y !== y);
+}
+var objectIs = "function" === typeof Object.is ? Object.is : is,
+  valueCursor = createCursor(null),
   currentlyRenderingFiber$1 = null,
   lastContextDependency = null;
 function pushProvider(providerFiber, context, nextValue) {
@@ -6814,8 +6813,8 @@ function commitLayoutEffectOnFiber(finishedRoot, current, finishedWork) {
         }
       }
       break;
-    case 26:
     case 27:
+    case 26:
     case 5:
       recursivelyTraverseLayoutEffects(finishedRoot, finishedWork);
       flags & 512 && safelyAttachRef(finishedWork, finishedWork.return);
@@ -7073,9 +7072,6 @@ function recursivelyTraverseMutationEffects(root$jscomp$0, parentFiber) {
             hostParentIsContainer = !1;
             break a;
           case 3:
-            hostParent = parent.stateNode.containerInfo;
-            hostParentIsContainer = !0;
-            break a;
           case 4:
             hostParent = parent.stateNode.containerInfo;
             hostParentIsContainer = !0;
@@ -7226,57 +7222,56 @@ function commitMutationEffectsOnFiber(finishedWork, root) {
           ? root._visibility & -2
           : root._visibility | 1),
         instance &&
-          ((root = offscreenSubtreeIsHidden || offscreenSubtreeWasHidden),
-          null === current ||
+          (null === current ||
             wasHidden ||
-            root ||
+            offscreenSubtreeIsHidden ||
+            offscreenSubtreeWasHidden ||
             (0 !== (finishedWork.mode & 1) &&
               recursivelyTraverseDisappearLayoutEffects(finishedWork))),
         null === finishedWork.memoizedProps ||
           "manual" !== finishedWork.memoizedProps.mode)
       )
-        a: for (current = null, wasHidden = finishedWork; ; ) {
-          if (5 === wasHidden.tag) {
+        a: for (current = null, root = finishedWork; ; ) {
+          if (5 === root.tag) {
             if (null === current) {
-              root = current = wasHidden;
+              wasHidden = current = root;
               try {
-                (existingHiddenCallbacks = root.stateNode),
+                (existingHiddenCallbacks = wasHidden.stateNode),
                   instance
                     ? (existingHiddenCallbacks.isHidden = !0)
-                    : (root.stateNode.isHidden = !1);
+                    : (wasHidden.stateNode.isHidden = !1);
               } catch (error) {
-                captureCommitPhaseError(root, root.return, error);
+                captureCommitPhaseError(wasHidden, wasHidden.return, error);
               }
             }
-          } else if (6 === wasHidden.tag) {
+          } else if (6 === root.tag) {
             if (null === current) {
-              root = wasHidden;
+              wasHidden = root;
               try {
-                root.stateNode.isHidden = instance ? !0 : !1;
+                wasHidden.stateNode.isHidden = instance ? !0 : !1;
               } catch (error) {
-                captureCommitPhaseError(root, root.return, error);
+                captureCommitPhaseError(wasHidden, wasHidden.return, error);
               }
             }
           } else if (
-            ((22 !== wasHidden.tag && 23 !== wasHidden.tag) ||
-              null === wasHidden.memoizedState ||
-              wasHidden === finishedWork) &&
-            null !== wasHidden.child
+            ((22 !== root.tag && 23 !== root.tag) ||
+              null === root.memoizedState ||
+              root === finishedWork) &&
+            null !== root.child
           ) {
-            wasHidden.child.return = wasHidden;
-            wasHidden = wasHidden.child;
+            root.child.return = root;
+            root = root.child;
             continue;
           }
-          if (wasHidden === finishedWork) break a;
-          for (; null === wasHidden.sibling; ) {
-            if (null === wasHidden.return || wasHidden.return === finishedWork)
-              break a;
-            current === wasHidden && (current = null);
-            wasHidden = wasHidden.return;
+          if (root === finishedWork) break a;
+          for (; null === root.sibling; ) {
+            if (null === root.return || root.return === finishedWork) break a;
+            current === root && (current = null);
+            root = root.return;
           }
-          current === wasHidden && (current = null);
-          wasHidden.sibling.return = wasHidden.return;
-          wasHidden = wasHidden.sibling;
+          current === root && (current = null);
+          root.sibling.return = root.return;
+          root = root.sibling;
         }
       flags & 4 &&
         ((flags = finishedWork.updateQueue),
@@ -7381,8 +7376,8 @@ function recursivelyTraverseDisappearLayoutEffects(parentFiber) {
           );
         recursivelyTraverseDisappearLayoutEffects(finishedWork);
         break;
-      case 26:
       case 27:
+      case 26:
       case 5:
         safelyDetachRef(finishedWork, finishedWork.return);
         recursivelyTraverseDisappearLayoutEffects(finishedWork);
@@ -7456,8 +7451,8 @@ function recursivelyTraverseReappearLayoutEffects(
           commitClassCallbacks(finishedWork);
         safelyAttachRef(finishedWork, finishedWork.return);
         break;
-      case 26:
       case 27:
+      case 26:
       case 5:
         recursivelyTraverseReappearLayoutEffects(
           finishedRoot,
@@ -8010,7 +8005,6 @@ var DefaultAsyncDispatcher = {
   workInProgressSuspendedRetryLanes = 0,
   workInProgressRootConcurrentErrors = null,
   workInProgressRootRecoverableErrors = null,
-  workInProgressAppearingViewTransitions = null,
   workInProgressRootDidIncludeRecursiveRenderUpdate = !1,
   globalMostRecentFallbackTime = 0,
   workInProgressRootRenderTargetTime = Infinity,
@@ -8205,7 +8199,6 @@ function performWorkOnRoot(root$jscomp$0, lanes, forceSync) {
               forceSync,
               workInProgressRootRecoverableErrors,
               workInProgressTransitions,
-              workInProgressAppearingViewTransitions,
               workInProgressRootDidIncludeRecursiveRenderUpdate,
               lanes,
               workInProgressDeferredLane,
@@ -8226,7 +8219,6 @@ function performWorkOnRoot(root$jscomp$0, lanes, forceSync) {
           forceSync,
           workInProgressRootRecoverableErrors,
           workInProgressTransitions,
-          workInProgressAppearingViewTransitions,
           workInProgressRootDidIncludeRecursiveRenderUpdate,
           lanes,
           workInProgressDeferredLane,
@@ -8244,7 +8236,6 @@ function commitRootWhenReady(
   finishedWork,
   recoverableErrors,
   transitions,
-  appearingViewTransitions,
   didIncludeRenderPhaseUpdate,
   lanes,
   spawnedLane,
@@ -8253,9 +8244,7 @@ function commitRootWhenReady(
 ) {
   root.timeoutHandle = -1;
   var subtreeFlags = finishedWork.subtreeFlags;
-  (subtreeFlags =
-    subtreeFlags & 8192 || 16785408 === (subtreeFlags & 16785408)) &&
-    subtreeFlags &&
+  (subtreeFlags & 8192 || 16785408 === (subtreeFlags & 16785408)) &&
     accumulateSuspenseyCommitOnFiber(finishedWork);
   commitRoot(
     root,
@@ -8263,7 +8252,6 @@ function commitRootWhenReady(
     lanes,
     recoverableErrors,
     transitions,
-    appearingViewTransitions,
     didIncludeRenderPhaseUpdate,
     spawnedLane,
     updatedLanes,
@@ -8387,7 +8375,6 @@ function prepareFreshStack(root, lanes) {
   workInProgressRootRecoverableErrors = workInProgressRootConcurrentErrors =
     null;
   workInProgressRootDidIncludeRecursiveRenderUpdate = !1;
-  workInProgressAppearingViewTransitions = null;
   0 !== (lanes & 8) && (lanes |= lanes & 32);
   var allEntangledLanes = root.entangledLanes;
   if (0 !== allEntangledLanes)
@@ -8802,7 +8789,6 @@ function commitRoot(
   lanes,
   recoverableErrors,
   transitions,
-  appearingViewTransitions,
   didIncludeRenderPhaseUpdate,
   spawnedLane,
   updatedLanes,
@@ -8855,12 +8841,7 @@ function commitRoot(
       spawnedLane = executionContext;
       executionContext |= 4;
       try {
-        commitBeforeMutationEffects(
-          root,
-          finishedWork,
-          lanes,
-          appearingViewTransitions
-        );
+        commitBeforeMutationEffects(root, finishedWork, lanes);
       } finally {
         (executionContext = spawnedLane),
           (currentUpdatePriority = transitions),
@@ -9825,24 +9806,24 @@ function wrapFiber(fiber) {
     fiberToWrapper.set(fiber, wrapper));
   return wrapper;
 }
-var internals$jscomp$inline_1402 = {
+var internals$jscomp$inline_1401 = {
   bundleType: 0,
-  version: "19.1.0-native-fb-0bf1f39e-20250110",
+  version: "19.1.0-native-fb-152bfe37-20250131",
   rendererPackageName: "react-test-renderer",
   currentDispatcherRef: ReactSharedInternals,
-  reconcilerVersion: "19.1.0-native-fb-0bf1f39e-20250110"
+  reconcilerVersion: "19.1.0-native-fb-152bfe37-20250131"
 };
 if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
-  var hook$jscomp$inline_1403 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
+  var hook$jscomp$inline_1402 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
   if (
-    !hook$jscomp$inline_1403.isDisabled &&
-    hook$jscomp$inline_1403.supportsFiber
+    !hook$jscomp$inline_1402.isDisabled &&
+    hook$jscomp$inline_1402.supportsFiber
   )
     try {
-      (rendererID = hook$jscomp$inline_1403.inject(
-        internals$jscomp$inline_1402
+      (rendererID = hook$jscomp$inline_1402.inject(
+        internals$jscomp$inline_1401
       )),
-        (injectedHook = hook$jscomp$inline_1403);
+        (injectedHook = hook$jscomp$inline_1402);
     } catch (err) {}
 }
 exports._Scheduler = Scheduler;
@@ -9966,4 +9947,4 @@ exports.unstable_batchedUpdates = function (fn, a) {
         flushSyncWorkAcrossRoots_impl(0, !0));
   }
 };
-exports.version = "19.1.0-native-fb-0bf1f39e-20250110";
+exports.version = "19.1.0-native-fb-152bfe37-20250131";

@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<2749caf6b148ee8b1c5525431f101c3f>>
+ * @generated SignedSource<<76c037ee8312b8fdc15b960b507d208d>>
  */
 
 "use strict";
@@ -30,6 +30,8 @@ var ReactNativePrivateInterface = require("react-native/Libraries/ReactPrivate/R
   passChildrenWhenCloningPersistedNodes =
     dynamicFlagsUntyped.passChildrenWhenCloningPersistedNodes,
   enableSiblingPrerendering = dynamicFlagsUntyped.enableSiblingPrerendering,
+  enableFastAddPropertiesInDiffing =
+    dynamicFlagsUntyped.enableFastAddPropertiesInDiffing,
   ReactSharedInternals =
     React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
   REACT_LEGACY_ELEMENT_TYPE = Symbol.for("react.element"),
@@ -1412,12 +1414,9 @@ function diffNestedProperty(
 function addNestedProperty(updatePayload, nextProp, validAttributes) {
   if (!nextProp) return updatePayload;
   if (!isArrayImpl(nextProp))
-    return diffProperties(
-      updatePayload,
-      emptyObject,
-      nextProp,
-      validAttributes
-    );
+    return enableFastAddPropertiesInDiffing
+      ? fastAddProperties(updatePayload, nextProp, validAttributes)
+      : diffProperties(updatePayload, emptyObject, nextProp, validAttributes);
   for (var i = 0; i < nextProp.length; i++)
     updatePayload = addNestedProperty(
       updatePayload,
@@ -2106,11 +2105,7 @@ function invalidateContextProvider(workInProgress, type, didChange) {
     : pop(didPerformWorkStackCursor);
   push(didPerformWorkStackCursor, didChange);
 }
-function is(x, y) {
-  return (x === y && (0 !== x || 1 / x === 1 / y)) || (x !== x && y !== y);
-}
-var objectIs = "function" === typeof Object.is ? Object.is : is,
-  CapturedStacks = new WeakMap();
+var CapturedStacks = new WeakMap();
 function createCapturedValueAtFiber(value, source) {
   if ("object" === typeof value && null !== value) {
     var existing = CapturedStacks.get(value);
@@ -2172,7 +2167,11 @@ function upgradeHydrationErrorsToRecoverable() {
     (hydrationErrors = null));
   return queuedErrors;
 }
-var valueCursor = createCursor(null),
+function is(x, y) {
+  return (x === y && (0 !== x || 1 / x === 1 / y)) || (x !== x && y !== y);
+}
+var objectIs = "function" === typeof Object.is ? Object.is : is,
+  valueCursor = createCursor(null),
   currentlyRenderingFiber$1 = null,
   lastContextDependency = null;
 function pushProvider(providerFiber, context, nextValue) {
@@ -7345,7 +7344,7 @@ function updateHostContainer(current, workInProgress) {
     current.pendingChildren = newChildSet;
     workInProgress.flags |= 4;
     enableFabricCompleteRootInCommitPhase ||
-      completeRoot(container, newChildSet);
+      completeRoot(container.containerTag, newChildSet);
   }
 }
 function scheduleRetryEffect(workInProgress, retryQueue) {
@@ -7453,13 +7452,13 @@ function completeWork(current, workInProgress, renderLanes) {
     case 27:
     case 5:
       popHostContext(workInProgress);
-      renderLanes = workInProgress.type;
-      if (null !== current && null != workInProgress.stateNode) {
-        renderLanes = current.stateNode;
-        var oldProps = current.memoizedProps;
+      var type = workInProgress.type;
+      if (null !== current && null != workInProgress.stateNode)
         if (
+          ((renderLanes = current.stateNode),
+          (type = current.memoizedProps),
           (current = doesRequireClone(current, workInProgress)) ||
-          oldProps !== newProps
+            type !== newProps)
         ) {
           var newChildSet = null;
           current &&
@@ -7470,9 +7469,9 @@ function completeWork(current, workInProgress, renderLanes) {
               : createChildNodeSet()),
             appendAllChildrenToContainer(newChildSet, workInProgress, !1, !1));
           b: {
-            oldProps = diffProperties(
+            type = diffProperties(
               null,
-              oldProps,
+              type,
               newProps,
               renderLanes.canonical.viewConfig.validAttributes
             );
@@ -7481,18 +7480,18 @@ function completeWork(current, workInProgress, renderLanes) {
             if (current)
               newProps =
                 null != newChildSet
-                  ? null !== oldProps
+                  ? null !== type
                     ? cloneNodeWithNewChildrenAndProps(
                         newProps,
                         newChildSet,
-                        oldProps
+                        type
                       )
                     : cloneNodeWithNewChildren(newProps, newChildSet)
-                  : null !== oldProps
-                    ? cloneNodeWithNewChildrenAndProps(newProps, oldProps)
+                  : null !== type
+                    ? cloneNodeWithNewChildrenAndProps(newProps, type)
                     : cloneNodeWithNewChildren(newProps);
-            else if (null !== oldProps)
-              newProps = cloneNodeWithNewProps(newProps, oldProps);
+            else if (null !== type)
+              newProps = cloneNodeWithNewProps(newProps, type);
             else {
               newProps = renderLanes;
               break b;
@@ -7508,7 +7507,7 @@ function completeWork(current, workInProgress, renderLanes) {
                   appendAllChildren(newProps, workInProgress, !1, !1)
                 : enablePersistedModeClonedFlag || (workInProgress.flags |= 4));
         } else workInProgress.stateNode = renderLanes;
-      } else {
+      else {
         if (!newProps) {
           if (null === workInProgress.stateNode)
             throw Error(
@@ -7517,35 +7516,32 @@ function completeWork(current, workInProgress, renderLanes) {
           bubbleProperties(workInProgress);
           return null;
         }
-        oldProps = rootInstanceStackCursor.current;
+        renderLanes = rootInstanceStackCursor.current;
         current = nextReactTag;
         nextReactTag += 2;
-        renderLanes = getViewConfigForType(renderLanes);
-        newChildSet = fastAddProperties(
-          null,
-          newProps,
-          renderLanes.validAttributes
-        );
-        oldProps = createNode(
+        type = getViewConfigForType(type);
+        newChildSet = fastAddProperties(null, newProps, type.validAttributes);
+        newChildSet = createNode(
           current,
-          renderLanes.uiViewClassName,
-          oldProps,
+          type.uiViewClassName,
+          renderLanes.containerTag,
           newChildSet,
           workInProgress
         );
-        newChildSet = ReactNativePrivateInterface.createPublicInstance(
+        renderLanes = ReactNativePrivateInterface.createPublicInstance(
           current,
-          renderLanes,
-          workInProgress
+          type,
+          workInProgress,
+          renderLanes.publicInstance
         );
         current = {
-          node: oldProps,
+          node: newChildSet,
           canonical: {
             nativeTag: current,
-            viewConfig: renderLanes,
+            viewConfig: type,
             currentProps: newProps,
             internalInstanceHandle: workInProgress,
-            publicInstance: newChildSet
+            publicInstance: renderLanes
           }
         };
         markCloned(workInProgress);
@@ -7606,14 +7602,14 @@ function completeWork(current, workInProgress, renderLanes) {
             (workInProgress.memoizedState = null);
           workInProgress.flags |= 4;
           bubbleProperties(workInProgress);
-          oldProps = !1;
+          type = !1;
         } else
-          (oldProps = upgradeHydrationErrorsToRecoverable()),
+          (type = upgradeHydrationErrorsToRecoverable()),
             null !== current &&
               null !== current.memoizedState &&
-              (current.memoizedState.hydrationErrors = oldProps),
-            (oldProps = !0);
-        if (!oldProps) {
+              (current.memoizedState.hydrationErrors = type),
+            (type = !0);
+        if (!type) {
           if (workInProgress.flags & 256)
             return popSuspenseHandler(workInProgress), workInProgress;
           popSuspenseHandler(workInProgress);
@@ -7627,16 +7623,16 @@ function completeWork(current, workInProgress, renderLanes) {
       current = null !== current && null !== current.memoizedState;
       newProps &&
         ((renderLanes = workInProgress.child),
-        (oldProps = null),
+        (type = null),
         null !== renderLanes.alternate &&
           null !== renderLanes.alternate.memoizedState &&
           null !== renderLanes.alternate.memoizedState.cachePool &&
-          (oldProps = renderLanes.alternate.memoizedState.cachePool.pool),
+          (type = renderLanes.alternate.memoizedState.cachePool.pool),
         (newChildSet = null),
         null !== renderLanes.memoizedState &&
           null !== renderLanes.memoizedState.cachePool &&
           (newChildSet = renderLanes.memoizedState.cachePool.pool),
-        newChildSet !== oldProps && (renderLanes.flags |= 2048));
+        newChildSet !== type && (renderLanes.flags |= 2048));
       newProps !== current && newProps && (workInProgress.child.flags |= 8192);
       scheduleRetryEffect(workInProgress, workInProgress.updateQueue);
       null !== workInProgress.updateQueue &&
@@ -7663,12 +7659,12 @@ function completeWork(current, workInProgress, renderLanes) {
       );
     case 19:
       pop(suspenseStackCursor);
-      oldProps = workInProgress.memoizedState;
-      if (null === oldProps) return bubbleProperties(workInProgress), null;
+      type = workInProgress.memoizedState;
+      if (null === type) return bubbleProperties(workInProgress), null;
       newProps = 0 !== (workInProgress.flags & 128);
-      newChildSet = oldProps.rendering;
+      newChildSet = type.rendering;
       if (null === newChildSet)
-        if (newProps) cutOffTailIfNeeded(oldProps, !1);
+        if (newProps) cutOffTailIfNeeded(type, !1);
         else {
           if (
             0 !== workInProgressRootExitStatus ||
@@ -7678,7 +7674,7 @@ function completeWork(current, workInProgress, renderLanes) {
               newChildSet = findFirstSuspended(current);
               if (null !== newChildSet) {
                 workInProgress.flags |= 128;
-                cutOffTailIfNeeded(oldProps, !1);
+                cutOffTailIfNeeded(type, !1);
                 current = newChildSet.updateQueue;
                 workInProgress.updateQueue = current;
                 scheduleRetryEffect(workInProgress, current);
@@ -7695,11 +7691,11 @@ function completeWork(current, workInProgress, renderLanes) {
               }
               current = current.sibling;
             }
-          null !== oldProps.tail &&
+          null !== type.tail &&
             now() > workInProgressRootRenderTargetTime &&
             ((workInProgress.flags |= 128),
             (newProps = !0),
-            cutOffTailIfNeeded(oldProps, !1),
+            cutOffTailIfNeeded(type, !1),
             (workInProgress.lanes = 4194304));
         }
       else {
@@ -7711,35 +7707,35 @@ function completeWork(current, workInProgress, renderLanes) {
               (current = current.updateQueue),
               (workInProgress.updateQueue = current),
               scheduleRetryEffect(workInProgress, current),
-              cutOffTailIfNeeded(oldProps, !0),
-              null === oldProps.tail &&
-                "hidden" === oldProps.tailMode &&
+              cutOffTailIfNeeded(type, !0),
+              null === type.tail &&
+                "hidden" === type.tailMode &&
                 !newChildSet.alternate)
             )
               return bubbleProperties(workInProgress), null;
           } else
-            2 * now() - oldProps.renderingStartTime >
+            2 * now() - type.renderingStartTime >
               workInProgressRootRenderTargetTime &&
               536870912 !== renderLanes &&
               ((workInProgress.flags |= 128),
               (newProps = !0),
-              cutOffTailIfNeeded(oldProps, !1),
+              cutOffTailIfNeeded(type, !1),
               (workInProgress.lanes = 4194304));
-        oldProps.isBackwards
+        type.isBackwards
           ? ((newChildSet.sibling = workInProgress.child),
             (workInProgress.child = newChildSet))
-          : ((current = oldProps.last),
+          : ((current = type.last),
             null !== current
               ? (current.sibling = newChildSet)
               : (workInProgress.child = newChildSet),
-            (oldProps.last = newChildSet));
+            (type.last = newChildSet));
       }
-      if (null !== oldProps.tail)
+      if (null !== type.tail)
         return (
-          (workInProgress = oldProps.tail),
-          (oldProps.rendering = workInProgress),
-          (oldProps.tail = workInProgress.sibling),
-          (oldProps.renderingStartTime = now()),
+          (workInProgress = type.tail),
+          (type.rendering = workInProgress),
+          (type.tail = workInProgress.sibling),
+          (type.renderingStartTime = now()),
           (workInProgress.sibling = null),
           (current = suspenseStackCursor.current),
           push(suspenseStackCursor, newProps ? (current & 1) | 2 : current & 1),
@@ -8112,7 +8108,7 @@ function commitHostPortalContainerChildren(
   portal = portal.containerInfo;
   try {
     enableFabricCompleteRootInCommitPhase &&
-      completeRoot(portal, pendingChildren);
+      completeRoot(portal.containerTag, pendingChildren);
   } catch (error) {
     captureCommitPhaseError(finishedWork, finishedWork.return, error);
   }
@@ -8252,8 +8248,8 @@ function commitLayoutEffectOnFiber(finishedRoot, current, finishedWork) {
         }
       }
       break;
-    case 26:
     case 27:
+    case 26:
     case 5:
       recursivelyTraverseLayoutEffects(finishedRoot, finishedWork);
       null === current && flags & 4 && commitHostMount(finishedWork);
@@ -8540,7 +8536,8 @@ function commitMutationEffectsOnFiber(finishedWork, root) {
         flags = root.containerInfo;
         current = root.pendingChildren;
         try {
-          enableFabricCompleteRootInCommitPhase && completeRoot(flags, current);
+          enableFabricCompleteRootInCommitPhase &&
+            completeRoot(flags.containerTag, current);
         } catch (error) {
           captureCommitPhaseError(finishedWork, finishedWork.return, error);
         }
@@ -8592,14 +8589,14 @@ function commitMutationEffectsOnFiber(finishedWork, root) {
         (offscreenSubtreeWasHidden ||
           null === current ||
           safelyDetachRef(current, current.return));
-      retryQueue = null !== finishedWork.memoizedState;
-      suspenseCallback = null !== current && null !== current.memoizedState;
+      suspenseCallback = null !== finishedWork.memoizedState;
+      retryQueue = null !== current && null !== current.memoizedState;
       if (finishedWork.mode & 1) {
         var prevOffscreenSubtreeIsHidden = offscreenSubtreeIsHidden,
           prevOffscreenSubtreeWasHidden = offscreenSubtreeWasHidden;
-        offscreenSubtreeIsHidden = prevOffscreenSubtreeIsHidden || retryQueue;
-        offscreenSubtreeWasHidden =
-          prevOffscreenSubtreeWasHidden || suspenseCallback;
+        offscreenSubtreeIsHidden =
+          prevOffscreenSubtreeIsHidden || suspenseCallback;
+        offscreenSubtreeWasHidden = prevOffscreenSubtreeWasHidden || retryQueue;
         recursivelyTraverseMutationEffects(root, finishedWork);
         offscreenSubtreeWasHidden = prevOffscreenSubtreeWasHidden;
         offscreenSubtreeIsHidden = prevOffscreenSubtreeIsHidden;
@@ -8610,14 +8607,14 @@ function commitMutationEffectsOnFiber(finishedWork, root) {
       root._visibility &= -3;
       root._visibility |= root._pendingVisibility & 2;
       flags & 8192 &&
-        ((root._visibility = retryQueue
+        ((root._visibility = suspenseCallback
           ? root._visibility & -2
           : root._visibility | 1),
-        retryQueue &&
-          ((root = offscreenSubtreeIsHidden || offscreenSubtreeWasHidden),
-          null === current ||
-            suspenseCallback ||
-            root ||
+        suspenseCallback &&
+          (null === current ||
+            retryQueue ||
+            offscreenSubtreeIsHidden ||
+            offscreenSubtreeWasHidden ||
             (0 !== (finishedWork.mode & 1) &&
               recursivelyTraverseDisappearLayoutEffects(finishedWork))));
       flags & 4 &&
@@ -8678,8 +8675,8 @@ function recursivelyTraverseDisappearLayoutEffects(parentFiber) {
           );
         recursivelyTraverseDisappearLayoutEffects(finishedWork);
         break;
-      case 26:
       case 27:
+      case 26:
       case 5:
         safelyDetachRef(finishedWork, finishedWork.return);
         recursivelyTraverseDisappearLayoutEffects(finishedWork);
@@ -8754,8 +8751,8 @@ function recursivelyTraverseReappearLayoutEffects(
           commitClassCallbacks(finishedWork);
         safelyAttachRef(finishedWork, finishedWork.return);
         break;
-      case 26:
       case 27:
+      case 26:
       case 5:
         recursivelyTraverseReappearLayoutEffects(
           finishedRoot,
@@ -9312,7 +9309,6 @@ var DefaultAsyncDispatcher = {
   workInProgressSuspendedRetryLanes = 0,
   workInProgressRootConcurrentErrors = null,
   workInProgressRootRecoverableErrors = null,
-  workInProgressAppearingViewTransitions = null,
   workInProgressRootDidIncludeRecursiveRenderUpdate = !1,
   globalMostRecentFallbackTime = 0,
   workInProgressRootRenderTargetTime = Infinity,
@@ -9507,7 +9503,6 @@ function performWorkOnRoot(root$jscomp$0, lanes, forceSync) {
               forceSync,
               workInProgressRootRecoverableErrors,
               workInProgressTransitions,
-              workInProgressAppearingViewTransitions,
               workInProgressRootDidIncludeRecursiveRenderUpdate,
               lanes,
               workInProgressDeferredLane,
@@ -9528,7 +9523,6 @@ function performWorkOnRoot(root$jscomp$0, lanes, forceSync) {
           forceSync,
           workInProgressRootRecoverableErrors,
           workInProgressTransitions,
-          workInProgressAppearingViewTransitions,
           workInProgressRootDidIncludeRecursiveRenderUpdate,
           lanes,
           workInProgressDeferredLane,
@@ -9546,7 +9540,6 @@ function commitRootWhenReady(
   finishedWork,
   recoverableErrors,
   transitions,
-  appearingViewTransitions,
   didIncludeRenderPhaseUpdate,
   lanes,
   spawnedLane,
@@ -9555,9 +9548,7 @@ function commitRootWhenReady(
 ) {
   root.timeoutHandle = -1;
   var subtreeFlags = finishedWork.subtreeFlags;
-  (subtreeFlags =
-    subtreeFlags & 8192 || 16785408 === (subtreeFlags & 16785408)) &&
-    subtreeFlags &&
+  (subtreeFlags & 8192 || 16785408 === (subtreeFlags & 16785408)) &&
     accumulateSuspenseyCommitOnFiber(finishedWork);
   commitRoot(
     root,
@@ -9565,7 +9556,6 @@ function commitRootWhenReady(
     lanes,
     recoverableErrors,
     transitions,
-    appearingViewTransitions,
     didIncludeRenderPhaseUpdate,
     spawnedLane,
     updatedLanes,
@@ -9672,7 +9662,6 @@ function prepareFreshStack(root, lanes) {
   workInProgressRootRecoverableErrors = workInProgressRootConcurrentErrors =
     null;
   workInProgressRootDidIncludeRecursiveRenderUpdate = !1;
-  workInProgressAppearingViewTransitions = null;
   0 !== (lanes & 8) && (lanes |= lanes & 32);
   var allEntangledLanes = root.entangledLanes;
   if (0 !== allEntangledLanes)
@@ -10119,7 +10108,6 @@ function commitRoot(
   lanes,
   recoverableErrors,
   transitions,
-  appearingViewTransitions,
   didIncludeRenderPhaseUpdate,
   spawnedLane,
   updatedLanes,
@@ -10172,12 +10160,7 @@ function commitRoot(
       spawnedLane = executionContext;
       executionContext |= 4;
       try {
-        commitBeforeMutationEffects(
-          root,
-          finishedWork,
-          lanes,
-          appearingViewTransitions
-        );
+        commitBeforeMutationEffects(root, finishedWork, lanes);
       } finally {
         (executionContext = spawnedLane),
           (currentUpdatePriority = transitions),
@@ -10923,7 +10906,7 @@ function createTextInstance(
     node: createNode(
       hostContext,
       "RCTRawText",
-      rootContainerInstance,
+      rootContainerInstance.containerTag,
       { text: text },
       internalInstanceHandle
     )
@@ -11045,26 +11028,26 @@ batchedUpdatesImpl = function (fn, a) {
   }
 };
 var roots = new Map(),
-  internals$jscomp$inline_1238 = {
+  internals$jscomp$inline_1237 = {
     bundleType: 0,
-    version: "19.1.0-native-fb-0bf1f39e-20250110",
+    version: "19.1.0-native-fb-152bfe37-20250131",
     rendererPackageName: "react-native-renderer",
     currentDispatcherRef: ReactSharedInternals,
-    reconcilerVersion: "19.1.0-native-fb-0bf1f39e-20250110"
+    reconcilerVersion: "19.1.0-native-fb-152bfe37-20250131"
   };
 null !== extraDevToolsConfig &&
-  (internals$jscomp$inline_1238.rendererConfig = extraDevToolsConfig);
+  (internals$jscomp$inline_1237.rendererConfig = extraDevToolsConfig);
 if ("undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__) {
-  var hook$jscomp$inline_1550 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
+  var hook$jscomp$inline_1549 = __REACT_DEVTOOLS_GLOBAL_HOOK__;
   if (
-    !hook$jscomp$inline_1550.isDisabled &&
-    hook$jscomp$inline_1550.supportsFiber
+    !hook$jscomp$inline_1549.isDisabled &&
+    hook$jscomp$inline_1549.supportsFiber
   )
     try {
-      (rendererID = hook$jscomp$inline_1550.inject(
-        internals$jscomp$inline_1238
+      (rendererID = hook$jscomp$inline_1549.inject(
+        internals$jscomp$inline_1237
       )),
-        (injectedHook = hook$jscomp$inline_1550);
+        (injectedHook = hook$jscomp$inline_1549);
     } catch (err) {}
 }
 exports.createPortal = function (children, containerTag) {
@@ -11144,6 +11127,11 @@ exports.getPublicInstanceFromInternalInstanceHandle = function (
         instance.publicInstance)
       : getPublicInstance(internalInstanceHandle.stateNode);
 };
+exports.getPublicInstanceFromRootTag = function (rootTag) {
+  return (rootTag = roots.get(rootTag))
+    ? rootTag.containerInfo.publicInstance
+    : null;
+};
 exports.isChildPublicInstance = function () {
   throw Error("isChildPublicInstance() is not available in production.");
 };
@@ -11168,9 +11156,14 @@ exports.render = function (
     options &&
       void 0 !== options.onRecoverableError &&
       (onRecoverableError = options.onRecoverableError);
+    options = {
+      publicInstance:
+        ReactNativePrivateInterface.createPublicRootInstance(containerTag),
+      containerTag: containerTag
+    };
     concurrentRoot = concurrentRoot ? 1 : 0;
-    options = new FiberRootNode(
-      containerTag,
+    root = new FiberRootNode(
+      options,
       concurrentRoot,
       !1,
       "",
@@ -11179,21 +11172,20 @@ exports.render = function (
       onRecoverableError,
       null
     );
-    options.hydrationCallbacks = null;
+    root.hydrationCallbacks = null;
     concurrentRoot = createFiber(3, null, null, 1 === concurrentRoot ? 1 : 0);
-    options.current = concurrentRoot;
-    concurrentRoot.stateNode = options;
-    root = createCache();
-    root.refCount++;
-    options.pooledCache = root;
-    root.refCount++;
+    root.current = concurrentRoot;
+    concurrentRoot.stateNode = root;
+    onCaughtError = createCache();
+    onCaughtError.refCount++;
+    root.pooledCache = onCaughtError;
+    onCaughtError.refCount++;
     concurrentRoot.memoizedState = {
       element: null,
       isDehydrated: !1,
-      cache: root
+      cache: onCaughtError
     };
     initializeUpdateQueue(concurrentRoot);
-    root = options;
     roots.set(containerTag, root);
   }
   updateContainer(element, root, null, callback);
@@ -11227,6 +11219,7 @@ exports.stopSurface = function (containerTag) {
   var root = roots.get(containerTag);
   root &&
     updateContainer(null, root, null, function () {
+      root.containerInfo.publicInstance = null;
       roots.delete(containerTag);
     });
 };

@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<5cdae7cf70bca180988fe036af5a75dd>>
+ * @generated SignedSource<<9d922af8ed3d976c254a24cc5946f738>>
  */
 
 "use strict";
@@ -41,7 +41,10 @@ __DEV__ &&
         _key++
       )
         args[_key - 1] = arguments[_key];
-      printWarning("warn", format, args);
+      if (enableRemoveConsolePatches) {
+        var _console;
+        (_console = console).warn.apply(_console, [format].concat(args));
+      } else printWarning("warn", format, args);
     }
     function error$jscomp$0(format) {
       for (
@@ -52,15 +55,20 @@ __DEV__ &&
         _key2++
       )
         args[_key2 - 1] = arguments[_key2];
-      printWarning("error", format, args);
+      if (enableRemoveConsolePatches) {
+        var _console2;
+        (_console2 = console).error.apply(_console2, [format].concat(args));
+      } else printWarning("error", format, args);
     }
     function printWarning(level, format, args) {
-      if (ReactSharedInternals.getCurrentStack) {
-        var stack = ReactSharedInternals.getCurrentStack();
-        "" !== stack && ((format += "%s"), (args = args.concat([stack])));
+      if (!enableRemoveConsolePatches) {
+        if (ReactSharedInternals.getCurrentStack) {
+          var stack = ReactSharedInternals.getCurrentStack();
+          "" !== stack && ((format += "%s"), (args = args.concat([stack])));
+        }
+        args.unshift(format);
+        Function.prototype.apply.call(console[level], console, args);
       }
-      args.unshift(format);
-      Function.prototype.apply.call(console[level], console, args);
     }
     function warnNoop(publicInstance, callerName) {
       publicInstance =
@@ -660,7 +668,8 @@ __DEV__ &&
         enableOwnerStacks ? oldElement._debugStack : void 0,
         enableOwnerStacks ? oldElement._debugTask : void 0
       );
-      newKey._store.validated = oldElement._store.validated;
+      oldElement._store &&
+        (newKey._store.validated = oldElement._store.validated);
       return newKey;
     }
     function validateChildKeys(node, parentType) {
@@ -1083,9 +1092,10 @@ __DEV__ &&
       "function" ===
         typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart &&
       __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-    var dynamicFlags = require("ReactNativeInternalFeatureFlags"),
-      enableUseResourceEffectHook = dynamicFlags.enableUseResourceEffectHook,
-      enableOwnerStacks = dynamicFlags.enableOwnerStacks,
+    var dynamicFlagsUntyped = require("ReactNativeInternalFeatureFlags"),
+      enableUseResourceEffectHook =
+        dynamicFlagsUntyped.enableUseResourceEffectHook,
+      enableOwnerStacks = dynamicFlagsUntyped.enableOwnerStacks,
       REACT_ELEMENT_TYPE = Symbol.for("react.element"),
       REACT_PORTAL_TYPE = Symbol.for("react.portal"),
       REACT_FRAGMENT_TYPE = Symbol.for("react.fragment"),
@@ -1109,6 +1119,7 @@ __DEV__ &&
         A: null,
         T: null,
         S: null,
+        V: null,
         actQueue: null,
         isBatchingLegacy: !1,
         didScheduleLegacyUpdate: !1,
@@ -1116,6 +1127,8 @@ __DEV__ &&
         thrownErrors: [],
         getCurrentStack: null
       },
+      enableRemoveConsolePatches =
+        dynamicFlagsUntyped && dynamicFlagsUntyped.enableRemoveConsolePatches,
       didWarnStateUpdateForUnmountedComponent = {},
       ReactNoopUpdateQueue = {
         isMounted: function () {
@@ -1244,7 +1257,10 @@ __DEV__ &&
               });
             }
           : enqueueTask,
-      ReactCompilerRuntime = { c: useMemoCache },
+      ReactCompilerRuntime = Object.freeze({
+        __proto__: null,
+        c: useMemoCache
+      }),
       Children = {
         map: mapChildren,
         forEach: function (children, forEachFunc, forEachContext) {
@@ -1824,7 +1840,7 @@ __DEV__ &&
     exports.useTransition = function () {
       return resolveDispatcher().useTransition();
     };
-    exports.version = "19.1.0-native-fb-0bf1f39e-20250110";
+    exports.version = "19.1.0-native-fb-152bfe37-20250131";
     "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ &&
       "function" ===
         typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop &&

@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<b57d260398996604ce144f77869f967c>>
+ * @generated SignedSource<<e65e27c285e286a4414394e196ebba85>>
  */
 
 "use strict";
@@ -23,12 +23,17 @@ __DEV__ &&
         _key2++
       )
         args[_key2 - 1] = arguments[_key2];
-      _len2 = format;
-      ReactSharedInternals.getCurrentStack &&
-        ((_key2 = ReactSharedInternals.getCurrentStack()),
-        "" !== _key2 && ((_len2 += "%s"), (args = args.concat([_key2]))));
-      args.unshift(_len2);
-      Function.prototype.apply.call(console.error, console, args);
+      if (enableRemoveConsolePatches) {
+        var _console2;
+        (_console2 = console).error.apply(_console2, [format].concat(args));
+      } else
+        (_len2 = format),
+          enableRemoveConsolePatches ||
+            (ReactSharedInternals.getCurrentStack &&
+              ((_key2 = ReactSharedInternals.getCurrentStack()),
+              "" !== _key2 && ((_len2 += "%s"), (args = args.concat([_key2])))),
+            args.unshift(_len2),
+            Function.prototype.apply.call(console.error, console, args));
     }
     function testStringCoercion(value) {
       return "" + value;
@@ -96,6 +101,7 @@ __DEV__ &&
       return dispatcher;
     }
     var React = require("react"),
+      dynamicFlagsUntyped = require("ReactNativeInternalFeatureFlags"),
       Internals = {
         d: {
           f: noop,
@@ -117,6 +123,8 @@ __DEV__ &&
       },
       ReactSharedInternals =
         React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
+      enableRemoveConsolePatches =
+        dynamicFlagsUntyped && dynamicFlagsUntyped.enableRemoveConsolePatches,
       REACT_PORTAL_TYPE = Symbol.for("react.portal");
     ("function" === typeof Map &&
       null != Map.prototype &&
@@ -420,5 +428,5 @@ __DEV__ &&
     exports.useFormStatus = function () {
       return resolveDispatcher().useHostTransitionStatus();
     };
-    exports.version = "19.1.0-native-fb-0bf1f39e-20250110";
+    exports.version = "19.1.0-native-fb-152bfe37-20250131";
   })();
