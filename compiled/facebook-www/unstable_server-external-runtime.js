@@ -1,127 +1,4 @@
 (function () {
-  function completeBoundary(suspenseBoundaryID, contentID, errorDigest) {
-    contentID = document.getElementById(contentID);
-    contentID.parentNode.removeChild(contentID);
-    var suspenseIdNode = document.getElementById(suspenseBoundaryID);
-    if (suspenseIdNode) {
-      suspenseBoundaryID = suspenseIdNode.previousSibling;
-      if (errorDigest)
-        (suspenseBoundaryID.data = "$!"),
-          suspenseIdNode.setAttribute("data-dgst", errorDigest);
-      else {
-        errorDigest = suspenseBoundaryID.parentNode;
-        suspenseIdNode = suspenseBoundaryID.nextSibling;
-        var depth = 0;
-        do {
-          if (suspenseIdNode && 8 === suspenseIdNode.nodeType) {
-            var data = suspenseIdNode.data;
-            if ("/$" === data)
-              if (0 === depth) break;
-              else depth--;
-            else ("$" !== data && "$?" !== data && "$!" !== data) || depth++;
-          }
-          data = suspenseIdNode.nextSibling;
-          errorDigest.removeChild(suspenseIdNode);
-          suspenseIdNode = data;
-        } while (suspenseIdNode);
-        for (; contentID.firstChild; )
-          errorDigest.insertBefore(contentID.firstChild, suspenseIdNode);
-        suspenseBoundaryID.data = "$";
-      }
-      suspenseBoundaryID._reactRetry && suspenseBoundaryID._reactRetry();
-    }
-  }
-  function completeBoundaryWithStyles(
-    suspenseBoundaryID,
-    contentID,
-    stylesheetDescriptors
-  ) {
-    function cleanupWith(cb) {
-      this._p = null;
-      cb();
-    }
-    for (
-      var precedences = new Map(),
-        thisDocument = document,
-        lastResource,
-        node,
-        nodes = thisDocument.querySelectorAll(
-          "link[data-precedence],style[data-precedence]"
-        ),
-        styleTagsToHoist = [],
-        i$0 = 0;
-      (node = nodes[i$0++]);
-
-    )
-      "not all" === node.getAttribute("media")
-        ? styleTagsToHoist.push(node)
-        : ("LINK" === node.tagName &&
-            resourceMap.set(node.getAttribute("href"), node),
-          precedences.set(node.dataset.precedence, (lastResource = node)));
-    node = 0;
-    nodes = [];
-    var precedence, resourceEl;
-    for (i$0 = !0; ; ) {
-      if (i$0) {
-        var stylesheetDescriptor = stylesheetDescriptors[node++];
-        if (!stylesheetDescriptor) {
-          i$0 = !1;
-          node = 0;
-          continue;
-        }
-        var avoidInsert = !1,
-          j = 0;
-        var href = stylesheetDescriptor[j++];
-        if ((resourceEl = resourceMap.get(href))) {
-          var attr = resourceEl._p;
-          avoidInsert = !0;
-        } else {
-          resourceEl = thisDocument.createElement("link");
-          resourceEl.href = href;
-          resourceEl.rel = "stylesheet";
-          for (
-            resourceEl.dataset.precedence = precedence =
-              stylesheetDescriptor[j++];
-            (attr = stylesheetDescriptor[j++]);
-
-          )
-            resourceEl.setAttribute(attr, stylesheetDescriptor[j++]);
-          attr = resourceEl._p = new Promise(function (resolve, reject) {
-            resourceEl.onload = cleanupWith.bind(resourceEl, resolve);
-            resourceEl.onerror = cleanupWith.bind(resourceEl, reject);
-          });
-          resourceMap.set(href, resourceEl);
-        }
-        href = resourceEl.getAttribute("media");
-        !attr || (href && !window.matchMedia(href).matches) || nodes.push(attr);
-        if (avoidInsert) continue;
-      } else {
-        resourceEl = styleTagsToHoist[node++];
-        if (!resourceEl) break;
-        precedence = resourceEl.getAttribute("data-precedence");
-        resourceEl.removeAttribute("media");
-      }
-      avoidInsert = precedences.get(precedence) || lastResource;
-      avoidInsert === lastResource && (lastResource = resourceEl);
-      precedences.set(precedence, resourceEl);
-      avoidInsert
-        ? avoidInsert.parentNode.insertBefore(
-            resourceEl,
-            avoidInsert.nextSibling
-          )
-        : ((avoidInsert = thisDocument.head),
-          avoidInsert.insertBefore(resourceEl, avoidInsert.firstChild));
-    }
-    Promise.all(nodes).then(
-      completeBoundary.bind(null, suspenseBoundaryID, contentID, ""),
-      completeBoundary.bind(
-        null,
-        suspenseBoundaryID,
-        contentID,
-        "Resource failed to load"
-      )
-    );
-  }
   function handleExistingNodes(target) {
     target = target.querySelectorAll("template");
     for (var i = 0; i < target.length; i++) handleNode(target[i]);
@@ -146,43 +23,191 @@
   function handleNode(node_) {
     if (1 === node_.nodeType && node_.dataset) {
       var dataset = node_.dataset;
-      if (null != dataset.rxi) {
-        var errorDigest = dataset.dgst,
-          errorMsg = dataset.msg,
-          errorStack = dataset.stck,
-          errorComponentStack = dataset.cstck,
-          suspenseIdNode = document.getElementById(dataset.bid);
-        suspenseIdNode &&
-          ((dataset = suspenseIdNode.previousSibling),
-          (dataset.data = "$!"),
-          (suspenseIdNode = suspenseIdNode.dataset),
-          errorDigest && (suspenseIdNode.dgst = errorDigest),
-          errorMsg && (suspenseIdNode.msg = errorMsg),
-          errorStack && (suspenseIdNode.stck = errorStack),
-          errorComponentStack && (suspenseIdNode.cstck = errorComponentStack),
-          dataset._reactRetry && dataset._reactRetry());
-        node_.remove();
-      } else if (null != dataset.rri)
-        completeBoundaryWithStyles(
-          dataset.bid,
-          dataset.sid,
-          JSON.parse(dataset.sty)
-        ),
-          node_.remove();
-      else if (null != dataset.rci)
-        completeBoundary(dataset.bid, dataset.sid), node_.remove();
-      else if (null != dataset.rsi) {
-        errorDigest = dataset.pid;
-        errorMsg = document.getElementById(dataset.sid);
-        errorDigest = document.getElementById(errorDigest);
-        for (errorMsg.parentNode.removeChild(errorMsg); errorMsg.firstChild; )
-          errorDigest.parentNode.insertBefore(errorMsg.firstChild, errorDigest);
-        errorDigest.parentNode.removeChild(errorDigest);
-        node_.remove();
-      }
+      null != dataset.rxi
+        ? ($RX(
+            dataset.bid,
+            dataset.dgst,
+            dataset.msg,
+            dataset.stck,
+            dataset.cstck
+          ),
+          node_.remove())
+        : null != dataset.rri
+          ? ($RR(dataset.bid, dataset.sid, JSON.parse(dataset.sty)),
+            node_.remove())
+          : null != dataset.rci
+            ? ($RC(dataset.bid, dataset.sid), node_.remove())
+            : null != dataset.rsi &&
+              ($RS(dataset.sid, dataset.pid), node_.remove());
     }
   }
-  var resourceMap = new Map();
+  var $RT;
+  var $RM = new Map();
+  var $RB = [];
+  var $RX = function (
+    suspenseBoundaryID,
+    errorDigest,
+    errorMsg,
+    errorStack,
+    errorComponentStack
+  ) {
+    var suspenseIdNode = document.getElementById(suspenseBoundaryID);
+    suspenseIdNode &&
+      ((suspenseBoundaryID = suspenseIdNode.previousSibling),
+      (suspenseBoundaryID.data = "$!"),
+      (suspenseIdNode = suspenseIdNode.dataset),
+      errorDigest && (suspenseIdNode.dgst = errorDigest),
+      errorMsg && (suspenseIdNode.msg = errorMsg),
+      errorStack && (suspenseIdNode.stck = errorStack),
+      errorComponentStack && (suspenseIdNode.cstck = errorComponentStack),
+      suspenseBoundaryID._reactRetry && suspenseBoundaryID._reactRetry());
+  };
+  var $RC = function (suspenseBoundaryID, contentID) {
+    function revealCompletedBoundaries() {
+      $RT = performance.now();
+      var batch = $RB;
+      $RB = [];
+      for (var i = 0; i < batch.length; i += 2) {
+        var suspenseIdNode = batch[i],
+          contentNode = batch[i + 1],
+          parentInstance = suspenseIdNode.parentNode;
+        if (parentInstance) {
+          var suspenseNode = suspenseIdNode.previousSibling,
+            depth = 0;
+          do {
+            if (suspenseIdNode && 8 === suspenseIdNode.nodeType) {
+              var data = suspenseIdNode.data;
+              if ("/$" === data || "/&" === data)
+                if (0 === depth) break;
+                else depth--;
+              else
+                ("$" !== data &&
+                  "$?" !== data &&
+                  "$~" !== data &&
+                  "$!" !== data &&
+                  "&" !== data) ||
+                  depth++;
+            }
+            data = suspenseIdNode.nextSibling;
+            parentInstance.removeChild(suspenseIdNode);
+            suspenseIdNode = data;
+          } while (suspenseIdNode);
+          for (; contentNode.firstChild; )
+            parentInstance.insertBefore(contentNode.firstChild, suspenseIdNode);
+          suspenseNode.data = "$";
+          suspenseNode._reactRetry && suspenseNode._reactRetry();
+        }
+      }
+    }
+    if ((contentID = document.getElementById(contentID)))
+      if (
+        (contentID.parentNode.removeChild(contentID),
+        (suspenseBoundaryID = document.getElementById(suspenseBoundaryID)))
+      )
+        (suspenseBoundaryID.previousSibling.data = "$~"),
+          $RB.push(suspenseBoundaryID, contentID),
+          2 === $RB.length &&
+            ((suspenseBoundaryID =
+              ("number" !== typeof $RT ? 0 : $RT) + 300 - performance.now()),
+            setTimeout(revealCompletedBoundaries, suspenseBoundaryID));
+  };
+  var $RR = function (suspenseBoundaryID, contentID, stylesheetDescriptors) {
+    function cleanupWith(cb) {
+      this._p = null;
+      cb();
+    }
+    for (
+      var precedences = new Map(),
+        thisDocument = document,
+        lastResource,
+        node,
+        nodes = thisDocument.querySelectorAll(
+          "link[data-precedence],style[data-precedence]"
+        ),
+        styleTagsToHoist = [],
+        i$0 = 0;
+      (node = nodes[i$0++]);
+
+    )
+      "not all" === node.getAttribute("media")
+        ? styleTagsToHoist.push(node)
+        : ("LINK" === node.tagName && $RM.set(node.getAttribute("href"), node),
+          precedences.set(node.dataset.precedence, (lastResource = node)));
+    nodes = 0;
+    node = [];
+    var precedence, resourceEl;
+    for (i$0 = !0; ; ) {
+      if (i$0) {
+        var stylesheetDescriptor = stylesheetDescriptors[nodes++];
+        if (!stylesheetDescriptor) {
+          i$0 = !1;
+          nodes = 0;
+          continue;
+        }
+        var avoidInsert = !1,
+          j = 0;
+        var href = stylesheetDescriptor[j++];
+        if ((resourceEl = $RM.get(href))) {
+          var attr = resourceEl._p;
+          avoidInsert = !0;
+        } else {
+          resourceEl = thisDocument.createElement("link");
+          resourceEl.href = href;
+          resourceEl.rel = "stylesheet";
+          for (
+            resourceEl.dataset.precedence = precedence =
+              stylesheetDescriptor[j++];
+            (attr = stylesheetDescriptor[j++]);
+
+          )
+            resourceEl.setAttribute(attr, stylesheetDescriptor[j++]);
+          attr = resourceEl._p = new Promise(function (resolve, reject) {
+            resourceEl.onload = cleanupWith.bind(resourceEl, resolve);
+            resourceEl.onerror = cleanupWith.bind(resourceEl, reject);
+          });
+          $RM.set(href, resourceEl);
+        }
+        href = resourceEl.getAttribute("media");
+        !attr || (href && !window.matchMedia(href).matches) || node.push(attr);
+        if (avoidInsert) continue;
+      } else {
+        resourceEl = styleTagsToHoist[nodes++];
+        if (!resourceEl) break;
+        precedence = resourceEl.getAttribute("data-precedence");
+        resourceEl.removeAttribute("media");
+      }
+      avoidInsert = precedences.get(precedence) || lastResource;
+      avoidInsert === lastResource && (lastResource = resourceEl);
+      precedences.set(precedence, resourceEl);
+      avoidInsert
+        ? avoidInsert.parentNode.insertBefore(
+            resourceEl,
+            avoidInsert.nextSibling
+          )
+        : ((avoidInsert = thisDocument.head),
+          avoidInsert.insertBefore(resourceEl, avoidInsert.firstChild));
+    }
+    if ((stylesheetDescriptors = document.getElementById(suspenseBoundaryID)))
+      stylesheetDescriptors.previousSibling.data = "$~";
+    Promise.all(node).then(
+      $RC.bind(null, suspenseBoundaryID, contentID),
+      $RX.bind(null, suspenseBoundaryID, "CSS failed to load")
+    );
+  };
+  var $RS = function (containerID, placeholderID) {
+    containerID = document.getElementById(containerID);
+    placeholderID = document.getElementById(placeholderID);
+    for (
+      containerID.parentNode.removeChild(containerID);
+      containerID.firstChild;
+
+    )
+      placeholderID.parentNode.insertBefore(
+        containerID.firstChild,
+        placeholderID
+      );
+    placeholderID.parentNode.removeChild(placeholderID);
+  };
   (function () {
     addEventListener("submit", function (event) {
       if (!event.defaultPrevented) {
@@ -218,7 +243,14 @@
       }
     });
   })();
-  window.$RC || ((window.$RC = completeBoundary), (window.$RM = new Map()));
+  var entries = performance.getEntriesByType
+    ? performance.getEntriesByType("paint")
+    : [];
+  0 < entries.length
+    ? ($RT = entries[0].startTime)
+    : requestAnimationFrame(function () {
+        $RT = performance.now();
+      });
   if (null != document.body)
     "loading" === document.readyState &&
       installFizzInstrObserver(document.body),
