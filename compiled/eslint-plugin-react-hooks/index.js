@@ -50,23 +50,36 @@ const rule$2 = {
                     enableDangerousAutofixThisMayCauseInfiniteLoops: {
                         type: 'boolean',
                     },
+                    experimental_autoDependenciesHooks: {
+                        type: 'array',
+                        items: {
+                            type: 'string',
+                        },
+                    },
+                    requireExplicitEffectDeps: {
+                        type: 'boolean',
+                    }
                 },
             },
         ],
     },
     create(context) {
-        const additionalHooks = context.options &&
-            context.options[0] &&
-            context.options[0].additionalHooks
-            ? new RegExp(context.options[0].additionalHooks)
+        const rawOptions = context.options && context.options[0];
+        const additionalHooks = rawOptions && rawOptions.additionalHooks
+            ? new RegExp(rawOptions.additionalHooks)
             : undefined;
-        const enableDangerousAutofixThisMayCauseInfiniteLoops = (context.options &&
-            context.options[0] &&
-            context.options[0].enableDangerousAutofixThisMayCauseInfiniteLoops) ||
+        const enableDangerousAutofixThisMayCauseInfiniteLoops = (rawOptions &&
+            rawOptions.enableDangerousAutofixThisMayCauseInfiniteLoops) ||
             false;
+        const experimental_autoDependenciesHooks = rawOptions && Array.isArray(rawOptions.experimental_autoDependenciesHooks)
+            ? rawOptions.experimental_autoDependenciesHooks
+            : [];
+        const requireExplicitEffectDeps = rawOptions && rawOptions.requireExplicitEffectDeps || false;
         const options = {
             additionalHooks,
+            experimental_autoDependenciesHooks,
             enableDangerousAutofixThisMayCauseInfiniteLoops,
+            requireExplicitEffectDeps,
         };
         function reportProblem(problem) {
             if (enableDangerousAutofixThisMayCauseInfiniteLoops) {
@@ -108,7 +121,7 @@ const rule$2 = {
                 return result;
             };
         }
-        function visitFunctionWithDependencies(node, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect) {
+        function visitFunctionWithDependencies(node, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect, isAutoDepsHook) {
             if (isEffect && node.async) {
                 reportProblem({
                     node: node,
@@ -434,6 +447,9 @@ const rule$2 = {
                 return;
             }
             if (!declaredDependenciesNode) {
+                if (isAutoDepsHook) {
+                    return;
+                }
                 let setStateInsideEffectWithoutDeps = null;
                 dependencies.forEach(({ references }, key) => {
                     if (setStateInsideEffectWithoutDeps) {
@@ -483,6 +499,11 @@ const rule$2 = {
                         ],
                     });
                 }
+                return;
+            }
+            if (isAutoDepsHook &&
+                declaredDependenciesNode.type === 'Literal' &&
+                declaredDependenciesNode.value === null) {
                 return;
             }
             const declaredDependencies = [];
@@ -918,7 +939,19 @@ const rule$2 = {
                 });
                 return;
             }
-            if (!declaredDependenciesNode && !isEffect) {
+            if (!maybeNode && isEffect && options.requireExplicitEffectDeps) {
+                reportProblem({
+                    node: reactiveHook,
+                    message: `React Hook ${reactiveHookName} always requires dependencies. ` +
+                        `Please add a dependency array or an explicit \`undefined\``
+                });
+            }
+            const isAutoDepsHook = options.experimental_autoDependenciesHooks.includes(reactiveHookName);
+            if ((!declaredDependenciesNode ||
+                (isAutoDepsHook &&
+                    declaredDependenciesNode.type === 'Literal' &&
+                    declaredDependenciesNode.value === null)) &&
+                !isEffect) {
                 if (reactiveHookName === 'useMemo' ||
                     reactiveHookName === 'useCallback') {
                     reportProblem({
@@ -937,10 +970,13 @@ const rule$2 = {
             switch (callback.type) {
                 case 'FunctionExpression':
                 case 'ArrowFunctionExpression':
-                    visitFunctionWithDependencies(callback, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect);
+                    visitFunctionWithDependencies(callback, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect, isAutoDepsHook);
                     return;
                 case 'Identifier':
-                    if (!declaredDependenciesNode) {
+                    if (!declaredDependenciesNode ||
+                        (isAutoDepsHook &&
+                            declaredDependenciesNode.type === 'Literal' &&
+                            declaredDependenciesNode.value === null)) {
                         return;
                     }
                     if ('elements' in declaredDependenciesNode &&
@@ -968,7 +1004,7 @@ const rule$2 = {
                     }
                     switch (def.node.type) {
                         case 'FunctionDeclaration':
-                            visitFunctionWithDependencies(def.node, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect);
+                            visitFunctionWithDependencies(def.node, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect, isAutoDepsHook);
                             return;
                         case 'VariableDeclarator':
                             const init = def.node.init;
@@ -978,7 +1014,7 @@ const rule$2 = {
                             switch (init.type) {
                                 case 'ArrowFunctionExpression':
                                 case 'FunctionExpression':
-                                    visitFunctionWithDependencies(init, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect);
+                                    visitFunctionWithDependencies(init, declaredDependenciesNode, reactiveHook, reactiveHookName, isEffect, isAutoDepsHook);
                                     return;
                             }
                             break;
@@ -6995,13 +7031,13 @@ function requireCore () {
 	return core;
 }
 
-var flow$1 = {};
+var flow = {};
 
-var hasRequiredFlow$1;
+var hasRequiredFlow;
 
-function requireFlow$1 () {
-	if (hasRequiredFlow$1) return flow$1;
-	hasRequiredFlow$1 = 1;
+function requireFlow () {
+	if (hasRequiredFlow) return flow;
+	hasRequiredFlow = 1;
 
 	var _core = requireCore();
 	var _utils = requireUtils();
@@ -7493,16 +7529,16 @@ function requireFlow$1 () {
 	});
 
 	
-	return flow$1;
+	return flow;
 }
 
-var jsx$1 = {};
+var jsx = {};
 
-var hasRequiredJsx$1;
+var hasRequiredJsx;
 
-function requireJsx$1 () {
-	if (hasRequiredJsx$1) return jsx$1;
-	hasRequiredJsx$1 = 1;
+function requireJsx () {
+	if (hasRequiredJsx) return jsx;
+	hasRequiredJsx = 1;
 
 	var _utils = requireUtils();
 	const defineType = (0, _utils.defineAliasedType)("JSX");
@@ -7654,7 +7690,7 @@ function requireJsx$1 () {
 	});
 
 	
-	return jsx$1;
+	return jsx;
 }
 
 var misc = {};
@@ -7878,13 +7914,13 @@ function requireExperimental () {
 	return experimental;
 }
 
-var typescript$1 = {};
+var typescript = {};
 
-var hasRequiredTypescript$1;
+var hasRequiredTypescript;
 
-function requireTypescript$1 () {
-	if (hasRequiredTypescript$1) return typescript$1;
-	hasRequiredTypescript$1 = 1;
+function requireTypescript () {
+	if (hasRequiredTypescript) return typescript;
+	hasRequiredTypescript = 1;
 
 	var _utils = requireUtils();
 	var _core = requireCore();
@@ -8383,7 +8419,7 @@ function requireTypescript$1 () {
 	});
 
 	
-	return typescript$1;
+	return typescript;
 }
 
 var deprecatedAliases = {};
@@ -8484,11 +8520,11 @@ function requireDefinitions () {
 		  }
 		});
 		requireCore();
-		requireFlow$1();
-		requireJsx$1();
+		requireFlow();
+		requireJsx();
 		requireMisc();
 		requireExperimental();
-		requireTypescript$1();
+		requireTypescript();
 		var _utils = requireUtils();
 		var _placeholders = requirePlaceholders();
 		var _deprecatedAliases = requireDeprecatedAliases();
@@ -16997,6 +17033,355 @@ function requireLib$1 () {
 
 var libExports$1 = requireLib$1();
 
+var lib = {};
+
+var picocolorsExports = {};
+var picocolors = {
+  get exports(){ return picocolorsExports; },
+  set exports(v){ picocolorsExports = v; },
+};
+
+var hasRequiredPicocolors;
+
+function requirePicocolors () {
+	if (hasRequiredPicocolors) return picocolorsExports;
+	hasRequiredPicocolors = 1;
+	let p = process || {}, argv = p.argv || [], env = p.env || {};
+	let isColorSupported =
+		!(!!env.NO_COLOR || argv.includes("--no-color")) &&
+		(!!env.FORCE_COLOR || argv.includes("--color") || p.platform === "win32" || ((p.stdout || {}).isTTY && env.TERM !== "dumb") || !!env.CI);
+
+	let formatter = (open, close, replace = open) =>
+		input => {
+			let string = "" + input, index = string.indexOf(close, open.length);
+			return ~index ? open + replaceClose(string, close, replace, index) + close : open + string + close
+		};
+
+	let replaceClose = (string, close, replace, index) => {
+		let result = "", cursor = 0;
+		do {
+			result += string.substring(cursor, index) + replace;
+			cursor = index + close.length;
+			index = string.indexOf(close, cursor);
+		} while (~index)
+		return result + string.substring(cursor)
+	};
+
+	let createColors = (enabled = isColorSupported) => {
+		let f = enabled ? formatter : () => String;
+		return {
+			isColorSupported: enabled,
+			reset: f("\x1b[0m", "\x1b[0m"),
+			bold: f("\x1b[1m", "\x1b[22m", "\x1b[22m\x1b[1m"),
+			dim: f("\x1b[2m", "\x1b[22m", "\x1b[22m\x1b[2m"),
+			italic: f("\x1b[3m", "\x1b[23m"),
+			underline: f("\x1b[4m", "\x1b[24m"),
+			inverse: f("\x1b[7m", "\x1b[27m"),
+			hidden: f("\x1b[8m", "\x1b[28m"),
+			strikethrough: f("\x1b[9m", "\x1b[29m"),
+
+			black: f("\x1b[30m", "\x1b[39m"),
+			red: f("\x1b[31m", "\x1b[39m"),
+			green: f("\x1b[32m", "\x1b[39m"),
+			yellow: f("\x1b[33m", "\x1b[39m"),
+			blue: f("\x1b[34m", "\x1b[39m"),
+			magenta: f("\x1b[35m", "\x1b[39m"),
+			cyan: f("\x1b[36m", "\x1b[39m"),
+			white: f("\x1b[37m", "\x1b[39m"),
+			gray: f("\x1b[90m", "\x1b[39m"),
+
+			bgBlack: f("\x1b[40m", "\x1b[49m"),
+			bgRed: f("\x1b[41m", "\x1b[49m"),
+			bgGreen: f("\x1b[42m", "\x1b[49m"),
+			bgYellow: f("\x1b[43m", "\x1b[49m"),
+			bgBlue: f("\x1b[44m", "\x1b[49m"),
+			bgMagenta: f("\x1b[45m", "\x1b[49m"),
+			bgCyan: f("\x1b[46m", "\x1b[49m"),
+			bgWhite: f("\x1b[47m", "\x1b[49m"),
+
+			blackBright: f("\x1b[90m", "\x1b[39m"),
+			redBright: f("\x1b[91m", "\x1b[39m"),
+			greenBright: f("\x1b[92m", "\x1b[39m"),
+			yellowBright: f("\x1b[93m", "\x1b[39m"),
+			blueBright: f("\x1b[94m", "\x1b[39m"),
+			magentaBright: f("\x1b[95m", "\x1b[39m"),
+			cyanBright: f("\x1b[96m", "\x1b[39m"),
+			whiteBright: f("\x1b[97m", "\x1b[39m"),
+
+			bgBlackBright: f("\x1b[100m", "\x1b[49m"),
+			bgRedBright: f("\x1b[101m", "\x1b[49m"),
+			bgGreenBright: f("\x1b[102m", "\x1b[49m"),
+			bgYellowBright: f("\x1b[103m", "\x1b[49m"),
+			bgBlueBright: f("\x1b[104m", "\x1b[49m"),
+			bgMagentaBright: f("\x1b[105m", "\x1b[49m"),
+			bgCyanBright: f("\x1b[106m", "\x1b[49m"),
+			bgWhiteBright: f("\x1b[107m", "\x1b[49m"),
+		}
+	};
+
+	picocolors.exports = createColors();
+	picocolorsExports.createColors = createColors;
+	return picocolorsExports;
+}
+
+var jsTokens = {};
+
+var hasRequiredJsTokens;
+
+function requireJsTokens () {
+	if (hasRequiredJsTokens) return jsTokens;
+	hasRequiredJsTokens = 1;
+	// Copyright 2014, 2015, 2016, 2017, 2018 Simon Lydell
+	// License: MIT. (See LICENSE.)
+
+	Object.defineProperty(jsTokens, "__esModule", {
+	  value: true
+	});
+
+	// This regex comes from regex.coffee, and is inserted here by generate-index.js
+	// (run `npm run build`).
+	jsTokens.default = /((['"])(?:(?!\2|\\).|\\(?:\r\n|[\s\S]))*(\2)?|`(?:[^`\\$]|\\[\s\S]|\$(?!\{)|\$\{(?:[^{}]|\{[^}]*\}?)*\}?)*(`)?)|(\/\/.*)|(\/\*(?:[^*]|\*(?!\/))*(\*\/)?)|(\/(?!\*)(?:\[(?:(?![\]\\]).|\\.)*\]|(?![\/\]\\]).|\\.)+\/(?:(?!\s*(?:\b|[\u0080-\uFFFF$\\'"~({]|[+\-!](?!=)|\.?\d))|[gmiyus]{1,6}\b(?![\u0080-\uFFFF$\\]|\s*(?:[+\-*%&|^<>!=?({]|\/(?![\/*])))))|(0[xX][\da-fA-F]+|0[oO][0-7]+|0[bB][01]+|(?:\d*\.\d+|\d+\.?)(?:[eE][+-]?\d+)?)|((?!\d)(?:(?!\s)[$\w\u0080-\uFFFF]|\\u[\da-fA-F]{4}|\\u\{[\da-fA-F]+\})+)|(--|\+\+|&&|\|\||=>|\.{3}|(?:[+\-\/%&|^]|\*{1,2}|<{1,2}|>{1,3}|!=?|={1,2})=?|[?~.,:;[\](){}])|(\s+)|(^$|[\s\S])/g;
+
+	jsTokens.matchToToken = function(match) {
+	  var token = {type: "invalid", value: match[0], closed: undefined};
+	       if (match[ 1]) token.type = "string" , token.closed = !!(match[3] || match[4]);
+	  else if (match[ 5]) token.type = "comment";
+	  else if (match[ 6]) token.type = "comment", token.closed = !!match[7];
+	  else if (match[ 8]) token.type = "regex";
+	  else if (match[ 9]) token.type = "number";
+	  else if (match[10]) token.type = "name";
+	  else if (match[11]) token.type = "punctuator";
+	  else if (match[12]) token.type = "whitespace";
+	  return token
+	};
+	return jsTokens;
+}
+
+var hasRequiredLib;
+
+function requireLib () {
+	if (hasRequiredLib) return lib;
+	hasRequiredLib = 1;
+
+	Object.defineProperty(lib, '__esModule', { value: true });
+
+	var picocolors = requirePicocolors();
+	var jsTokens = requireJsTokens();
+	var helperValidatorIdentifier = requireLib$3();
+
+	function isColorSupported() {
+	  return (typeof process === "object" && (process.env.FORCE_COLOR === "0" || process.env.FORCE_COLOR === "false") ? false : picocolors.isColorSupported
+	  );
+	}
+	const compose = (f, g) => v => f(g(v));
+	function buildDefs(colors) {
+	  return {
+	    keyword: colors.cyan,
+	    capitalized: colors.yellow,
+	    jsxIdentifier: colors.yellow,
+	    punctuator: colors.yellow,
+	    number: colors.magenta,
+	    string: colors.green,
+	    regex: colors.magenta,
+	    comment: colors.gray,
+	    invalid: compose(compose(colors.white, colors.bgRed), colors.bold),
+	    gutter: colors.gray,
+	    marker: compose(colors.red, colors.bold),
+	    message: compose(colors.red, colors.bold),
+	    reset: colors.reset
+	  };
+	}
+	const defsOn = buildDefs(picocolors.createColors(true));
+	const defsOff = buildDefs(picocolors.createColors(false));
+	function getDefs(enabled) {
+	  return enabled ? defsOn : defsOff;
+	}
+
+	const sometimesKeywords = new Set(["as", "async", "from", "get", "of", "set"]);
+	const NEWLINE$1 = /\r\n|[\n\r\u2028\u2029]/;
+	const BRACKET = /^[()[\]{}]$/;
+	let tokenize;
+	{
+	  const JSX_TAG = /^[a-z][\w-]*$/i;
+	  const getTokenType = function (token, offset, text) {
+	    if (token.type === "name") {
+	      if (helperValidatorIdentifier.isKeyword(token.value) || helperValidatorIdentifier.isStrictReservedWord(token.value, true) || sometimesKeywords.has(token.value)) {
+	        return "keyword";
+	      }
+	      if (JSX_TAG.test(token.value) && (text[offset - 1] === "<" || text.slice(offset - 2, offset) === "</")) {
+	        return "jsxIdentifier";
+	      }
+	      if (token.value[0] !== token.value[0].toLowerCase()) {
+	        return "capitalized";
+	      }
+	    }
+	    if (token.type === "punctuator" && BRACKET.test(token.value)) {
+	      return "bracket";
+	    }
+	    if (token.type === "invalid" && (token.value === "@" || token.value === "#")) {
+	      return "punctuator";
+	    }
+	    return token.type;
+	  };
+	  tokenize = function* (text) {
+	    let match;
+	    while (match = jsTokens.default.exec(text)) {
+	      const token = jsTokens.matchToToken(match);
+	      yield {
+	        type: getTokenType(token, match.index, text),
+	        value: token.value
+	      };
+	    }
+	  };
+	}
+	function highlight(text) {
+	  if (text === "") return "";
+	  const defs = getDefs(true);
+	  let highlighted = "";
+	  for (const {
+	    type,
+	    value
+	  } of tokenize(text)) {
+	    if (type in defs) {
+	      highlighted += value.split(NEWLINE$1).map(str => defs[type](str)).join("\n");
+	    } else {
+	      highlighted += value;
+	    }
+	  }
+	  return highlighted;
+	}
+
+	let deprecationWarningShown = false;
+	const NEWLINE = /\r\n|[\n\r\u2028\u2029]/;
+	function getMarkerLines(loc, source, opts) {
+	  const startLoc = Object.assign({
+	    column: 0,
+	    line: -1
+	  }, loc.start);
+	  const endLoc = Object.assign({}, startLoc, loc.end);
+	  const {
+	    linesAbove = 2,
+	    linesBelow = 3
+	  } = opts || {};
+	  const startLine = startLoc.line;
+	  const startColumn = startLoc.column;
+	  const endLine = endLoc.line;
+	  const endColumn = endLoc.column;
+	  let start = Math.max(startLine - (linesAbove + 1), 0);
+	  let end = Math.min(source.length, endLine + linesBelow);
+	  if (startLine === -1) {
+	    start = 0;
+	  }
+	  if (endLine === -1) {
+	    end = source.length;
+	  }
+	  const lineDiff = endLine - startLine;
+	  const markerLines = {};
+	  if (lineDiff) {
+	    for (let i = 0; i <= lineDiff; i++) {
+	      const lineNumber = i + startLine;
+	      if (!startColumn) {
+	        markerLines[lineNumber] = true;
+	      } else if (i === 0) {
+	        const sourceLength = source[lineNumber - 1].length;
+	        markerLines[lineNumber] = [startColumn, sourceLength - startColumn + 1];
+	      } else if (i === lineDiff) {
+	        markerLines[lineNumber] = [0, endColumn];
+	      } else {
+	        const sourceLength = source[lineNumber - i].length;
+	        markerLines[lineNumber] = [0, sourceLength];
+	      }
+	    }
+	  } else {
+	    if (startColumn === endColumn) {
+	      if (startColumn) {
+	        markerLines[startLine] = [startColumn, 0];
+	      } else {
+	        markerLines[startLine] = true;
+	      }
+	    } else {
+	      markerLines[startLine] = [startColumn, endColumn - startColumn];
+	    }
+	  }
+	  return {
+	    start,
+	    end,
+	    markerLines
+	  };
+	}
+	function codeFrameColumns(rawLines, loc, opts = {}) {
+	  const shouldHighlight = opts.forceColor || isColorSupported() && opts.highlightCode;
+	  const defs = getDefs(shouldHighlight);
+	  const lines = rawLines.split(NEWLINE);
+	  const {
+	    start,
+	    end,
+	    markerLines
+	  } = getMarkerLines(loc, lines, opts);
+	  const hasColumns = loc.start && typeof loc.start.column === "number";
+	  const numberMaxWidth = String(end).length;
+	  const highlightedLines = shouldHighlight ? highlight(rawLines) : rawLines;
+	  let frame = highlightedLines.split(NEWLINE, end).slice(start, end).map((line, index) => {
+	    const number = start + 1 + index;
+	    const paddedNumber = ` ${number}`.slice(-numberMaxWidth);
+	    const gutter = ` ${paddedNumber} |`;
+	    const hasMarker = markerLines[number];
+	    const lastMarkerLine = !markerLines[number + 1];
+	    if (hasMarker) {
+	      let markerLine = "";
+	      if (Array.isArray(hasMarker)) {
+	        const markerSpacing = line.slice(0, Math.max(hasMarker[0] - 1, 0)).replace(/[^\t]/g, " ");
+	        const numberOfMarkers = hasMarker[1] || 1;
+	        markerLine = ["\n ", defs.gutter(gutter.replace(/\d/g, " ")), " ", markerSpacing, defs.marker("^").repeat(numberOfMarkers)].join("");
+	        if (lastMarkerLine && opts.message) {
+	          markerLine += " " + defs.message(opts.message);
+	        }
+	      }
+	      return [defs.marker(">"), defs.gutter(gutter), line.length > 0 ? ` ${line}` : "", markerLine].join("");
+	    } else {
+	      return ` ${defs.gutter(gutter)}${line.length > 0 ? ` ${line}` : ""}`;
+	    }
+	  }).join("\n");
+	  if (opts.message && !hasColumns) {
+	    frame = `${" ".repeat(numberMaxWidth + 1)}${opts.message}\n${frame}`;
+	  }
+	  if (shouldHighlight) {
+	    return defs.reset(frame);
+	  } else {
+	    return frame;
+	  }
+	}
+	function index (rawLines, lineNumber, colNumber, opts = {}) {
+	  if (!deprecationWarningShown) {
+	    deprecationWarningShown = true;
+	    const message = "Passing lineNumber and colNumber is deprecated to @babel/code-frame. Please use `codeFrameColumns`.";
+	    if (process.emitWarning) {
+	      process.emitWarning(message, "DeprecationWarning");
+	    } else {
+	      const deprecationError = new Error(message);
+	      deprecationError.name = "DeprecationWarning";
+	      console.warn(new Error(message));
+	    }
+	  }
+	  colNumber = Math.max(colNumber, 0);
+	  const location = {
+	    start: {
+	      column: colNumber,
+	      line: lineNumber
+	    }
+	  };
+	  return codeFrameColumns(rawLines, location, opts);
+	}
+
+	lib.codeFrameColumns = codeFrameColumns;
+	lib.default = index;
+	lib.highlight = highlight;
+	
+	return lib;
+}
+
+var libExports = requireLib();
+
 function Ok(val) {
     return new OkImpl(val);
 }
@@ -17192,6 +17577,14 @@ function Set_intersect(sets) {
     }
     return result;
 }
+function Set_isSuperset(a, b) {
+    for (const v of b) {
+        if (!a.has(v)) {
+            return false;
+        }
+    }
+    return true;
+}
 function Iterable_some(iter, pred) {
     for (const item of iter) {
         if (pred(item)) {
@@ -17219,6 +17612,7 @@ function hasOwnProperty$1(obj, key) {
 var ErrorSeverity;
 (function (ErrorSeverity) {
     ErrorSeverity["InvalidJS"] = "InvalidJS";
+    ErrorSeverity["UnsupportedJS"] = "UnsupportedJS";
     ErrorSeverity["InvalidReact"] = "InvalidReact";
     ErrorSeverity["InvalidConfig"] = "InvalidConfig";
     ErrorSeverity["CannotPreserveMemoization"] = "CannotPreserveMemoization";
@@ -17232,6 +17626,83 @@ var CompilerSuggestionOperation;
     CompilerSuggestionOperation[CompilerSuggestionOperation["Remove"] = 2] = "Remove";
     CompilerSuggestionOperation[CompilerSuggestionOperation["Replace"] = 3] = "Replace";
 })(CompilerSuggestionOperation || (CompilerSuggestionOperation = {}));
+class CompilerDiagnostic {
+    constructor(options) {
+        this.options = options;
+    }
+    static create(options) {
+        return new CompilerDiagnostic(Object.assign(Object.assign({}, options), { details: [] }));
+    }
+    get category() {
+        return this.options.category;
+    }
+    get description() {
+        return this.options.description;
+    }
+    get severity() {
+        return this.options.severity;
+    }
+    get suggestions() {
+        return this.options.suggestions;
+    }
+    withDetail(detail) {
+        this.options.details.push(detail);
+        return this;
+    }
+    primaryLocation() {
+        var _a, _b;
+        return (_b = (_a = this.options.details.filter(d => d.kind === 'error')[0]) === null || _a === void 0 ? void 0 : _a.loc) !== null && _b !== void 0 ? _b : null;
+    }
+    printErrorMessage(source, options) {
+        const buffer = [
+            printErrorSummary(this.severity, this.category),
+            '\n\n',
+            this.description,
+        ];
+        for (const detail of this.options.details) {
+            switch (detail.kind) {
+                case 'error': {
+                    const loc = detail.loc;
+                    if (loc == null || typeof loc === 'symbol') {
+                        continue;
+                    }
+                    let codeFrame;
+                    try {
+                        codeFrame = printCodeFrame(source, loc, detail.message);
+                    }
+                    catch (e) {
+                        codeFrame = detail.message;
+                    }
+                    buffer.push('\n\n');
+                    if (loc.filename != null) {
+                        const line = loc.start.line;
+                        const column = options.eslint
+                            ? loc.start.column + 1
+                            : loc.start.column;
+                        buffer.push(`${loc.filename}:${line}:${column}\n`);
+                    }
+                    buffer.push(codeFrame);
+                    break;
+                }
+                default: {
+                    assertExhaustive$1(detail.kind, `Unexpected detail kind ${detail.kind}`);
+                }
+            }
+        }
+        return buffer.join('');
+    }
+    toString() {
+        const buffer = [printErrorSummary(this.severity, this.category)];
+        if (this.description != null) {
+            buffer.push(`. ${this.description}.`);
+        }
+        const loc = this.primaryLocation();
+        if (loc != null && typeof loc !== 'symbol') {
+            buffer.push(` (${loc.start.line}:${loc.start.column})`);
+        }
+        return buffer.join('');
+    }
+}
 class CompilerErrorDetail {
     constructor(options) {
         this.options = options;
@@ -17251,18 +17722,44 @@ class CompilerErrorDetail {
     get suggestions() {
         return this.options.suggestions;
     }
-    printErrorMessage() {
-        const buffer = [`${this.severity}: ${this.reason}`];
+    primaryLocation() {
+        return this.loc;
+    }
+    printErrorMessage(source, options) {
+        const buffer = [printErrorSummary(this.severity, this.reason)];
         if (this.description != null) {
-            buffer.push(`. ${this.description}`);
+            buffer.push(`\n\n${this.description}.`);
         }
-        if (this.loc != null && typeof this.loc !== 'symbol') {
-            buffer.push(` (${this.loc.start.line}:${this.loc.end.line})`);
+        const loc = this.loc;
+        if (loc != null && typeof loc !== 'symbol') {
+            let codeFrame;
+            try {
+                codeFrame = printCodeFrame(source, loc, this.reason);
+            }
+            catch (e) {
+                codeFrame = '';
+            }
+            buffer.push(`\n\n`);
+            if (loc.filename != null) {
+                const line = loc.start.line;
+                const column = options.eslint ? loc.start.column + 1 : loc.start.column;
+                buffer.push(`${loc.filename}:${line}:${column}\n`);
+            }
+            buffer.push(codeFrame);
+            buffer.push('\n\n');
         }
         return buffer.join('');
     }
     toString() {
-        return this.printErrorMessage();
+        const buffer = [printErrorSummary(this.severity, this.reason)];
+        if (this.description != null) {
+            buffer.push(`. ${this.description}.`);
+        }
+        const loc = this.loc;
+        if (loc != null && typeof loc !== 'symbol') {
+            buffer.push(` (${loc.start.line}:${loc.start.column})`);
+        }
+        return buffer.join('');
     }
 }
 class CompilerError extends Error {
@@ -17272,6 +17769,11 @@ class CompilerError extends Error {
             errors.pushErrorDetail(new CompilerErrorDetail(Object.assign(Object.assign({}, options), { severity: ErrorSeverity.Invariant })));
             throw errors;
         }
+    }
+    static throwDiagnostic(options) {
+        const errors = new CompilerError();
+        errors.pushDiagnostic(new CompilerDiagnostic(options));
+        throw errors;
     }
     static throwTodo(options) {
         const errors = new CompilerError();
@@ -17301,18 +17803,42 @@ class CompilerError extends Error {
     constructor(...args) {
         super(...args);
         this.details = [];
+        this.printedMessage = null;
         this.name = 'ReactCompilerError';
         this.details = [];
     }
     get message() {
-        return this.toString();
+        var _a;
+        return (_a = this.printedMessage) !== null && _a !== void 0 ? _a : this.toString();
     }
     set message(_message) { }
     toString() {
+        if (this.printedMessage) {
+            return this.printedMessage;
+        }
         if (Array.isArray(this.details)) {
             return this.details.map(detail => detail.toString()).join('\n\n');
         }
         return this.name;
+    }
+    withPrintedMessage(source, options) {
+        this.printedMessage = this.printErrorMessage(source, options);
+        return this;
+    }
+    printErrorMessage(source, options) {
+        if (options.eslint && this.details.length === 1) {
+            return this.details[0].printErrorMessage(source, options);
+        }
+        return (`Found ${this.details.length} error${this.details.length === 1 ? '' : 's'}:\n\n` +
+            this.details
+                .map(detail => detail.printErrorMessage(source, options).trim())
+                .join('\n\n'));
+    }
+    merge(other) {
+        this.details.push(...other.details);
+    }
+    pushDiagnostic(diagnostic) {
+        this.details.push(diagnostic);
     }
     push(options) {
         var _a;
@@ -17342,15 +17868,61 @@ class CompilerError extends Error {
                 case ErrorSeverity.InvalidJS:
                 case ErrorSeverity.InvalidReact:
                 case ErrorSeverity.InvalidConfig:
+                case ErrorSeverity.UnsupportedJS: {
                     return true;
+                }
                 case ErrorSeverity.CannotPreserveMemoization:
-                case ErrorSeverity.Todo:
+                case ErrorSeverity.Todo: {
                     return false;
-                default:
+                }
+                default: {
                     assertExhaustive$1(detail.severity, 'Unhandled error severity');
+                }
             }
         });
     }
+}
+function printCodeFrame(source, loc, message) {
+    return libExports.codeFrameColumns(source, {
+        start: {
+            line: loc.start.line,
+            column: loc.start.column + 1,
+        },
+        end: {
+            line: loc.end.line,
+            column: loc.end.column + 1,
+        },
+    }, {
+        message,
+    });
+}
+function printErrorSummary(severity, message) {
+    let severityCategory;
+    switch (severity) {
+        case ErrorSeverity.InvalidConfig:
+        case ErrorSeverity.InvalidJS:
+        case ErrorSeverity.InvalidReact:
+        case ErrorSeverity.UnsupportedJS: {
+            severityCategory = 'Error';
+            break;
+        }
+        case ErrorSeverity.CannotPreserveMemoization: {
+            severityCategory = 'Memoization';
+            break;
+        }
+        case ErrorSeverity.Invariant: {
+            severityCategory = 'Invariant';
+            break;
+        }
+        case ErrorSeverity.Todo: {
+            severityCategory = 'Todo';
+            break;
+        }
+        default: {
+            assertExhaustive$1(severity, `Unexpected severity '${severity}'`);
+        }
+    }
+    return `${severityCategory}: ${message}`;
 }
 
 function insertAdditionalFunctionDeclaration(fnPath, compiled, programContext, gatingFunctionIdentifierName) {
@@ -17527,6 +18099,61 @@ function phiTypeEquals(tA, tB) {
     return false;
 }
 
+const RESERVED_WORDS = new Set([
+    'break',
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'debugger',
+    'default',
+    'delete',
+    'do',
+    'else',
+    'enum',
+    'export',
+    'extends',
+    'false',
+    'finally',
+    'for',
+    'function',
+    'if',
+    'import',
+    'in',
+    'instanceof',
+    'new',
+    'null',
+    'return',
+    'super',
+    'switch',
+    'this',
+    'throw',
+    'true',
+    'try',
+    'typeof',
+    'var',
+    'void',
+    'while',
+    'with',
+]);
+const STRICT_MODE_RESERVED_WORDS = new Set([
+    'let',
+    'static',
+    'implements',
+    'interface',
+    'package',
+    'private',
+    'protected',
+    'public',
+]);
+const STRICT_MODE_RESTRICTED_WORDS = new Set(['eval', 'arguments']);
+function isReservedWord(identifierName) {
+    return (RESERVED_WORDS.has(identifierName) ||
+        STRICT_MODE_RESERVED_WORDS.has(identifierName) ||
+        STRICT_MODE_RESTRICTED_WORDS.has(identifierName));
+}
+
 const GeneratedSource = Symbol();
 function isStatementBlockKind(kind) {
     return kind === 'block' || kind === 'catch';
@@ -17584,12 +18211,22 @@ function forkTemporaryIdentifier(id, source) {
     return Object.assign(Object.assign({}, source), { mutableRange: { start: makeInstructionId(0), end: makeInstructionId(0) }, id });
 }
 function makeIdentifierName(name) {
-    CompilerError.invariant(libExports$1.isValidIdentifier(name), {
-        reason: `Expected a valid identifier name`,
-        loc: GeneratedSource,
-        description: `\`${name}\` is not a valid JavaScript identifier`,
-        suggestions: null,
-    });
+    if (isReservedWord(name)) {
+        CompilerError.throwInvalidJS({
+            reason: 'Expected a non-reserved identifier name',
+            loc: GeneratedSource,
+            description: `\`${name}\` is a reserved word in JavaScript and cannot be used as an identifier name`,
+            suggestions: null,
+        });
+    }
+    else {
+        CompilerError.invariant(libExports$1.isValidIdentifier(name), {
+            reason: `Expected a valid identifier name`,
+            loc: GeneratedSource,
+            description: `\`${name}\` is not a valid JavaScript identifier`,
+            suggestions: null,
+        });
+    }
     return {
         kind: 'named',
         value: name,
@@ -17629,6 +18266,9 @@ var ValueReason;
 (function (ValueReason) {
     ValueReason["Global"] = "global";
     ValueReason["JsxCaptured"] = "jsx-captured";
+    ValueReason["HookCaptured"] = "hook-captured";
+    ValueReason["HookReturn"] = "hook-return";
+    ValueReason["Effect"] = "effect";
     ValueReason["KnownReturnSignature"] = "known-return-signature";
     ValueReason["Context"] = "context";
     ValueReason["State"] = "state";
@@ -17652,6 +18292,19 @@ const ValueKindSchema = zod.z.enum([
     ValueKind.Global,
     ValueKind.Mutable,
     ValueKind.Context,
+]);
+const ValueReasonSchema = zod.z.enum([
+    ValueReason.Context,
+    ValueReason.Effect,
+    ValueReason.Global,
+    ValueReason.HookCaptured,
+    ValueReason.HookReturn,
+    ValueReason.JsxCaptured,
+    ValueReason.KnownReturnSignature,
+    ValueReason.Other,
+    ValueReason.ReactiveFunctionArgument,
+    ValueReason.ReducerState,
+    ValueReason.State,
 ]);
 var Effect;
 (function (Effect) {
@@ -17791,6 +18444,9 @@ function isUseRefType(id) {
 function isUseStateType(id) {
     return id.type.kind === 'Object' && id.type.shapeId === 'BuiltInUseState';
 }
+function isJsxType(type) {
+    return type.kind === 'Object' && type.shapeId === 'BuiltInJsx';
+}
 function isRefOrRefValue(id) {
     return isUseRefType(id) || isRefValueType(id);
 }
@@ -17816,6 +18472,10 @@ function isDispatcherType(id) {
 }
 function isFireFunctionType(id) {
     return (id.type.kind === 'Function' && id.type.shapeId === 'BuiltInFireFunction');
+}
+function isEffectEventFunctionType(id) {
+    return (id.type.kind === 'Function' &&
+        id.type.shapeId === 'BuiltInEffectEventFunction');
 }
 function isStableType(id) {
     return (isSetStateType(id) ||
@@ -17878,9078 +18538,6 @@ function getHookKindForType(env, type) {
     return null;
 }
 
-var lib = {};
-
-var sourceMap$1 = {};
-
-var sourceMap = {};
-
-var sourceMapGenerator = {};
-
-var base64Vlq = {};
-
-var base64 = {};
-
-var hasRequiredBase64;
-
-function requireBase64 () {
-	if (hasRequiredBase64) return base64;
-	hasRequiredBase64 = 1;
-	/*
-	 * Copyright 2011 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 */
-
-	var intToCharMap = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'.split('');
-
-	/**
-	 * Encode an integer in the range of 0 to 63 to a single base 64 digit.
-	 */
-	base64.encode = function (number) {
-	  if (0 <= number && number < intToCharMap.length) {
-	    return intToCharMap[number];
-	  }
-	  throw new TypeError("Must be between 0 and 63: " + number);
-	};
-
-	/**
-	 * Decode a single base 64 character code digit to an integer. Returns -1 on
-	 * failure.
-	 */
-	base64.decode = function (charCode) {
-	  var bigA = 65;     // 'A'
-	  var bigZ = 90;     // 'Z'
-
-	  var littleA = 97;  // 'a'
-	  var littleZ = 122; // 'z'
-
-	  var zero = 48;     // '0'
-	  var nine = 57;     // '9'
-
-	  var plus = 43;     // '+'
-	  var slash = 47;    // '/'
-
-	  var littleOffset = 26;
-	  var numberOffset = 52;
-
-	  // 0 - 25: ABCDEFGHIJKLMNOPQRSTUVWXYZ
-	  if (bigA <= charCode && charCode <= bigZ) {
-	    return (charCode - bigA);
-	  }
-
-	  // 26 - 51: abcdefghijklmnopqrstuvwxyz
-	  if (littleA <= charCode && charCode <= littleZ) {
-	    return (charCode - littleA + littleOffset);
-	  }
-
-	  // 52 - 61: 0123456789
-	  if (zero <= charCode && charCode <= nine) {
-	    return (charCode - zero + numberOffset);
-	  }
-
-	  // 62: +
-	  if (charCode == plus) {
-	    return 62;
-	  }
-
-	  // 63: /
-	  if (charCode == slash) {
-	    return 63;
-	  }
-
-	  // Invalid base64 digit.
-	  return -1;
-	};
-	return base64;
-}
-
-var hasRequiredBase64Vlq;
-
-function requireBase64Vlq () {
-	if (hasRequiredBase64Vlq) return base64Vlq;
-	hasRequiredBase64Vlq = 1;
-	/*
-	 * Copyright 2011 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 *
-	 * Based on the Base 64 VLQ implementation in Closure Compiler:
-	 * https://code.google.com/p/closure-compiler/source/browse/trunk/src/com/google/debugging/sourcemap/Base64VLQ.java
-	 *
-	 * Copyright 2011 The Closure Compiler Authors. All rights reserved.
-	 * Redistribution and use in source and binary forms, with or without
-	 * modification, are permitted provided that the following conditions are
-	 * met:
-	 *
-	 *  * Redistributions of source code must retain the above copyright
-	 *    notice, this list of conditions and the following disclaimer.
-	 *  * Redistributions in binary form must reproduce the above
-	 *    copyright notice, this list of conditions and the following
-	 *    disclaimer in the documentation and/or other materials provided
-	 *    with the distribution.
-	 *  * Neither the name of Google Inc. nor the names of its
-	 *    contributors may be used to endorse or promote products derived
-	 *    from this software without specific prior written permission.
-	 *
-	 * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-	 * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-	 * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-	 * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-	 * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-	 * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-	 * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-	 * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-	 * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-	 * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-	 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-	 */
-
-	var base64 = requireBase64();
-
-	// A single base 64 digit can contain 6 bits of data. For the base 64 variable
-	// length quantities we use in the source map spec, the first bit is the sign,
-	// the next four bits are the actual value, and the 6th bit is the
-	// continuation bit. The continuation bit tells us whether there are more
-	// digits in this value following this digit.
-	//
-	//   Continuation
-	//   |    Sign
-	//   |    |
-	//   V    V
-	//   101011
-
-	var VLQ_BASE_SHIFT = 5;
-
-	// binary: 100000
-	var VLQ_BASE = 1 << VLQ_BASE_SHIFT;
-
-	// binary: 011111
-	var VLQ_BASE_MASK = VLQ_BASE - 1;
-
-	// binary: 100000
-	var VLQ_CONTINUATION_BIT = VLQ_BASE;
-
-	/**
-	 * Converts from a two-complement value to a value where the sign bit is
-	 * placed in the least significant bit.  For example, as decimals:
-	 *   1 becomes 2 (10 binary), -1 becomes 3 (11 binary)
-	 *   2 becomes 4 (100 binary), -2 becomes 5 (101 binary)
-	 */
-	function toVLQSigned(aValue) {
-	  return aValue < 0
-	    ? ((-aValue) << 1) + 1
-	    : (aValue << 1) + 0;
-	}
-
-	/**
-	 * Converts to a two-complement value from a value where the sign bit is
-	 * placed in the least significant bit.  For example, as decimals:
-	 *   2 (10 binary) becomes 1, 3 (11 binary) becomes -1
-	 *   4 (100 binary) becomes 2, 5 (101 binary) becomes -2
-	 */
-	function fromVLQSigned(aValue) {
-	  var isNegative = (aValue & 1) === 1;
-	  var shifted = aValue >> 1;
-	  return isNegative
-	    ? -shifted
-	    : shifted;
-	}
-
-	/**
-	 * Returns the base 64 VLQ encoded value.
-	 */
-	base64Vlq.encode = function base64VLQ_encode(aValue) {
-	  var encoded = "";
-	  var digit;
-
-	  var vlq = toVLQSigned(aValue);
-
-	  do {
-	    digit = vlq & VLQ_BASE_MASK;
-	    vlq >>>= VLQ_BASE_SHIFT;
-	    if (vlq > 0) {
-	      // There are still more digits in this value, so we must make sure the
-	      // continuation bit is marked.
-	      digit |= VLQ_CONTINUATION_BIT;
-	    }
-	    encoded += base64.encode(digit);
-	  } while (vlq > 0);
-
-	  return encoded;
-	};
-
-	/**
-	 * Decodes the next base 64 VLQ value from the given string and returns the
-	 * value and the rest of the string via the out parameter.
-	 */
-	base64Vlq.decode = function base64VLQ_decode(aStr, aIndex, aOutParam) {
-	  var strLen = aStr.length;
-	  var result = 0;
-	  var shift = 0;
-	  var continuation, digit;
-
-	  do {
-	    if (aIndex >= strLen) {
-	      throw new Error("Expected more digits in base 64 VLQ value.");
-	    }
-
-	    digit = base64.decode(aStr.charCodeAt(aIndex++));
-	    if (digit === -1) {
-	      throw new Error("Invalid base64 digit: " + aStr.charAt(aIndex - 1));
-	    }
-
-	    continuation = !!(digit & VLQ_CONTINUATION_BIT);
-	    digit &= VLQ_BASE_MASK;
-	    result = result + (digit << shift);
-	    shift += VLQ_BASE_SHIFT;
-	  } while (continuation);
-
-	  aOutParam.value = fromVLQSigned(result);
-	  aOutParam.rest = aIndex;
-	};
-	return base64Vlq;
-}
-
-var util = {};
-
-var hasRequiredUtil;
-
-function requireUtil () {
-	if (hasRequiredUtil) return util;
-	hasRequiredUtil = 1;
-	(function (exports) {
-		/*
-		 * Copyright 2011 Mozilla Foundation and contributors
-		 * Licensed under the New BSD license. See LICENSE or:
-		 * http://opensource.org/licenses/BSD-3-Clause
-		 */
-
-		/**
-		 * This is a helper function for getting values from parameter/options
-		 * objects.
-		 *
-		 * @param args The object we are extracting values from
-		 * @param name The name of the property we are getting.
-		 * @param defaultValue An optional value to return if the property is missing
-		 * from the object. If this is not specified and the property is missing, an
-		 * error will be thrown.
-		 */
-		function getArg(aArgs, aName, aDefaultValue) {
-		  if (aName in aArgs) {
-		    return aArgs[aName];
-		  } else if (arguments.length === 3) {
-		    return aDefaultValue;
-		  } else {
-		    throw new Error('"' + aName + '" is a required argument.');
-		  }
-		}
-		exports.getArg = getArg;
-
-		var urlRegexp = /^(?:([\w+\-.]+):)?\/\/(?:(\w+:\w+)@)?([\w.]*)(?::(\d+))?(\S*)$/;
-		var dataUrlRegexp = /^data:.+\,.+$/;
-
-		function urlParse(aUrl) {
-		  var match = aUrl.match(urlRegexp);
-		  if (!match) {
-		    return null;
-		  }
-		  return {
-		    scheme: match[1],
-		    auth: match[2],
-		    host: match[3],
-		    port: match[4],
-		    path: match[5]
-		  };
-		}
-		exports.urlParse = urlParse;
-
-		function urlGenerate(aParsedUrl) {
-		  var url = '';
-		  if (aParsedUrl.scheme) {
-		    url += aParsedUrl.scheme + ':';
-		  }
-		  url += '//';
-		  if (aParsedUrl.auth) {
-		    url += aParsedUrl.auth + '@';
-		  }
-		  if (aParsedUrl.host) {
-		    url += aParsedUrl.host;
-		  }
-		  if (aParsedUrl.port) {
-		    url += ":" + aParsedUrl.port;
-		  }
-		  if (aParsedUrl.path) {
-		    url += aParsedUrl.path;
-		  }
-		  return url;
-		}
-		exports.urlGenerate = urlGenerate;
-
-		/**
-		 * Normalizes a path, or the path portion of a URL:
-		 *
-		 * - Replaces consecutive slashes with one slash.
-		 * - Removes unnecessary '.' parts.
-		 * - Removes unnecessary '<dir>/..' parts.
-		 *
-		 * Based on code in the Node.js 'path' core module.
-		 *
-		 * @param aPath The path or url to normalize.
-		 */
-		function normalize(aPath) {
-		  var path = aPath;
-		  var url = urlParse(aPath);
-		  if (url) {
-		    if (!url.path) {
-		      return aPath;
-		    }
-		    path = url.path;
-		  }
-		  var isAbsolute = exports.isAbsolute(path);
-
-		  var parts = path.split(/\/+/);
-		  for (var part, up = 0, i = parts.length - 1; i >= 0; i--) {
-		    part = parts[i];
-		    if (part === '.') {
-		      parts.splice(i, 1);
-		    } else if (part === '..') {
-		      up++;
-		    } else if (up > 0) {
-		      if (part === '') {
-		        // The first part is blank if the path is absolute. Trying to go
-		        // above the root is a no-op. Therefore we can remove all '..' parts
-		        // directly after the root.
-		        parts.splice(i + 1, up);
-		        up = 0;
-		      } else {
-		        parts.splice(i, 2);
-		        up--;
-		      }
-		    }
-		  }
-		  path = parts.join('/');
-
-		  if (path === '') {
-		    path = isAbsolute ? '/' : '.';
-		  }
-
-		  if (url) {
-		    url.path = path;
-		    return urlGenerate(url);
-		  }
-		  return path;
-		}
-		exports.normalize = normalize;
-
-		/**
-		 * Joins two paths/URLs.
-		 *
-		 * @param aRoot The root path or URL.
-		 * @param aPath The path or URL to be joined with the root.
-		 *
-		 * - If aPath is a URL or a data URI, aPath is returned, unless aPath is a
-		 *   scheme-relative URL: Then the scheme of aRoot, if any, is prepended
-		 *   first.
-		 * - Otherwise aPath is a path. If aRoot is a URL, then its path portion
-		 *   is updated with the result and aRoot is returned. Otherwise the result
-		 *   is returned.
-		 *   - If aPath is absolute, the result is aPath.
-		 *   - Otherwise the two paths are joined with a slash.
-		 * - Joining for example 'http://' and 'www.example.com' is also supported.
-		 */
-		function join(aRoot, aPath) {
-		  if (aRoot === "") {
-		    aRoot = ".";
-		  }
-		  if (aPath === "") {
-		    aPath = ".";
-		  }
-		  var aPathUrl = urlParse(aPath);
-		  var aRootUrl = urlParse(aRoot);
-		  if (aRootUrl) {
-		    aRoot = aRootUrl.path || '/';
-		  }
-
-		  // `join(foo, '//www.example.org')`
-		  if (aPathUrl && !aPathUrl.scheme) {
-		    if (aRootUrl) {
-		      aPathUrl.scheme = aRootUrl.scheme;
-		    }
-		    return urlGenerate(aPathUrl);
-		  }
-
-		  if (aPathUrl || aPath.match(dataUrlRegexp)) {
-		    return aPath;
-		  }
-
-		  // `join('http://', 'www.example.com')`
-		  if (aRootUrl && !aRootUrl.host && !aRootUrl.path) {
-		    aRootUrl.host = aPath;
-		    return urlGenerate(aRootUrl);
-		  }
-
-		  var joined = aPath.charAt(0) === '/'
-		    ? aPath
-		    : normalize(aRoot.replace(/\/+$/, '') + '/' + aPath);
-
-		  if (aRootUrl) {
-		    aRootUrl.path = joined;
-		    return urlGenerate(aRootUrl);
-		  }
-		  return joined;
-		}
-		exports.join = join;
-
-		exports.isAbsolute = function (aPath) {
-		  return aPath.charAt(0) === '/' || !!aPath.match(urlRegexp);
-		};
-
-		/**
-		 * Make a path relative to a URL or another path.
-		 *
-		 * @param aRoot The root path or URL.
-		 * @param aPath The path or URL to be made relative to aRoot.
-		 */
-		function relative(aRoot, aPath) {
-		  if (aRoot === "") {
-		    aRoot = ".";
-		  }
-
-		  aRoot = aRoot.replace(/\/$/, '');
-
-		  // It is possible for the path to be above the root. In this case, simply
-		  // checking whether the root is a prefix of the path won't work. Instead, we
-		  // need to remove components from the root one by one, until either we find
-		  // a prefix that fits, or we run out of components to remove.
-		  var level = 0;
-		  while (aPath.indexOf(aRoot + '/') !== 0) {
-		    var index = aRoot.lastIndexOf("/");
-		    if (index < 0) {
-		      return aPath;
-		    }
-
-		    // If the only part of the root that is left is the scheme (i.e. http://,
-		    // file:///, etc.), one or more slashes (/), or simply nothing at all, we
-		    // have exhausted all components, so the path is not relative to the root.
-		    aRoot = aRoot.slice(0, index);
-		    if (aRoot.match(/^([^\/]+:\/)?\/*$/)) {
-		      return aPath;
-		    }
-
-		    ++level;
-		  }
-
-		  // Make sure we add a "../" for each component we removed from the root.
-		  return Array(level + 1).join("../") + aPath.substr(aRoot.length + 1);
-		}
-		exports.relative = relative;
-
-		var supportsNullProto = (function () {
-		  var obj = Object.create(null);
-		  return !('__proto__' in obj);
-		}());
-
-		function identity (s) {
-		  return s;
-		}
-
-		/**
-		 * Because behavior goes wacky when you set `__proto__` on objects, we
-		 * have to prefix all the strings in our set with an arbitrary character.
-		 *
-		 * See https://github.com/mozilla/source-map/pull/31 and
-		 * https://github.com/mozilla/source-map/issues/30
-		 *
-		 * @param String aStr
-		 */
-		function toSetString(aStr) {
-		  if (isProtoString(aStr)) {
-		    return '$' + aStr;
-		  }
-
-		  return aStr;
-		}
-		exports.toSetString = supportsNullProto ? identity : toSetString;
-
-		function fromSetString(aStr) {
-		  if (isProtoString(aStr)) {
-		    return aStr.slice(1);
-		  }
-
-		  return aStr;
-		}
-		exports.fromSetString = supportsNullProto ? identity : fromSetString;
-
-		function isProtoString(s) {
-		  if (!s) {
-		    return false;
-		  }
-
-		  var length = s.length;
-
-		  if (length < 9 /* "__proto__".length */) {
-		    return false;
-		  }
-
-		  if (s.charCodeAt(length - 1) !== 95  /* '_' */ ||
-		      s.charCodeAt(length - 2) !== 95  /* '_' */ ||
-		      s.charCodeAt(length - 3) !== 111 /* 'o' */ ||
-		      s.charCodeAt(length - 4) !== 116 /* 't' */ ||
-		      s.charCodeAt(length - 5) !== 111 /* 'o' */ ||
-		      s.charCodeAt(length - 6) !== 114 /* 'r' */ ||
-		      s.charCodeAt(length - 7) !== 112 /* 'p' */ ||
-		      s.charCodeAt(length - 8) !== 95  /* '_' */ ||
-		      s.charCodeAt(length - 9) !== 95  /* '_' */) {
-		    return false;
-		  }
-
-		  for (var i = length - 10; i >= 0; i--) {
-		    if (s.charCodeAt(i) !== 36 /* '$' */) {
-		      return false;
-		    }
-		  }
-
-		  return true;
-		}
-
-		/**
-		 * Comparator between two mappings where the original positions are compared.
-		 *
-		 * Optionally pass in `true` as `onlyCompareGenerated` to consider two
-		 * mappings with the same original source/line/column, but different generated
-		 * line and column the same. Useful when searching for a mapping with a
-		 * stubbed out mapping.
-		 */
-		function compareByOriginalPositions(mappingA, mappingB, onlyCompareOriginal) {
-		  var cmp = mappingA.source - mappingB.source;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.originalLine - mappingB.originalLine;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.originalColumn - mappingB.originalColumn;
-		  if (cmp !== 0 || onlyCompareOriginal) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.generatedColumn - mappingB.generatedColumn;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.generatedLine - mappingB.generatedLine;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  return mappingA.name - mappingB.name;
-		}
-		exports.compareByOriginalPositions = compareByOriginalPositions;
-
-		/**
-		 * Comparator between two mappings with deflated source and name indices where
-		 * the generated positions are compared.
-		 *
-		 * Optionally pass in `true` as `onlyCompareGenerated` to consider two
-		 * mappings with the same generated line and column, but different
-		 * source/name/original line and column the same. Useful when searching for a
-		 * mapping with a stubbed out mapping.
-		 */
-		function compareByGeneratedPositionsDeflated(mappingA, mappingB, onlyCompareGenerated) {
-		  var cmp = mappingA.generatedLine - mappingB.generatedLine;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.generatedColumn - mappingB.generatedColumn;
-		  if (cmp !== 0 || onlyCompareGenerated) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.source - mappingB.source;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.originalLine - mappingB.originalLine;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.originalColumn - mappingB.originalColumn;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  return mappingA.name - mappingB.name;
-		}
-		exports.compareByGeneratedPositionsDeflated = compareByGeneratedPositionsDeflated;
-
-		function strcmp(aStr1, aStr2) {
-		  if (aStr1 === aStr2) {
-		    return 0;
-		  }
-
-		  if (aStr1 > aStr2) {
-		    return 1;
-		  }
-
-		  return -1;
-		}
-
-		/**
-		 * Comparator between two mappings with inflated source and name strings where
-		 * the generated positions are compared.
-		 */
-		function compareByGeneratedPositionsInflated(mappingA, mappingB) {
-		  var cmp = mappingA.generatedLine - mappingB.generatedLine;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.generatedColumn - mappingB.generatedColumn;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = strcmp(mappingA.source, mappingB.source);
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.originalLine - mappingB.originalLine;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  cmp = mappingA.originalColumn - mappingB.originalColumn;
-		  if (cmp !== 0) {
-		    return cmp;
-		  }
-
-		  return strcmp(mappingA.name, mappingB.name);
-		}
-		exports.compareByGeneratedPositionsInflated = compareByGeneratedPositionsInflated;
-} (util));
-	return util;
-}
-
-var arraySet = {};
-
-var hasRequiredArraySet;
-
-function requireArraySet () {
-	if (hasRequiredArraySet) return arraySet;
-	hasRequiredArraySet = 1;
-	/*
-	 * Copyright 2011 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 */
-
-	var util = requireUtil();
-	var has = Object.prototype.hasOwnProperty;
-	var hasNativeMap = typeof Map !== "undefined";
-
-	/**
-	 * A data structure which is a combination of an array and a set. Adding a new
-	 * member is O(1), testing for membership is O(1), and finding the index of an
-	 * element is O(1). Removing elements from the set is not supported. Only
-	 * strings are supported for membership.
-	 */
-	function ArraySet() {
-	  this._array = [];
-	  this._set = hasNativeMap ? new Map() : Object.create(null);
-	}
-
-	/**
-	 * Static method for creating ArraySet instances from an existing array.
-	 */
-	ArraySet.fromArray = function ArraySet_fromArray(aArray, aAllowDuplicates) {
-	  var set = new ArraySet();
-	  for (var i = 0, len = aArray.length; i < len; i++) {
-	    set.add(aArray[i], aAllowDuplicates);
-	  }
-	  return set;
-	};
-
-	/**
-	 * Return how many unique items are in this ArraySet. If duplicates have been
-	 * added, than those do not count towards the size.
-	 *
-	 * @returns Number
-	 */
-	ArraySet.prototype.size = function ArraySet_size() {
-	  return hasNativeMap ? this._set.size : Object.getOwnPropertyNames(this._set).length;
-	};
-
-	/**
-	 * Add the given string to this set.
-	 *
-	 * @param String aStr
-	 */
-	ArraySet.prototype.add = function ArraySet_add(aStr, aAllowDuplicates) {
-	  var sStr = hasNativeMap ? aStr : util.toSetString(aStr);
-	  var isDuplicate = hasNativeMap ? this.has(aStr) : has.call(this._set, sStr);
-	  var idx = this._array.length;
-	  if (!isDuplicate || aAllowDuplicates) {
-	    this._array.push(aStr);
-	  }
-	  if (!isDuplicate) {
-	    if (hasNativeMap) {
-	      this._set.set(aStr, idx);
-	    } else {
-	      this._set[sStr] = idx;
-	    }
-	  }
-	};
-
-	/**
-	 * Is the given string a member of this set?
-	 *
-	 * @param String aStr
-	 */
-	ArraySet.prototype.has = function ArraySet_has(aStr) {
-	  if (hasNativeMap) {
-	    return this._set.has(aStr);
-	  } else {
-	    var sStr = util.toSetString(aStr);
-	    return has.call(this._set, sStr);
-	  }
-	};
-
-	/**
-	 * What is the index of the given string in the array?
-	 *
-	 * @param String aStr
-	 */
-	ArraySet.prototype.indexOf = function ArraySet_indexOf(aStr) {
-	  if (hasNativeMap) {
-	    var idx = this._set.get(aStr);
-	    if (idx >= 0) {
-	        return idx;
-	    }
-	  } else {
-	    var sStr = util.toSetString(aStr);
-	    if (has.call(this._set, sStr)) {
-	      return this._set[sStr];
-	    }
-	  }
-
-	  throw new Error('"' + aStr + '" is not in the set.');
-	};
-
-	/**
-	 * What is the element at the given index?
-	 *
-	 * @param Number aIdx
-	 */
-	ArraySet.prototype.at = function ArraySet_at(aIdx) {
-	  if (aIdx >= 0 && aIdx < this._array.length) {
-	    return this._array[aIdx];
-	  }
-	  throw new Error('No element indexed by ' + aIdx);
-	};
-
-	/**
-	 * Returns the array representation of this set (which has the proper indices
-	 * indicated by indexOf). Note that this is a copy of the internal array used
-	 * for storing the members so that no one can mess with internal state.
-	 */
-	ArraySet.prototype.toArray = function ArraySet_toArray() {
-	  return this._array.slice();
-	};
-
-	arraySet.ArraySet = ArraySet;
-	return arraySet;
-}
-
-var mappingList = {};
-
-var hasRequiredMappingList;
-
-function requireMappingList () {
-	if (hasRequiredMappingList) return mappingList;
-	hasRequiredMappingList = 1;
-	/*
-	 * Copyright 2014 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 */
-
-	var util = requireUtil();
-
-	/**
-	 * Determine whether mappingB is after mappingA with respect to generated
-	 * position.
-	 */
-	function generatedPositionAfter(mappingA, mappingB) {
-	  // Optimized for most common case
-	  var lineA = mappingA.generatedLine;
-	  var lineB = mappingB.generatedLine;
-	  var columnA = mappingA.generatedColumn;
-	  var columnB = mappingB.generatedColumn;
-	  return lineB > lineA || lineB == lineA && columnB >= columnA ||
-	         util.compareByGeneratedPositionsInflated(mappingA, mappingB) <= 0;
-	}
-
-	/**
-	 * A data structure to provide a sorted view of accumulated mappings in a
-	 * performance conscious manner. It trades a neglibable overhead in general
-	 * case for a large speedup in case of mappings being added in order.
-	 */
-	function MappingList() {
-	  this._array = [];
-	  this._sorted = true;
-	  // Serves as infimum
-	  this._last = {generatedLine: -1, generatedColumn: 0};
-	}
-
-	/**
-	 * Iterate through internal items. This method takes the same arguments that
-	 * `Array.prototype.forEach` takes.
-	 *
-	 * NOTE: The order of the mappings is NOT guaranteed.
-	 */
-	MappingList.prototype.unsortedForEach =
-	  function MappingList_forEach(aCallback, aThisArg) {
-	    this._array.forEach(aCallback, aThisArg);
-	  };
-
-	/**
-	 * Add the given source mapping.
-	 *
-	 * @param Object aMapping
-	 */
-	MappingList.prototype.add = function MappingList_add(aMapping) {
-	  if (generatedPositionAfter(this._last, aMapping)) {
-	    this._last = aMapping;
-	    this._array.push(aMapping);
-	  } else {
-	    this._sorted = false;
-	    this._array.push(aMapping);
-	  }
-	};
-
-	/**
-	 * Returns the flat, sorted array of mappings. The mappings are sorted by
-	 * generated position.
-	 *
-	 * WARNING: This method returns internal data without copying, for
-	 * performance. The return value must NOT be mutated, and should be treated as
-	 * an immutable borrow. If you want to take ownership, you must make your own
-	 * copy.
-	 */
-	MappingList.prototype.toArray = function MappingList_toArray() {
-	  if (!this._sorted) {
-	    this._array.sort(util.compareByGeneratedPositionsInflated);
-	    this._sorted = true;
-	  }
-	  return this._array;
-	};
-
-	mappingList.MappingList = MappingList;
-	return mappingList;
-}
-
-var hasRequiredSourceMapGenerator;
-
-function requireSourceMapGenerator () {
-	if (hasRequiredSourceMapGenerator) return sourceMapGenerator;
-	hasRequiredSourceMapGenerator = 1;
-	/*
-	 * Copyright 2011 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 */
-
-	var base64VLQ = requireBase64Vlq();
-	var util = requireUtil();
-	var ArraySet = requireArraySet().ArraySet;
-	var MappingList = requireMappingList().MappingList;
-
-	/**
-	 * An instance of the SourceMapGenerator represents a source map which is
-	 * being built incrementally. You may pass an object with the following
-	 * properties:
-	 *
-	 *   - file: The filename of the generated source.
-	 *   - sourceRoot: A root for all relative URLs in this source map.
-	 */
-	function SourceMapGenerator(aArgs) {
-	  if (!aArgs) {
-	    aArgs = {};
-	  }
-	  this._file = util.getArg(aArgs, 'file', null);
-	  this._sourceRoot = util.getArg(aArgs, 'sourceRoot', null);
-	  this._skipValidation = util.getArg(aArgs, 'skipValidation', false);
-	  this._sources = new ArraySet();
-	  this._names = new ArraySet();
-	  this._mappings = new MappingList();
-	  this._sourcesContents = null;
-	}
-
-	SourceMapGenerator.prototype._version = 3;
-
-	/**
-	 * Creates a new SourceMapGenerator based on a SourceMapConsumer
-	 *
-	 * @param aSourceMapConsumer The SourceMap.
-	 */
-	SourceMapGenerator.fromSourceMap =
-	  function SourceMapGenerator_fromSourceMap(aSourceMapConsumer) {
-	    var sourceRoot = aSourceMapConsumer.sourceRoot;
-	    var generator = new SourceMapGenerator({
-	      file: aSourceMapConsumer.file,
-	      sourceRoot: sourceRoot
-	    });
-	    aSourceMapConsumer.eachMapping(function (mapping) {
-	      var newMapping = {
-	        generated: {
-	          line: mapping.generatedLine,
-	          column: mapping.generatedColumn
-	        }
-	      };
-
-	      if (mapping.source != null) {
-	        newMapping.source = mapping.source;
-	        if (sourceRoot != null) {
-	          newMapping.source = util.relative(sourceRoot, newMapping.source);
-	        }
-
-	        newMapping.original = {
-	          line: mapping.originalLine,
-	          column: mapping.originalColumn
-	        };
-
-	        if (mapping.name != null) {
-	          newMapping.name = mapping.name;
-	        }
-	      }
-
-	      generator.addMapping(newMapping);
-	    });
-	    aSourceMapConsumer.sources.forEach(function (sourceFile) {
-	      var content = aSourceMapConsumer.sourceContentFor(sourceFile);
-	      if (content != null) {
-	        generator.setSourceContent(sourceFile, content);
-	      }
-	    });
-	    return generator;
-	  };
-
-	/**
-	 * Add a single mapping from original source line and column to the generated
-	 * source's line and column for this source map being created. The mapping
-	 * object should have the following properties:
-	 *
-	 *   - generated: An object with the generated line and column positions.
-	 *   - original: An object with the original line and column positions.
-	 *   - source: The original source file (relative to the sourceRoot).
-	 *   - name: An optional original token name for this mapping.
-	 */
-	SourceMapGenerator.prototype.addMapping =
-	  function SourceMapGenerator_addMapping(aArgs) {
-	    var generated = util.getArg(aArgs, 'generated');
-	    var original = util.getArg(aArgs, 'original', null);
-	    var source = util.getArg(aArgs, 'source', null);
-	    var name = util.getArg(aArgs, 'name', null);
-
-	    if (!this._skipValidation) {
-	      this._validateMapping(generated, original, source, name);
-	    }
-
-	    if (source != null) {
-	      source = String(source);
-	      if (!this._sources.has(source)) {
-	        this._sources.add(source);
-	      }
-	    }
-
-	    if (name != null) {
-	      name = String(name);
-	      if (!this._names.has(name)) {
-	        this._names.add(name);
-	      }
-	    }
-
-	    this._mappings.add({
-	      generatedLine: generated.line,
-	      generatedColumn: generated.column,
-	      originalLine: original != null && original.line,
-	      originalColumn: original != null && original.column,
-	      source: source,
-	      name: name
-	    });
-	  };
-
-	/**
-	 * Set the source content for a source file.
-	 */
-	SourceMapGenerator.prototype.setSourceContent =
-	  function SourceMapGenerator_setSourceContent(aSourceFile, aSourceContent) {
-	    var source = aSourceFile;
-	    if (this._sourceRoot != null) {
-	      source = util.relative(this._sourceRoot, source);
-	    }
-
-	    if (aSourceContent != null) {
-	      // Add the source content to the _sourcesContents map.
-	      // Create a new _sourcesContents map if the property is null.
-	      if (!this._sourcesContents) {
-	        this._sourcesContents = Object.create(null);
-	      }
-	      this._sourcesContents[util.toSetString(source)] = aSourceContent;
-	    } else if (this._sourcesContents) {
-	      // Remove the source file from the _sourcesContents map.
-	      // If the _sourcesContents map is empty, set the property to null.
-	      delete this._sourcesContents[util.toSetString(source)];
-	      if (Object.keys(this._sourcesContents).length === 0) {
-	        this._sourcesContents = null;
-	      }
-	    }
-	  };
-
-	/**
-	 * Applies the mappings of a sub-source-map for a specific source file to the
-	 * source map being generated. Each mapping to the supplied source file is
-	 * rewritten using the supplied source map. Note: The resolution for the
-	 * resulting mappings is the minimium of this map and the supplied map.
-	 *
-	 * @param aSourceMapConsumer The source map to be applied.
-	 * @param aSourceFile Optional. The filename of the source file.
-	 *        If omitted, SourceMapConsumer's file property will be used.
-	 * @param aSourceMapPath Optional. The dirname of the path to the source map
-	 *        to be applied. If relative, it is relative to the SourceMapConsumer.
-	 *        This parameter is needed when the two source maps aren't in the same
-	 *        directory, and the source map to be applied contains relative source
-	 *        paths. If so, those relative source paths need to be rewritten
-	 *        relative to the SourceMapGenerator.
-	 */
-	SourceMapGenerator.prototype.applySourceMap =
-	  function SourceMapGenerator_applySourceMap(aSourceMapConsumer, aSourceFile, aSourceMapPath) {
-	    var sourceFile = aSourceFile;
-	    // If aSourceFile is omitted, we will use the file property of the SourceMap
-	    if (aSourceFile == null) {
-	      if (aSourceMapConsumer.file == null) {
-	        throw new Error(
-	          'SourceMapGenerator.prototype.applySourceMap requires either an explicit source file, ' +
-	          'or the source map\'s "file" property. Both were omitted.'
-	        );
-	      }
-	      sourceFile = aSourceMapConsumer.file;
-	    }
-	    var sourceRoot = this._sourceRoot;
-	    // Make "sourceFile" relative if an absolute Url is passed.
-	    if (sourceRoot != null) {
-	      sourceFile = util.relative(sourceRoot, sourceFile);
-	    }
-	    // Applying the SourceMap can add and remove items from the sources and
-	    // the names array.
-	    var newSources = new ArraySet();
-	    var newNames = new ArraySet();
-
-	    // Find mappings for the "sourceFile"
-	    this._mappings.unsortedForEach(function (mapping) {
-	      if (mapping.source === sourceFile && mapping.originalLine != null) {
-	        // Check if it can be mapped by the source map, then update the mapping.
-	        var original = aSourceMapConsumer.originalPositionFor({
-	          line: mapping.originalLine,
-	          column: mapping.originalColumn
-	        });
-	        if (original.source != null) {
-	          // Copy mapping
-	          mapping.source = original.source;
-	          if (aSourceMapPath != null) {
-	            mapping.source = util.join(aSourceMapPath, mapping.source);
-	          }
-	          if (sourceRoot != null) {
-	            mapping.source = util.relative(sourceRoot, mapping.source);
-	          }
-	          mapping.originalLine = original.line;
-	          mapping.originalColumn = original.column;
-	          if (original.name != null) {
-	            mapping.name = original.name;
-	          }
-	        }
-	      }
-
-	      var source = mapping.source;
-	      if (source != null && !newSources.has(source)) {
-	        newSources.add(source);
-	      }
-
-	      var name = mapping.name;
-	      if (name != null && !newNames.has(name)) {
-	        newNames.add(name);
-	      }
-
-	    }, this);
-	    this._sources = newSources;
-	    this._names = newNames;
-
-	    // Copy sourcesContents of applied map.
-	    aSourceMapConsumer.sources.forEach(function (sourceFile) {
-	      var content = aSourceMapConsumer.sourceContentFor(sourceFile);
-	      if (content != null) {
-	        if (aSourceMapPath != null) {
-	          sourceFile = util.join(aSourceMapPath, sourceFile);
-	        }
-	        if (sourceRoot != null) {
-	          sourceFile = util.relative(sourceRoot, sourceFile);
-	        }
-	        this.setSourceContent(sourceFile, content);
-	      }
-	    }, this);
-	  };
-
-	/**
-	 * A mapping can have one of the three levels of data:
-	 *
-	 *   1. Just the generated position.
-	 *   2. The Generated position, original position, and original source.
-	 *   3. Generated and original position, original source, as well as a name
-	 *      token.
-	 *
-	 * To maintain consistency, we validate that any new mapping being added falls
-	 * in to one of these categories.
-	 */
-	SourceMapGenerator.prototype._validateMapping =
-	  function SourceMapGenerator_validateMapping(aGenerated, aOriginal, aSource,
-	                                              aName) {
-	    // When aOriginal is truthy but has empty values for .line and .column,
-	    // it is most likely a programmer error. In this case we throw a very
-	    // specific error message to try to guide them the right way.
-	    // For example: https://github.com/Polymer/polymer-bundler/pull/519
-	    if (aOriginal && typeof aOriginal.line !== 'number' && typeof aOriginal.column !== 'number') {
-	        throw new Error(
-	            'original.line and original.column are not numbers -- you probably meant to omit ' +
-	            'the original mapping entirely and only map the generated position. If so, pass ' +
-	            'null for the original mapping instead of an object with empty or null values.'
-	        );
-	    }
-
-	    if (aGenerated && 'line' in aGenerated && 'column' in aGenerated
-	        && aGenerated.line > 0 && aGenerated.column >= 0
-	        && !aOriginal && !aSource && !aName) {
-	      // Case 1.
-	      return;
-	    }
-	    else if (aGenerated && 'line' in aGenerated && 'column' in aGenerated
-	             && aOriginal && 'line' in aOriginal && 'column' in aOriginal
-	             && aGenerated.line > 0 && aGenerated.column >= 0
-	             && aOriginal.line > 0 && aOriginal.column >= 0
-	             && aSource) {
-	      // Cases 2 and 3.
-	      return;
-	    }
-	    else {
-	      throw new Error('Invalid mapping: ' + JSON.stringify({
-	        generated: aGenerated,
-	        source: aSource,
-	        original: aOriginal,
-	        name: aName
-	      }));
-	    }
-	  };
-
-	/**
-	 * Serialize the accumulated mappings in to the stream of base 64 VLQs
-	 * specified by the source map format.
-	 */
-	SourceMapGenerator.prototype._serializeMappings =
-	  function SourceMapGenerator_serializeMappings() {
-	    var previousGeneratedColumn = 0;
-	    var previousGeneratedLine = 1;
-	    var previousOriginalColumn = 0;
-	    var previousOriginalLine = 0;
-	    var previousName = 0;
-	    var previousSource = 0;
-	    var result = '';
-	    var next;
-	    var mapping;
-	    var nameIdx;
-	    var sourceIdx;
-
-	    var mappings = this._mappings.toArray();
-	    for (var i = 0, len = mappings.length; i < len; i++) {
-	      mapping = mappings[i];
-	      next = '';
-
-	      if (mapping.generatedLine !== previousGeneratedLine) {
-	        previousGeneratedColumn = 0;
-	        while (mapping.generatedLine !== previousGeneratedLine) {
-	          next += ';';
-	          previousGeneratedLine++;
-	        }
-	      }
-	      else {
-	        if (i > 0) {
-	          if (!util.compareByGeneratedPositionsInflated(mapping, mappings[i - 1])) {
-	            continue;
-	          }
-	          next += ',';
-	        }
-	      }
-
-	      next += base64VLQ.encode(mapping.generatedColumn
-	                                 - previousGeneratedColumn);
-	      previousGeneratedColumn = mapping.generatedColumn;
-
-	      if (mapping.source != null) {
-	        sourceIdx = this._sources.indexOf(mapping.source);
-	        next += base64VLQ.encode(sourceIdx - previousSource);
-	        previousSource = sourceIdx;
-
-	        // lines are stored 0-based in SourceMap spec version 3
-	        next += base64VLQ.encode(mapping.originalLine - 1
-	                                   - previousOriginalLine);
-	        previousOriginalLine = mapping.originalLine - 1;
-
-	        next += base64VLQ.encode(mapping.originalColumn
-	                                   - previousOriginalColumn);
-	        previousOriginalColumn = mapping.originalColumn;
-
-	        if (mapping.name != null) {
-	          nameIdx = this._names.indexOf(mapping.name);
-	          next += base64VLQ.encode(nameIdx - previousName);
-	          previousName = nameIdx;
-	        }
-	      }
-
-	      result += next;
-	    }
-
-	    return result;
-	  };
-
-	SourceMapGenerator.prototype._generateSourcesContent =
-	  function SourceMapGenerator_generateSourcesContent(aSources, aSourceRoot) {
-	    return aSources.map(function (source) {
-	      if (!this._sourcesContents) {
-	        return null;
-	      }
-	      if (aSourceRoot != null) {
-	        source = util.relative(aSourceRoot, source);
-	      }
-	      var key = util.toSetString(source);
-	      return Object.prototype.hasOwnProperty.call(this._sourcesContents, key)
-	        ? this._sourcesContents[key]
-	        : null;
-	    }, this);
-	  };
-
-	/**
-	 * Externalize the source map.
-	 */
-	SourceMapGenerator.prototype.toJSON =
-	  function SourceMapGenerator_toJSON() {
-	    var map = {
-	      version: this._version,
-	      sources: this._sources.toArray(),
-	      names: this._names.toArray(),
-	      mappings: this._serializeMappings()
-	    };
-	    if (this._file != null) {
-	      map.file = this._file;
-	    }
-	    if (this._sourceRoot != null) {
-	      map.sourceRoot = this._sourceRoot;
-	    }
-	    if (this._sourcesContents) {
-	      map.sourcesContent = this._generateSourcesContent(map.sources, map.sourceRoot);
-	    }
-
-	    return map;
-	  };
-
-	/**
-	 * Render the source map being generated to a string.
-	 */
-	SourceMapGenerator.prototype.toString =
-	  function SourceMapGenerator_toString() {
-	    return JSON.stringify(this.toJSON());
-	  };
-
-	sourceMapGenerator.SourceMapGenerator = SourceMapGenerator;
-	return sourceMapGenerator;
-}
-
-var sourceMapConsumer = {};
-
-var binarySearch = {};
-
-var hasRequiredBinarySearch;
-
-function requireBinarySearch () {
-	if (hasRequiredBinarySearch) return binarySearch;
-	hasRequiredBinarySearch = 1;
-	(function (exports) {
-		/*
-		 * Copyright 2011 Mozilla Foundation and contributors
-		 * Licensed under the New BSD license. See LICENSE or:
-		 * http://opensource.org/licenses/BSD-3-Clause
-		 */
-
-		exports.GREATEST_LOWER_BOUND = 1;
-		exports.LEAST_UPPER_BOUND = 2;
-
-		/**
-		 * Recursive implementation of binary search.
-		 *
-		 * @param aLow Indices here and lower do not contain the needle.
-		 * @param aHigh Indices here and higher do not contain the needle.
-		 * @param aNeedle The element being searched for.
-		 * @param aHaystack The non-empty array being searched.
-		 * @param aCompare Function which takes two elements and returns -1, 0, or 1.
-		 * @param aBias Either 'binarySearch.GREATEST_LOWER_BOUND' or
-		 *     'binarySearch.LEAST_UPPER_BOUND'. Specifies whether to return the
-		 *     closest element that is smaller than or greater than the one we are
-		 *     searching for, respectively, if the exact element cannot be found.
-		 */
-		function recursiveSearch(aLow, aHigh, aNeedle, aHaystack, aCompare, aBias) {
-		  // This function terminates when one of the following is true:
-		  //
-		  //   1. We find the exact element we are looking for.
-		  //
-		  //   2. We did not find the exact element, but we can return the index of
-		  //      the next-closest element.
-		  //
-		  //   3. We did not find the exact element, and there is no next-closest
-		  //      element than the one we are searching for, so we return -1.
-		  var mid = Math.floor((aHigh - aLow) / 2) + aLow;
-		  var cmp = aCompare(aNeedle, aHaystack[mid], true);
-		  if (cmp === 0) {
-		    // Found the element we are looking for.
-		    return mid;
-		  }
-		  else if (cmp > 0) {
-		    // Our needle is greater than aHaystack[mid].
-		    if (aHigh - mid > 1) {
-		      // The element is in the upper half.
-		      return recursiveSearch(mid, aHigh, aNeedle, aHaystack, aCompare, aBias);
-		    }
-
-		    // The exact needle element was not found in this haystack. Determine if
-		    // we are in termination case (3) or (2) and return the appropriate thing.
-		    if (aBias == exports.LEAST_UPPER_BOUND) {
-		      return aHigh < aHaystack.length ? aHigh : -1;
-		    } else {
-		      return mid;
-		    }
-		  }
-		  else {
-		    // Our needle is less than aHaystack[mid].
-		    if (mid - aLow > 1) {
-		      // The element is in the lower half.
-		      return recursiveSearch(aLow, mid, aNeedle, aHaystack, aCompare, aBias);
-		    }
-
-		    // we are in termination case (3) or (2) and return the appropriate thing.
-		    if (aBias == exports.LEAST_UPPER_BOUND) {
-		      return mid;
-		    } else {
-		      return aLow < 0 ? -1 : aLow;
-		    }
-		  }
-		}
-
-		/**
-		 * This is an implementation of binary search which will always try and return
-		 * the index of the closest element if there is no exact hit. This is because
-		 * mappings between original and generated line/col pairs are single points,
-		 * and there is an implicit region between each of them, so a miss just means
-		 * that you aren't on the very start of a region.
-		 *
-		 * @param aNeedle The element you are looking for.
-		 * @param aHaystack The array that is being searched.
-		 * @param aCompare A function which takes the needle and an element in the
-		 *     array and returns -1, 0, or 1 depending on whether the needle is less
-		 *     than, equal to, or greater than the element, respectively.
-		 * @param aBias Either 'binarySearch.GREATEST_LOWER_BOUND' or
-		 *     'binarySearch.LEAST_UPPER_BOUND'. Specifies whether to return the
-		 *     closest element that is smaller than or greater than the one we are
-		 *     searching for, respectively, if the exact element cannot be found.
-		 *     Defaults to 'binarySearch.GREATEST_LOWER_BOUND'.
-		 */
-		exports.search = function search(aNeedle, aHaystack, aCompare, aBias) {
-		  if (aHaystack.length === 0) {
-		    return -1;
-		  }
-
-		  var index = recursiveSearch(-1, aHaystack.length, aNeedle, aHaystack,
-		                              aCompare, aBias || exports.GREATEST_LOWER_BOUND);
-		  if (index < 0) {
-		    return -1;
-		  }
-
-		  // We have found either the exact element, or the next-closest element than
-		  // the one we are searching for. However, there may be more than one such
-		  // element. Make sure we always return the smallest of these.
-		  while (index - 1 >= 0) {
-		    if (aCompare(aHaystack[index], aHaystack[index - 1], true) !== 0) {
-		      break;
-		    }
-		    --index;
-		  }
-
-		  return index;
-		};
-} (binarySearch));
-	return binarySearch;
-}
-
-var quickSort = {};
-
-var hasRequiredQuickSort;
-
-function requireQuickSort () {
-	if (hasRequiredQuickSort) return quickSort;
-	hasRequiredQuickSort = 1;
-	/*
-	 * Copyright 2011 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 */
-
-	// It turns out that some (most?) JavaScript engines don't self-host
-	// `Array.prototype.sort`. This makes sense because C++ will likely remain
-	// faster than JS when doing raw CPU-intensive sorting. However, when using a
-	// custom comparator function, calling back and forth between the VM's C++ and
-	// JIT'd JS is rather slow *and* loses JIT type information, resulting in
-	// worse generated code for the comparator function than would be optimal. In
-	// fact, when sorting with a comparator, these costs outweigh the benefits of
-	// sorting in C++. By using our own JS-implemented Quick Sort (below), we get
-	// a ~3500ms mean speed-up in `bench/bench.html`.
-
-	/**
-	 * Swap the elements indexed by `x` and `y` in the array `ary`.
-	 *
-	 * @param {Array} ary
-	 *        The array.
-	 * @param {Number} x
-	 *        The index of the first item.
-	 * @param {Number} y
-	 *        The index of the second item.
-	 */
-	function swap(ary, x, y) {
-	  var temp = ary[x];
-	  ary[x] = ary[y];
-	  ary[y] = temp;
-	}
-
-	/**
-	 * Returns a random integer within the range `low .. high` inclusive.
-	 *
-	 * @param {Number} low
-	 *        The lower bound on the range.
-	 * @param {Number} high
-	 *        The upper bound on the range.
-	 */
-	function randomIntInRange(low, high) {
-	  return Math.round(low + (Math.random() * (high - low)));
-	}
-
-	/**
-	 * The Quick Sort algorithm.
-	 *
-	 * @param {Array} ary
-	 *        An array to sort.
-	 * @param {function} comparator
-	 *        Function to use to compare two items.
-	 * @param {Number} p
-	 *        Start index of the array
-	 * @param {Number} r
-	 *        End index of the array
-	 */
-	function doQuickSort(ary, comparator, p, r) {
-	  // If our lower bound is less than our upper bound, we (1) partition the
-	  // array into two pieces and (2) recurse on each half. If it is not, this is
-	  // the empty array and our base case.
-
-	  if (p < r) {
-	    // (1) Partitioning.
-	    //
-	    // The partitioning chooses a pivot between `p` and `r` and moves all
-	    // elements that are less than or equal to the pivot to the before it, and
-	    // all the elements that are greater than it after it. The effect is that
-	    // once partition is done, the pivot is in the exact place it will be when
-	    // the array is put in sorted order, and it will not need to be moved
-	    // again. This runs in O(n) time.
-
-	    // Always choose a random pivot so that an input array which is reverse
-	    // sorted does not cause O(n^2) running time.
-	    var pivotIndex = randomIntInRange(p, r);
-	    var i = p - 1;
-
-	    swap(ary, pivotIndex, r);
-	    var pivot = ary[r];
-
-	    // Immediately after `j` is incremented in this loop, the following hold
-	    // true:
-	    //
-	    //   * Every element in `ary[p .. i]` is less than or equal to the pivot.
-	    //
-	    //   * Every element in `ary[i+1 .. j-1]` is greater than the pivot.
-	    for (var j = p; j < r; j++) {
-	      if (comparator(ary[j], pivot) <= 0) {
-	        i += 1;
-	        swap(ary, i, j);
-	      }
-	    }
-
-	    swap(ary, i + 1, j);
-	    var q = i + 1;
-
-	    // (2) Recurse on each half.
-
-	    doQuickSort(ary, comparator, p, q - 1);
-	    doQuickSort(ary, comparator, q + 1, r);
-	  }
-	}
-
-	/**
-	 * Sort the given array in-place with the given comparator function.
-	 *
-	 * @param {Array} ary
-	 *        An array to sort.
-	 * @param {function} comparator
-	 *        Function to use to compare two items.
-	 */
-	quickSort.quickSort = function (ary, comparator) {
-	  doQuickSort(ary, comparator, 0, ary.length - 1);
-	};
-	return quickSort;
-}
-
-var hasRequiredSourceMapConsumer;
-
-function requireSourceMapConsumer () {
-	if (hasRequiredSourceMapConsumer) return sourceMapConsumer;
-	hasRequiredSourceMapConsumer = 1;
-	/*
-	 * Copyright 2011 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 */
-
-	var util = requireUtil();
-	var binarySearch = requireBinarySearch();
-	var ArraySet = requireArraySet().ArraySet;
-	var base64VLQ = requireBase64Vlq();
-	var quickSort = requireQuickSort().quickSort;
-
-	function SourceMapConsumer(aSourceMap) {
-	  var sourceMap = aSourceMap;
-	  if (typeof aSourceMap === 'string') {
-	    sourceMap = JSON.parse(aSourceMap.replace(/^\)\]\}'/, ''));
-	  }
-
-	  return sourceMap.sections != null
-	    ? new IndexedSourceMapConsumer(sourceMap)
-	    : new BasicSourceMapConsumer(sourceMap);
-	}
-
-	SourceMapConsumer.fromSourceMap = function(aSourceMap) {
-	  return BasicSourceMapConsumer.fromSourceMap(aSourceMap);
-	};
-
-	/**
-	 * The version of the source mapping spec that we are consuming.
-	 */
-	SourceMapConsumer.prototype._version = 3;
-
-	// `__generatedMappings` and `__originalMappings` are arrays that hold the
-	// parsed mapping coordinates from the source map's "mappings" attribute. They
-	// are lazily instantiated, accessed via the `_generatedMappings` and
-	// `_originalMappings` getters respectively, and we only parse the mappings
-	// and create these arrays once queried for a source location. We jump through
-	// these hoops because there can be many thousands of mappings, and parsing
-	// them is expensive, so we only want to do it if we must.
-	//
-	// Each object in the arrays is of the form:
-	//
-	//     {
-	//       generatedLine: The line number in the generated code,
-	//       generatedColumn: The column number in the generated code,
-	//       source: The path to the original source file that generated this
-	//               chunk of code,
-	//       originalLine: The line number in the original source that
-	//                     corresponds to this chunk of generated code,
-	//       originalColumn: The column number in the original source that
-	//                       corresponds to this chunk of generated code,
-	//       name: The name of the original symbol which generated this chunk of
-	//             code.
-	//     }
-	//
-	// All properties except for `generatedLine` and `generatedColumn` can be
-	// `null`.
-	//
-	// `_generatedMappings` is ordered by the generated positions.
-	//
-	// `_originalMappings` is ordered by the original positions.
-
-	SourceMapConsumer.prototype.__generatedMappings = null;
-	Object.defineProperty(SourceMapConsumer.prototype, '_generatedMappings', {
-	  get: function () {
-	    if (!this.__generatedMappings) {
-	      this._parseMappings(this._mappings, this.sourceRoot);
-	    }
-
-	    return this.__generatedMappings;
-	  }
-	});
-
-	SourceMapConsumer.prototype.__originalMappings = null;
-	Object.defineProperty(SourceMapConsumer.prototype, '_originalMappings', {
-	  get: function () {
-	    if (!this.__originalMappings) {
-	      this._parseMappings(this._mappings, this.sourceRoot);
-	    }
-
-	    return this.__originalMappings;
-	  }
-	});
-
-	SourceMapConsumer.prototype._charIsMappingSeparator =
-	  function SourceMapConsumer_charIsMappingSeparator(aStr, index) {
-	    var c = aStr.charAt(index);
-	    return c === ";" || c === ",";
-	  };
-
-	/**
-	 * Parse the mappings in a string in to a data structure which we can easily
-	 * query (the ordered arrays in the `this.__generatedMappings` and
-	 * `this.__originalMappings` properties).
-	 */
-	SourceMapConsumer.prototype._parseMappings =
-	  function SourceMapConsumer_parseMappings(aStr, aSourceRoot) {
-	    throw new Error("Subclasses must implement _parseMappings");
-	  };
-
-	SourceMapConsumer.GENERATED_ORDER = 1;
-	SourceMapConsumer.ORIGINAL_ORDER = 2;
-
-	SourceMapConsumer.GREATEST_LOWER_BOUND = 1;
-	SourceMapConsumer.LEAST_UPPER_BOUND = 2;
-
-	/**
-	 * Iterate over each mapping between an original source/line/column and a
-	 * generated line/column in this source map.
-	 *
-	 * @param Function aCallback
-	 *        The function that is called with each mapping.
-	 * @param Object aContext
-	 *        Optional. If specified, this object will be the value of `this` every
-	 *        time that `aCallback` is called.
-	 * @param aOrder
-	 *        Either `SourceMapConsumer.GENERATED_ORDER` or
-	 *        `SourceMapConsumer.ORIGINAL_ORDER`. Specifies whether you want to
-	 *        iterate over the mappings sorted by the generated file's line/column
-	 *        order or the original's source/line/column order, respectively. Defaults to
-	 *        `SourceMapConsumer.GENERATED_ORDER`.
-	 */
-	SourceMapConsumer.prototype.eachMapping =
-	  function SourceMapConsumer_eachMapping(aCallback, aContext, aOrder) {
-	    var context = aContext || null;
-	    var order = aOrder || SourceMapConsumer.GENERATED_ORDER;
-
-	    var mappings;
-	    switch (order) {
-	    case SourceMapConsumer.GENERATED_ORDER:
-	      mappings = this._generatedMappings;
-	      break;
-	    case SourceMapConsumer.ORIGINAL_ORDER:
-	      mappings = this._originalMappings;
-	      break;
-	    default:
-	      throw new Error("Unknown order of iteration.");
-	    }
-
-	    var sourceRoot = this.sourceRoot;
-	    mappings.map(function (mapping) {
-	      var source = mapping.source === null ? null : this._sources.at(mapping.source);
-	      if (source != null && sourceRoot != null) {
-	        source = util.join(sourceRoot, source);
-	      }
-	      return {
-	        source: source,
-	        generatedLine: mapping.generatedLine,
-	        generatedColumn: mapping.generatedColumn,
-	        originalLine: mapping.originalLine,
-	        originalColumn: mapping.originalColumn,
-	        name: mapping.name === null ? null : this._names.at(mapping.name)
-	      };
-	    }, this).forEach(aCallback, context);
-	  };
-
-	/**
-	 * Returns all generated line and column information for the original source,
-	 * line, and column provided. If no column is provided, returns all mappings
-	 * corresponding to a either the line we are searching for or the next
-	 * closest line that has any mappings. Otherwise, returns all mappings
-	 * corresponding to the given line and either the column we are searching for
-	 * or the next closest column that has any offsets.
-	 *
-	 * The only argument is an object with the following properties:
-	 *
-	 *   - source: The filename of the original source.
-	 *   - line: The line number in the original source.
-	 *   - column: Optional. the column number in the original source.
-	 *
-	 * and an array of objects is returned, each with the following properties:
-	 *
-	 *   - line: The line number in the generated source, or null.
-	 *   - column: The column number in the generated source, or null.
-	 */
-	SourceMapConsumer.prototype.allGeneratedPositionsFor =
-	  function SourceMapConsumer_allGeneratedPositionsFor(aArgs) {
-	    var line = util.getArg(aArgs, 'line');
-
-	    // When there is no exact match, BasicSourceMapConsumer.prototype._findMapping
-	    // returns the index of the closest mapping less than the needle. By
-	    // setting needle.originalColumn to 0, we thus find the last mapping for
-	    // the given line, provided such a mapping exists.
-	    var needle = {
-	      source: util.getArg(aArgs, 'source'),
-	      originalLine: line,
-	      originalColumn: util.getArg(aArgs, 'column', 0)
-	    };
-
-	    if (this.sourceRoot != null) {
-	      needle.source = util.relative(this.sourceRoot, needle.source);
-	    }
-	    if (!this._sources.has(needle.source)) {
-	      return [];
-	    }
-	    needle.source = this._sources.indexOf(needle.source);
-
-	    var mappings = [];
-
-	    var index = this._findMapping(needle,
-	                                  this._originalMappings,
-	                                  "originalLine",
-	                                  "originalColumn",
-	                                  util.compareByOriginalPositions,
-	                                  binarySearch.LEAST_UPPER_BOUND);
-	    if (index >= 0) {
-	      var mapping = this._originalMappings[index];
-
-	      if (aArgs.column === undefined) {
-	        var originalLine = mapping.originalLine;
-
-	        // Iterate until either we run out of mappings, or we run into
-	        // a mapping for a different line than the one we found. Since
-	        // mappings are sorted, this is guaranteed to find all mappings for
-	        // the line we found.
-	        while (mapping && mapping.originalLine === originalLine) {
-	          mappings.push({
-	            line: util.getArg(mapping, 'generatedLine', null),
-	            column: util.getArg(mapping, 'generatedColumn', null),
-	            lastColumn: util.getArg(mapping, 'lastGeneratedColumn', null)
-	          });
-
-	          mapping = this._originalMappings[++index];
-	        }
-	      } else {
-	        var originalColumn = mapping.originalColumn;
-
-	        // Iterate until either we run out of mappings, or we run into
-	        // a mapping for a different line than the one we were searching for.
-	        // Since mappings are sorted, this is guaranteed to find all mappings for
-	        // the line we are searching for.
-	        while (mapping &&
-	               mapping.originalLine === line &&
-	               mapping.originalColumn == originalColumn) {
-	          mappings.push({
-	            line: util.getArg(mapping, 'generatedLine', null),
-	            column: util.getArg(mapping, 'generatedColumn', null),
-	            lastColumn: util.getArg(mapping, 'lastGeneratedColumn', null)
-	          });
-
-	          mapping = this._originalMappings[++index];
-	        }
-	      }
-	    }
-
-	    return mappings;
-	  };
-
-	sourceMapConsumer.SourceMapConsumer = SourceMapConsumer;
-
-	/**
-	 * A BasicSourceMapConsumer instance represents a parsed source map which we can
-	 * query for information about the original file positions by giving it a file
-	 * position in the generated source.
-	 *
-	 * The only parameter is the raw source map (either as a JSON string, or
-	 * already parsed to an object). According to the spec, source maps have the
-	 * following attributes:
-	 *
-	 *   - version: Which version of the source map spec this map is following.
-	 *   - sources: An array of URLs to the original source files.
-	 *   - names: An array of identifiers which can be referrenced by individual mappings.
-	 *   - sourceRoot: Optional. The URL root from which all sources are relative.
-	 *   - sourcesContent: Optional. An array of contents of the original source files.
-	 *   - mappings: A string of base64 VLQs which contain the actual mappings.
-	 *   - file: Optional. The generated file this source map is associated with.
-	 *
-	 * Here is an example source map, taken from the source map spec[0]:
-	 *
-	 *     {
-	 *       version : 3,
-	 *       file: "out.js",
-	 *       sourceRoot : "",
-	 *       sources: ["foo.js", "bar.js"],
-	 *       names: ["src", "maps", "are", "fun"],
-	 *       mappings: "AA,AB;;ABCDE;"
-	 *     }
-	 *
-	 * [0]: https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k/edit?pli=1#
-	 */
-	function BasicSourceMapConsumer(aSourceMap) {
-	  var sourceMap = aSourceMap;
-	  if (typeof aSourceMap === 'string') {
-	    sourceMap = JSON.parse(aSourceMap.replace(/^\)\]\}'/, ''));
-	  }
-
-	  var version = util.getArg(sourceMap, 'version');
-	  var sources = util.getArg(sourceMap, 'sources');
-	  // Sass 3.3 leaves out the 'names' array, so we deviate from the spec (which
-	  // requires the array) to play nice here.
-	  var names = util.getArg(sourceMap, 'names', []);
-	  var sourceRoot = util.getArg(sourceMap, 'sourceRoot', null);
-	  var sourcesContent = util.getArg(sourceMap, 'sourcesContent', null);
-	  var mappings = util.getArg(sourceMap, 'mappings');
-	  var file = util.getArg(sourceMap, 'file', null);
-
-	  // Once again, Sass deviates from the spec and supplies the version as a
-	  // string rather than a number, so we use loose equality checking here.
-	  if (version != this._version) {
-	    throw new Error('Unsupported version: ' + version);
-	  }
-
-	  sources = sources
-	    .map(String)
-	    // Some source maps produce relative source paths like "./foo.js" instead of
-	    // "foo.js".  Normalize these first so that future comparisons will succeed.
-	    // See bugzil.la/1090768.
-	    .map(util.normalize)
-	    // Always ensure that absolute sources are internally stored relative to
-	    // the source root, if the source root is absolute. Not doing this would
-	    // be particularly problematic when the source root is a prefix of the
-	    // source (valid, but why??). See github issue #199 and bugzil.la/1188982.
-	    .map(function (source) {
-	      return sourceRoot && util.isAbsolute(sourceRoot) && util.isAbsolute(source)
-	        ? util.relative(sourceRoot, source)
-	        : source;
-	    });
-
-	  // Pass `true` below to allow duplicate names and sources. While source maps
-	  // are intended to be compressed and deduplicated, the TypeScript compiler
-	  // sometimes generates source maps with duplicates in them. See Github issue
-	  // #72 and bugzil.la/889492.
-	  this._names = ArraySet.fromArray(names.map(String), true);
-	  this._sources = ArraySet.fromArray(sources, true);
-
-	  this.sourceRoot = sourceRoot;
-	  this.sourcesContent = sourcesContent;
-	  this._mappings = mappings;
-	  this.file = file;
-	}
-
-	BasicSourceMapConsumer.prototype = Object.create(SourceMapConsumer.prototype);
-	BasicSourceMapConsumer.prototype.consumer = SourceMapConsumer;
-
-	/**
-	 * Create a BasicSourceMapConsumer from a SourceMapGenerator.
-	 *
-	 * @param SourceMapGenerator aSourceMap
-	 *        The source map that will be consumed.
-	 * @returns BasicSourceMapConsumer
-	 */
-	BasicSourceMapConsumer.fromSourceMap =
-	  function SourceMapConsumer_fromSourceMap(aSourceMap) {
-	    var smc = Object.create(BasicSourceMapConsumer.prototype);
-
-	    var names = smc._names = ArraySet.fromArray(aSourceMap._names.toArray(), true);
-	    var sources = smc._sources = ArraySet.fromArray(aSourceMap._sources.toArray(), true);
-	    smc.sourceRoot = aSourceMap._sourceRoot;
-	    smc.sourcesContent = aSourceMap._generateSourcesContent(smc._sources.toArray(),
-	                                                            smc.sourceRoot);
-	    smc.file = aSourceMap._file;
-
-	    // Because we are modifying the entries (by converting string sources and
-	    // names to indices into the sources and names ArraySets), we have to make
-	    // a copy of the entry or else bad things happen. Shared mutable state
-	    // strikes again! See github issue #191.
-
-	    var generatedMappings = aSourceMap._mappings.toArray().slice();
-	    var destGeneratedMappings = smc.__generatedMappings = [];
-	    var destOriginalMappings = smc.__originalMappings = [];
-
-	    for (var i = 0, length = generatedMappings.length; i < length; i++) {
-	      var srcMapping = generatedMappings[i];
-	      var destMapping = new Mapping;
-	      destMapping.generatedLine = srcMapping.generatedLine;
-	      destMapping.generatedColumn = srcMapping.generatedColumn;
-
-	      if (srcMapping.source) {
-	        destMapping.source = sources.indexOf(srcMapping.source);
-	        destMapping.originalLine = srcMapping.originalLine;
-	        destMapping.originalColumn = srcMapping.originalColumn;
-
-	        if (srcMapping.name) {
-	          destMapping.name = names.indexOf(srcMapping.name);
-	        }
-
-	        destOriginalMappings.push(destMapping);
-	      }
-
-	      destGeneratedMappings.push(destMapping);
-	    }
-
-	    quickSort(smc.__originalMappings, util.compareByOriginalPositions);
-
-	    return smc;
-	  };
-
-	/**
-	 * The version of the source mapping spec that we are consuming.
-	 */
-	BasicSourceMapConsumer.prototype._version = 3;
-
-	/**
-	 * The list of original sources.
-	 */
-	Object.defineProperty(BasicSourceMapConsumer.prototype, 'sources', {
-	  get: function () {
-	    return this._sources.toArray().map(function (s) {
-	      return this.sourceRoot != null ? util.join(this.sourceRoot, s) : s;
-	    }, this);
-	  }
-	});
-
-	/**
-	 * Provide the JIT with a nice shape / hidden class.
-	 */
-	function Mapping() {
-	  this.generatedLine = 0;
-	  this.generatedColumn = 0;
-	  this.source = null;
-	  this.originalLine = null;
-	  this.originalColumn = null;
-	  this.name = null;
-	}
-
-	/**
-	 * Parse the mappings in a string in to a data structure which we can easily
-	 * query (the ordered arrays in the `this.__generatedMappings` and
-	 * `this.__originalMappings` properties).
-	 */
-	BasicSourceMapConsumer.prototype._parseMappings =
-	  function SourceMapConsumer_parseMappings(aStr, aSourceRoot) {
-	    var generatedLine = 1;
-	    var previousGeneratedColumn = 0;
-	    var previousOriginalLine = 0;
-	    var previousOriginalColumn = 0;
-	    var previousSource = 0;
-	    var previousName = 0;
-	    var length = aStr.length;
-	    var index = 0;
-	    var cachedSegments = {};
-	    var temp = {};
-	    var originalMappings = [];
-	    var generatedMappings = [];
-	    var mapping, str, segment, end, value;
-
-	    while (index < length) {
-	      if (aStr.charAt(index) === ';') {
-	        generatedLine++;
-	        index++;
-	        previousGeneratedColumn = 0;
-	      }
-	      else if (aStr.charAt(index) === ',') {
-	        index++;
-	      }
-	      else {
-	        mapping = new Mapping();
-	        mapping.generatedLine = generatedLine;
-
-	        // Because each offset is encoded relative to the previous one,
-	        // many segments often have the same encoding. We can exploit this
-	        // fact by caching the parsed variable length fields of each segment,
-	        // allowing us to avoid a second parse if we encounter the same
-	        // segment again.
-	        for (end = index; end < length; end++) {
-	          if (this._charIsMappingSeparator(aStr, end)) {
-	            break;
-	          }
-	        }
-	        str = aStr.slice(index, end);
-
-	        segment = cachedSegments[str];
-	        if (segment) {
-	          index += str.length;
-	        } else {
-	          segment = [];
-	          while (index < end) {
-	            base64VLQ.decode(aStr, index, temp);
-	            value = temp.value;
-	            index = temp.rest;
-	            segment.push(value);
-	          }
-
-	          if (segment.length === 2) {
-	            throw new Error('Found a source, but no line and column');
-	          }
-
-	          if (segment.length === 3) {
-	            throw new Error('Found a source and line, but no column');
-	          }
-
-	          cachedSegments[str] = segment;
-	        }
-
-	        // Generated column.
-	        mapping.generatedColumn = previousGeneratedColumn + segment[0];
-	        previousGeneratedColumn = mapping.generatedColumn;
-
-	        if (segment.length > 1) {
-	          // Original source.
-	          mapping.source = previousSource + segment[1];
-	          previousSource += segment[1];
-
-	          // Original line.
-	          mapping.originalLine = previousOriginalLine + segment[2];
-	          previousOriginalLine = mapping.originalLine;
-	          // Lines are stored 0-based
-	          mapping.originalLine += 1;
-
-	          // Original column.
-	          mapping.originalColumn = previousOriginalColumn + segment[3];
-	          previousOriginalColumn = mapping.originalColumn;
-
-	          if (segment.length > 4) {
-	            // Original name.
-	            mapping.name = previousName + segment[4];
-	            previousName += segment[4];
-	          }
-	        }
-
-	        generatedMappings.push(mapping);
-	        if (typeof mapping.originalLine === 'number') {
-	          originalMappings.push(mapping);
-	        }
-	      }
-	    }
-
-	    quickSort(generatedMappings, util.compareByGeneratedPositionsDeflated);
-	    this.__generatedMappings = generatedMappings;
-
-	    quickSort(originalMappings, util.compareByOriginalPositions);
-	    this.__originalMappings = originalMappings;
-	  };
-
-	/**
-	 * Find the mapping that best matches the hypothetical "needle" mapping that
-	 * we are searching for in the given "haystack" of mappings.
-	 */
-	BasicSourceMapConsumer.prototype._findMapping =
-	  function SourceMapConsumer_findMapping(aNeedle, aMappings, aLineName,
-	                                         aColumnName, aComparator, aBias) {
-	    // To return the position we are searching for, we must first find the
-	    // mapping for the given position and then return the opposite position it
-	    // points to. Because the mappings are sorted, we can use binary search to
-	    // find the best mapping.
-
-	    if (aNeedle[aLineName] <= 0) {
-	      throw new TypeError('Line must be greater than or equal to 1, got '
-	                          + aNeedle[aLineName]);
-	    }
-	    if (aNeedle[aColumnName] < 0) {
-	      throw new TypeError('Column must be greater than or equal to 0, got '
-	                          + aNeedle[aColumnName]);
-	    }
-
-	    return binarySearch.search(aNeedle, aMappings, aComparator, aBias);
-	  };
-
-	/**
-	 * Compute the last column for each generated mapping. The last column is
-	 * inclusive.
-	 */
-	BasicSourceMapConsumer.prototype.computeColumnSpans =
-	  function SourceMapConsumer_computeColumnSpans() {
-	    for (var index = 0; index < this._generatedMappings.length; ++index) {
-	      var mapping = this._generatedMappings[index];
-
-	      // Mappings do not contain a field for the last generated columnt. We
-	      // can come up with an optimistic estimate, however, by assuming that
-	      // mappings are contiguous (i.e. given two consecutive mappings, the
-	      // first mapping ends where the second one starts).
-	      if (index + 1 < this._generatedMappings.length) {
-	        var nextMapping = this._generatedMappings[index + 1];
-
-	        if (mapping.generatedLine === nextMapping.generatedLine) {
-	          mapping.lastGeneratedColumn = nextMapping.generatedColumn - 1;
-	          continue;
-	        }
-	      }
-
-	      // The last mapping for each line spans the entire line.
-	      mapping.lastGeneratedColumn = Infinity;
-	    }
-	  };
-
-	/**
-	 * Returns the original source, line, and column information for the generated
-	 * source's line and column positions provided. The only argument is an object
-	 * with the following properties:
-	 *
-	 *   - line: The line number in the generated source.
-	 *   - column: The column number in the generated source.
-	 *   - bias: Either 'SourceMapConsumer.GREATEST_LOWER_BOUND' or
-	 *     'SourceMapConsumer.LEAST_UPPER_BOUND'. Specifies whether to return the
-	 *     closest element that is smaller than or greater than the one we are
-	 *     searching for, respectively, if the exact element cannot be found.
-	 *     Defaults to 'SourceMapConsumer.GREATEST_LOWER_BOUND'.
-	 *
-	 * and an object is returned with the following properties:
-	 *
-	 *   - source: The original source file, or null.
-	 *   - line: The line number in the original source, or null.
-	 *   - column: The column number in the original source, or null.
-	 *   - name: The original identifier, or null.
-	 */
-	BasicSourceMapConsumer.prototype.originalPositionFor =
-	  function SourceMapConsumer_originalPositionFor(aArgs) {
-	    var needle = {
-	      generatedLine: util.getArg(aArgs, 'line'),
-	      generatedColumn: util.getArg(aArgs, 'column')
-	    };
-
-	    var index = this._findMapping(
-	      needle,
-	      this._generatedMappings,
-	      "generatedLine",
-	      "generatedColumn",
-	      util.compareByGeneratedPositionsDeflated,
-	      util.getArg(aArgs, 'bias', SourceMapConsumer.GREATEST_LOWER_BOUND)
-	    );
-
-	    if (index >= 0) {
-	      var mapping = this._generatedMappings[index];
-
-	      if (mapping.generatedLine === needle.generatedLine) {
-	        var source = util.getArg(mapping, 'source', null);
-	        if (source !== null) {
-	          source = this._sources.at(source);
-	          if (this.sourceRoot != null) {
-	            source = util.join(this.sourceRoot, source);
-	          }
-	        }
-	        var name = util.getArg(mapping, 'name', null);
-	        if (name !== null) {
-	          name = this._names.at(name);
-	        }
-	        return {
-	          source: source,
-	          line: util.getArg(mapping, 'originalLine', null),
-	          column: util.getArg(mapping, 'originalColumn', null),
-	          name: name
-	        };
-	      }
-	    }
-
-	    return {
-	      source: null,
-	      line: null,
-	      column: null,
-	      name: null
-	    };
-	  };
-
-	/**
-	 * Return true if we have the source content for every source in the source
-	 * map, false otherwise.
-	 */
-	BasicSourceMapConsumer.prototype.hasContentsOfAllSources =
-	  function BasicSourceMapConsumer_hasContentsOfAllSources() {
-	    if (!this.sourcesContent) {
-	      return false;
-	    }
-	    return this.sourcesContent.length >= this._sources.size() &&
-	      !this.sourcesContent.some(function (sc) { return sc == null; });
-	  };
-
-	/**
-	 * Returns the original source content. The only argument is the url of the
-	 * original source file. Returns null if no original source content is
-	 * available.
-	 */
-	BasicSourceMapConsumer.prototype.sourceContentFor =
-	  function SourceMapConsumer_sourceContentFor(aSource, nullOnMissing) {
-	    if (!this.sourcesContent) {
-	      return null;
-	    }
-
-	    if (this.sourceRoot != null) {
-	      aSource = util.relative(this.sourceRoot, aSource);
-	    }
-
-	    if (this._sources.has(aSource)) {
-	      return this.sourcesContent[this._sources.indexOf(aSource)];
-	    }
-
-	    var url;
-	    if (this.sourceRoot != null
-	        && (url = util.urlParse(this.sourceRoot))) {
-	      // XXX: file:// URIs and absolute paths lead to unexpected behavior for
-	      // many users. We can help them out when they expect file:// URIs to
-	      // behave like it would if they were running a local HTTP server. See
-	      // https://bugzilla.mozilla.org/show_bug.cgi?id=885597.
-	      var fileUriAbsPath = aSource.replace(/^file:\/\//, "");
-	      if (url.scheme == "file"
-	          && this._sources.has(fileUriAbsPath)) {
-	        return this.sourcesContent[this._sources.indexOf(fileUriAbsPath)]
-	      }
-
-	      if ((!url.path || url.path == "/")
-	          && this._sources.has("/" + aSource)) {
-	        return this.sourcesContent[this._sources.indexOf("/" + aSource)];
-	      }
-	    }
-
-	    // This function is used recursively from
-	    // IndexedSourceMapConsumer.prototype.sourceContentFor. In that case, we
-	    // don't want to throw if we can't find the source - we just want to
-	    // return null, so we provide a flag to exit gracefully.
-	    if (nullOnMissing) {
-	      return null;
-	    }
-	    else {
-	      throw new Error('"' + aSource + '" is not in the SourceMap.');
-	    }
-	  };
-
-	/**
-	 * Returns the generated line and column information for the original source,
-	 * line, and column positions provided. The only argument is an object with
-	 * the following properties:
-	 *
-	 *   - source: The filename of the original source.
-	 *   - line: The line number in the original source.
-	 *   - column: The column number in the original source.
-	 *   - bias: Either 'SourceMapConsumer.GREATEST_LOWER_BOUND' or
-	 *     'SourceMapConsumer.LEAST_UPPER_BOUND'. Specifies whether to return the
-	 *     closest element that is smaller than or greater than the one we are
-	 *     searching for, respectively, if the exact element cannot be found.
-	 *     Defaults to 'SourceMapConsumer.GREATEST_LOWER_BOUND'.
-	 *
-	 * and an object is returned with the following properties:
-	 *
-	 *   - line: The line number in the generated source, or null.
-	 *   - column: The column number in the generated source, or null.
-	 */
-	BasicSourceMapConsumer.prototype.generatedPositionFor =
-	  function SourceMapConsumer_generatedPositionFor(aArgs) {
-	    var source = util.getArg(aArgs, 'source');
-	    if (this.sourceRoot != null) {
-	      source = util.relative(this.sourceRoot, source);
-	    }
-	    if (!this._sources.has(source)) {
-	      return {
-	        line: null,
-	        column: null,
-	        lastColumn: null
-	      };
-	    }
-	    source = this._sources.indexOf(source);
-
-	    var needle = {
-	      source: source,
-	      originalLine: util.getArg(aArgs, 'line'),
-	      originalColumn: util.getArg(aArgs, 'column')
-	    };
-
-	    var index = this._findMapping(
-	      needle,
-	      this._originalMappings,
-	      "originalLine",
-	      "originalColumn",
-	      util.compareByOriginalPositions,
-	      util.getArg(aArgs, 'bias', SourceMapConsumer.GREATEST_LOWER_BOUND)
-	    );
-
-	    if (index >= 0) {
-	      var mapping = this._originalMappings[index];
-
-	      if (mapping.source === needle.source) {
-	        return {
-	          line: util.getArg(mapping, 'generatedLine', null),
-	          column: util.getArg(mapping, 'generatedColumn', null),
-	          lastColumn: util.getArg(mapping, 'lastGeneratedColumn', null)
-	        };
-	      }
-	    }
-
-	    return {
-	      line: null,
-	      column: null,
-	      lastColumn: null
-	    };
-	  };
-
-	sourceMapConsumer.BasicSourceMapConsumer = BasicSourceMapConsumer;
-
-	/**
-	 * An IndexedSourceMapConsumer instance represents a parsed source map which
-	 * we can query for information. It differs from BasicSourceMapConsumer in
-	 * that it takes "indexed" source maps (i.e. ones with a "sections" field) as
-	 * input.
-	 *
-	 * The only parameter is a raw source map (either as a JSON string, or already
-	 * parsed to an object). According to the spec for indexed source maps, they
-	 * have the following attributes:
-	 *
-	 *   - version: Which version of the source map spec this map is following.
-	 *   - file: Optional. The generated file this source map is associated with.
-	 *   - sections: A list of section definitions.
-	 *
-	 * Each value under the "sections" field has two fields:
-	 *   - offset: The offset into the original specified at which this section
-	 *       begins to apply, defined as an object with a "line" and "column"
-	 *       field.
-	 *   - map: A source map definition. This source map could also be indexed,
-	 *       but doesn't have to be.
-	 *
-	 * Instead of the "map" field, it's also possible to have a "url" field
-	 * specifying a URL to retrieve a source map from, but that's currently
-	 * unsupported.
-	 *
-	 * Here's an example source map, taken from the source map spec[0], but
-	 * modified to omit a section which uses the "url" field.
-	 *
-	 *  {
-	 *    version : 3,
-	 *    file: "app.js",
-	 *    sections: [{
-	 *      offset: {line:100, column:10},
-	 *      map: {
-	 *        version : 3,
-	 *        file: "section.js",
-	 *        sources: ["foo.js", "bar.js"],
-	 *        names: ["src", "maps", "are", "fun"],
-	 *        mappings: "AAAA,E;;ABCDE;"
-	 *      }
-	 *    }],
-	 *  }
-	 *
-	 * [0]: https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k/edit#heading=h.535es3xeprgt
-	 */
-	function IndexedSourceMapConsumer(aSourceMap) {
-	  var sourceMap = aSourceMap;
-	  if (typeof aSourceMap === 'string') {
-	    sourceMap = JSON.parse(aSourceMap.replace(/^\)\]\}'/, ''));
-	  }
-
-	  var version = util.getArg(sourceMap, 'version');
-	  var sections = util.getArg(sourceMap, 'sections');
-
-	  if (version != this._version) {
-	    throw new Error('Unsupported version: ' + version);
-	  }
-
-	  this._sources = new ArraySet();
-	  this._names = new ArraySet();
-
-	  var lastOffset = {
-	    line: -1,
-	    column: 0
-	  };
-	  this._sections = sections.map(function (s) {
-	    if (s.url) {
-	      // The url field will require support for asynchronicity.
-	      // See https://github.com/mozilla/source-map/issues/16
-	      throw new Error('Support for url field in sections not implemented.');
-	    }
-	    var offset = util.getArg(s, 'offset');
-	    var offsetLine = util.getArg(offset, 'line');
-	    var offsetColumn = util.getArg(offset, 'column');
-
-	    if (offsetLine < lastOffset.line ||
-	        (offsetLine === lastOffset.line && offsetColumn < lastOffset.column)) {
-	      throw new Error('Section offsets must be ordered and non-overlapping.');
-	    }
-	    lastOffset = offset;
-
-	    return {
-	      generatedOffset: {
-	        // The offset fields are 0-based, but we use 1-based indices when
-	        // encoding/decoding from VLQ.
-	        generatedLine: offsetLine + 1,
-	        generatedColumn: offsetColumn + 1
-	      },
-	      consumer: new SourceMapConsumer(util.getArg(s, 'map'))
-	    }
-	  });
-	}
-
-	IndexedSourceMapConsumer.prototype = Object.create(SourceMapConsumer.prototype);
-	IndexedSourceMapConsumer.prototype.constructor = SourceMapConsumer;
-
-	/**
-	 * The version of the source mapping spec that we are consuming.
-	 */
-	IndexedSourceMapConsumer.prototype._version = 3;
-
-	/**
-	 * The list of original sources.
-	 */
-	Object.defineProperty(IndexedSourceMapConsumer.prototype, 'sources', {
-	  get: function () {
-	    var sources = [];
-	    for (var i = 0; i < this._sections.length; i++) {
-	      for (var j = 0; j < this._sections[i].consumer.sources.length; j++) {
-	        sources.push(this._sections[i].consumer.sources[j]);
-	      }
-	    }
-	    return sources;
-	  }
-	});
-
-	/**
-	 * Returns the original source, line, and column information for the generated
-	 * source's line and column positions provided. The only argument is an object
-	 * with the following properties:
-	 *
-	 *   - line: The line number in the generated source.
-	 *   - column: The column number in the generated source.
-	 *
-	 * and an object is returned with the following properties:
-	 *
-	 *   - source: The original source file, or null.
-	 *   - line: The line number in the original source, or null.
-	 *   - column: The column number in the original source, or null.
-	 *   - name: The original identifier, or null.
-	 */
-	IndexedSourceMapConsumer.prototype.originalPositionFor =
-	  function IndexedSourceMapConsumer_originalPositionFor(aArgs) {
-	    var needle = {
-	      generatedLine: util.getArg(aArgs, 'line'),
-	      generatedColumn: util.getArg(aArgs, 'column')
-	    };
-
-	    // Find the section containing the generated position we're trying to map
-	    // to an original position.
-	    var sectionIndex = binarySearch.search(needle, this._sections,
-	      function(needle, section) {
-	        var cmp = needle.generatedLine - section.generatedOffset.generatedLine;
-	        if (cmp) {
-	          return cmp;
-	        }
-
-	        return (needle.generatedColumn -
-	                section.generatedOffset.generatedColumn);
-	      });
-	    var section = this._sections[sectionIndex];
-
-	    if (!section) {
-	      return {
-	        source: null,
-	        line: null,
-	        column: null,
-	        name: null
-	      };
-	    }
-
-	    return section.consumer.originalPositionFor({
-	      line: needle.generatedLine -
-	        (section.generatedOffset.generatedLine - 1),
-	      column: needle.generatedColumn -
-	        (section.generatedOffset.generatedLine === needle.generatedLine
-	         ? section.generatedOffset.generatedColumn - 1
-	         : 0),
-	      bias: aArgs.bias
-	    });
-	  };
-
-	/**
-	 * Return true if we have the source content for every source in the source
-	 * map, false otherwise.
-	 */
-	IndexedSourceMapConsumer.prototype.hasContentsOfAllSources =
-	  function IndexedSourceMapConsumer_hasContentsOfAllSources() {
-	    return this._sections.every(function (s) {
-	      return s.consumer.hasContentsOfAllSources();
-	    });
-	  };
-
-	/**
-	 * Returns the original source content. The only argument is the url of the
-	 * original source file. Returns null if no original source content is
-	 * available.
-	 */
-	IndexedSourceMapConsumer.prototype.sourceContentFor =
-	  function IndexedSourceMapConsumer_sourceContentFor(aSource, nullOnMissing) {
-	    for (var i = 0; i < this._sections.length; i++) {
-	      var section = this._sections[i];
-
-	      var content = section.consumer.sourceContentFor(aSource, true);
-	      if (content) {
-	        return content;
-	      }
-	    }
-	    if (nullOnMissing) {
-	      return null;
-	    }
-	    else {
-	      throw new Error('"' + aSource + '" is not in the SourceMap.');
-	    }
-	  };
-
-	/**
-	 * Returns the generated line and column information for the original source,
-	 * line, and column positions provided. The only argument is an object with
-	 * the following properties:
-	 *
-	 *   - source: The filename of the original source.
-	 *   - line: The line number in the original source.
-	 *   - column: The column number in the original source.
-	 *
-	 * and an object is returned with the following properties:
-	 *
-	 *   - line: The line number in the generated source, or null.
-	 *   - column: The column number in the generated source, or null.
-	 */
-	IndexedSourceMapConsumer.prototype.generatedPositionFor =
-	  function IndexedSourceMapConsumer_generatedPositionFor(aArgs) {
-	    for (var i = 0; i < this._sections.length; i++) {
-	      var section = this._sections[i];
-
-	      // Only consider this section if the requested source is in the list of
-	      // sources of the consumer.
-	      if (section.consumer.sources.indexOf(util.getArg(aArgs, 'source')) === -1) {
-	        continue;
-	      }
-	      var generatedPosition = section.consumer.generatedPositionFor(aArgs);
-	      if (generatedPosition) {
-	        var ret = {
-	          line: generatedPosition.line +
-	            (section.generatedOffset.generatedLine - 1),
-	          column: generatedPosition.column +
-	            (section.generatedOffset.generatedLine === generatedPosition.line
-	             ? section.generatedOffset.generatedColumn - 1
-	             : 0)
-	        };
-	        return ret;
-	      }
-	    }
-
-	    return {
-	      line: null,
-	      column: null
-	    };
-	  };
-
-	/**
-	 * Parse the mappings in a string in to a data structure which we can easily
-	 * query (the ordered arrays in the `this.__generatedMappings` and
-	 * `this.__originalMappings` properties).
-	 */
-	IndexedSourceMapConsumer.prototype._parseMappings =
-	  function IndexedSourceMapConsumer_parseMappings(aStr, aSourceRoot) {
-	    this.__generatedMappings = [];
-	    this.__originalMappings = [];
-	    for (var i = 0; i < this._sections.length; i++) {
-	      var section = this._sections[i];
-	      var sectionMappings = section.consumer._generatedMappings;
-	      for (var j = 0; j < sectionMappings.length; j++) {
-	        var mapping = sectionMappings[j];
-
-	        var source = section.consumer._sources.at(mapping.source);
-	        if (section.consumer.sourceRoot !== null) {
-	          source = util.join(section.consumer.sourceRoot, source);
-	        }
-	        this._sources.add(source);
-	        source = this._sources.indexOf(source);
-
-	        var name = section.consumer._names.at(mapping.name);
-	        this._names.add(name);
-	        name = this._names.indexOf(name);
-
-	        // The mappings coming from the consumer for the section have
-	        // generated positions relative to the start of the section, so we
-	        // need to offset them to be relative to the start of the concatenated
-	        // generated file.
-	        var adjustedMapping = {
-	          source: source,
-	          generatedLine: mapping.generatedLine +
-	            (section.generatedOffset.generatedLine - 1),
-	          generatedColumn: mapping.generatedColumn +
-	            (section.generatedOffset.generatedLine === mapping.generatedLine
-	            ? section.generatedOffset.generatedColumn - 1
-	            : 0),
-	          originalLine: mapping.originalLine,
-	          originalColumn: mapping.originalColumn,
-	          name: name
-	        };
-
-	        this.__generatedMappings.push(adjustedMapping);
-	        if (typeof adjustedMapping.originalLine === 'number') {
-	          this.__originalMappings.push(adjustedMapping);
-	        }
-	      }
-	    }
-
-	    quickSort(this.__generatedMappings, util.compareByGeneratedPositionsDeflated);
-	    quickSort(this.__originalMappings, util.compareByOriginalPositions);
-	  };
-
-	sourceMapConsumer.IndexedSourceMapConsumer = IndexedSourceMapConsumer;
-	return sourceMapConsumer;
-}
-
-var sourceNode = {};
-
-var hasRequiredSourceNode;
-
-function requireSourceNode () {
-	if (hasRequiredSourceNode) return sourceNode;
-	hasRequiredSourceNode = 1;
-	/*
-	 * Copyright 2011 Mozilla Foundation and contributors
-	 * Licensed under the New BSD license. See LICENSE or:
-	 * http://opensource.org/licenses/BSD-3-Clause
-	 */
-
-	var SourceMapGenerator = requireSourceMapGenerator().SourceMapGenerator;
-	var util = requireUtil();
-
-	// Matches a Windows-style `\r\n` newline or a `\n` newline used by all other
-	// operating systems these days (capturing the result).
-	var REGEX_NEWLINE = /(\r?\n)/;
-
-	// Newline character code for charCodeAt() comparisons
-	var NEWLINE_CODE = 10;
-
-	// Private symbol for identifying `SourceNode`s when multiple versions of
-	// the source-map library are loaded. This MUST NOT CHANGE across
-	// versions!
-	var isSourceNode = "$$$isSourceNode$$$";
-
-	/**
-	 * SourceNodes provide a way to abstract over interpolating/concatenating
-	 * snippets of generated JavaScript source code while maintaining the line and
-	 * column information associated with the original source code.
-	 *
-	 * @param aLine The original line number.
-	 * @param aColumn The original column number.
-	 * @param aSource The original source's filename.
-	 * @param aChunks Optional. An array of strings which are snippets of
-	 *        generated JS, or other SourceNodes.
-	 * @param aName The original identifier.
-	 */
-	function SourceNode(aLine, aColumn, aSource, aChunks, aName) {
-	  this.children = [];
-	  this.sourceContents = {};
-	  this.line = aLine == null ? null : aLine;
-	  this.column = aColumn == null ? null : aColumn;
-	  this.source = aSource == null ? null : aSource;
-	  this.name = aName == null ? null : aName;
-	  this[isSourceNode] = true;
-	  if (aChunks != null) this.add(aChunks);
-	}
-
-	/**
-	 * Creates a SourceNode from generated code and a SourceMapConsumer.
-	 *
-	 * @param aGeneratedCode The generated code
-	 * @param aSourceMapConsumer The SourceMap for the generated code
-	 * @param aRelativePath Optional. The path that relative sources in the
-	 *        SourceMapConsumer should be relative to.
-	 */
-	SourceNode.fromStringWithSourceMap =
-	  function SourceNode_fromStringWithSourceMap(aGeneratedCode, aSourceMapConsumer, aRelativePath) {
-	    // The SourceNode we want to fill with the generated code
-	    // and the SourceMap
-	    var node = new SourceNode();
-
-	    // All even indices of this array are one line of the generated code,
-	    // while all odd indices are the newlines between two adjacent lines
-	    // (since `REGEX_NEWLINE` captures its match).
-	    // Processed fragments are accessed by calling `shiftNextLine`.
-	    var remainingLines = aGeneratedCode.split(REGEX_NEWLINE);
-	    var remainingLinesIndex = 0;
-	    var shiftNextLine = function() {
-	      var lineContents = getNextLine();
-	      // The last line of a file might not have a newline.
-	      var newLine = getNextLine() || "";
-	      return lineContents + newLine;
-
-	      function getNextLine() {
-	        return remainingLinesIndex < remainingLines.length ?
-	            remainingLines[remainingLinesIndex++] : undefined;
-	      }
-	    };
-
-	    // We need to remember the position of "remainingLines"
-	    var lastGeneratedLine = 1, lastGeneratedColumn = 0;
-
-	    // The generate SourceNodes we need a code range.
-	    // To extract it current and last mapping is used.
-	    // Here we store the last mapping.
-	    var lastMapping = null;
-
-	    aSourceMapConsumer.eachMapping(function (mapping) {
-	      if (lastMapping !== null) {
-	        // We add the code from "lastMapping" to "mapping":
-	        // First check if there is a new line in between.
-	        if (lastGeneratedLine < mapping.generatedLine) {
-	          // Associate first line with "lastMapping"
-	          addMappingWithCode(lastMapping, shiftNextLine());
-	          lastGeneratedLine++;
-	          lastGeneratedColumn = 0;
-	          // The remaining code is added without mapping
-	        } else {
-	          // There is no new line in between.
-	          // Associate the code between "lastGeneratedColumn" and
-	          // "mapping.generatedColumn" with "lastMapping"
-	          var nextLine = remainingLines[remainingLinesIndex];
-	          var code = nextLine.substr(0, mapping.generatedColumn -
-	                                        lastGeneratedColumn);
-	          remainingLines[remainingLinesIndex] = nextLine.substr(mapping.generatedColumn -
-	                                              lastGeneratedColumn);
-	          lastGeneratedColumn = mapping.generatedColumn;
-	          addMappingWithCode(lastMapping, code);
-	          // No more remaining code, continue
-	          lastMapping = mapping;
-	          return;
-	        }
-	      }
-	      // We add the generated code until the first mapping
-	      // to the SourceNode without any mapping.
-	      // Each line is added as separate string.
-	      while (lastGeneratedLine < mapping.generatedLine) {
-	        node.add(shiftNextLine());
-	        lastGeneratedLine++;
-	      }
-	      if (lastGeneratedColumn < mapping.generatedColumn) {
-	        var nextLine = remainingLines[remainingLinesIndex];
-	        node.add(nextLine.substr(0, mapping.generatedColumn));
-	        remainingLines[remainingLinesIndex] = nextLine.substr(mapping.generatedColumn);
-	        lastGeneratedColumn = mapping.generatedColumn;
-	      }
-	      lastMapping = mapping;
-	    }, this);
-	    // We have processed all mappings.
-	    if (remainingLinesIndex < remainingLines.length) {
-	      if (lastMapping) {
-	        // Associate the remaining code in the current line with "lastMapping"
-	        addMappingWithCode(lastMapping, shiftNextLine());
-	      }
-	      // and add the remaining lines without any mapping
-	      node.add(remainingLines.splice(remainingLinesIndex).join(""));
-	    }
-
-	    // Copy sourcesContent into SourceNode
-	    aSourceMapConsumer.sources.forEach(function (sourceFile) {
-	      var content = aSourceMapConsumer.sourceContentFor(sourceFile);
-	      if (content != null) {
-	        if (aRelativePath != null) {
-	          sourceFile = util.join(aRelativePath, sourceFile);
-	        }
-	        node.setSourceContent(sourceFile, content);
-	      }
-	    });
-
-	    return node;
-
-	    function addMappingWithCode(mapping, code) {
-	      if (mapping === null || mapping.source === undefined) {
-	        node.add(code);
-	      } else {
-	        var source = aRelativePath
-	          ? util.join(aRelativePath, mapping.source)
-	          : mapping.source;
-	        node.add(new SourceNode(mapping.originalLine,
-	                                mapping.originalColumn,
-	                                source,
-	                                code,
-	                                mapping.name));
-	      }
-	    }
-	  };
-
-	/**
-	 * Add a chunk of generated JS to this source node.
-	 *
-	 * @param aChunk A string snippet of generated JS code, another instance of
-	 *        SourceNode, or an array where each member is one of those things.
-	 */
-	SourceNode.prototype.add = function SourceNode_add(aChunk) {
-	  if (Array.isArray(aChunk)) {
-	    aChunk.forEach(function (chunk) {
-	      this.add(chunk);
-	    }, this);
-	  }
-	  else if (aChunk[isSourceNode] || typeof aChunk === "string") {
-	    if (aChunk) {
-	      this.children.push(aChunk);
-	    }
-	  }
-	  else {
-	    throw new TypeError(
-	      "Expected a SourceNode, string, or an array of SourceNodes and strings. Got " + aChunk
-	    );
-	  }
-	  return this;
-	};
-
-	/**
-	 * Add a chunk of generated JS to the beginning of this source node.
-	 *
-	 * @param aChunk A string snippet of generated JS code, another instance of
-	 *        SourceNode, or an array where each member is one of those things.
-	 */
-	SourceNode.prototype.prepend = function SourceNode_prepend(aChunk) {
-	  if (Array.isArray(aChunk)) {
-	    for (var i = aChunk.length-1; i >= 0; i--) {
-	      this.prepend(aChunk[i]);
-	    }
-	  }
-	  else if (aChunk[isSourceNode] || typeof aChunk === "string") {
-	    this.children.unshift(aChunk);
-	  }
-	  else {
-	    throw new TypeError(
-	      "Expected a SourceNode, string, or an array of SourceNodes and strings. Got " + aChunk
-	    );
-	  }
-	  return this;
-	};
-
-	/**
-	 * Walk over the tree of JS snippets in this node and its children. The
-	 * walking function is called once for each snippet of JS and is passed that
-	 * snippet and the its original associated source's line/column location.
-	 *
-	 * @param aFn The traversal function.
-	 */
-	SourceNode.prototype.walk = function SourceNode_walk(aFn) {
-	  var chunk;
-	  for (var i = 0, len = this.children.length; i < len; i++) {
-	    chunk = this.children[i];
-	    if (chunk[isSourceNode]) {
-	      chunk.walk(aFn);
-	    }
-	    else {
-	      if (chunk !== '') {
-	        aFn(chunk, { source: this.source,
-	                     line: this.line,
-	                     column: this.column,
-	                     name: this.name });
-	      }
-	    }
-	  }
-	};
-
-	/**
-	 * Like `String.prototype.join` except for SourceNodes. Inserts `aStr` between
-	 * each of `this.children`.
-	 *
-	 * @param aSep The separator.
-	 */
-	SourceNode.prototype.join = function SourceNode_join(aSep) {
-	  var newChildren;
-	  var i;
-	  var len = this.children.length;
-	  if (len > 0) {
-	    newChildren = [];
-	    for (i = 0; i < len-1; i++) {
-	      newChildren.push(this.children[i]);
-	      newChildren.push(aSep);
-	    }
-	    newChildren.push(this.children[i]);
-	    this.children = newChildren;
-	  }
-	  return this;
-	};
-
-	/**
-	 * Call String.prototype.replace on the very right-most source snippet. Useful
-	 * for trimming whitespace from the end of a source node, etc.
-	 *
-	 * @param aPattern The pattern to replace.
-	 * @param aReplacement The thing to replace the pattern with.
-	 */
-	SourceNode.prototype.replaceRight = function SourceNode_replaceRight(aPattern, aReplacement) {
-	  var lastChild = this.children[this.children.length - 1];
-	  if (lastChild[isSourceNode]) {
-	    lastChild.replaceRight(aPattern, aReplacement);
-	  }
-	  else if (typeof lastChild === 'string') {
-	    this.children[this.children.length - 1] = lastChild.replace(aPattern, aReplacement);
-	  }
-	  else {
-	    this.children.push(''.replace(aPattern, aReplacement));
-	  }
-	  return this;
-	};
-
-	/**
-	 * Set the source content for a source file. This will be added to the SourceMapGenerator
-	 * in the sourcesContent field.
-	 *
-	 * @param aSourceFile The filename of the source file
-	 * @param aSourceContent The content of the source file
-	 */
-	SourceNode.prototype.setSourceContent =
-	  function SourceNode_setSourceContent(aSourceFile, aSourceContent) {
-	    this.sourceContents[util.toSetString(aSourceFile)] = aSourceContent;
-	  };
-
-	/**
-	 * Walk over the tree of SourceNodes. The walking function is called for each
-	 * source file content and is passed the filename and source content.
-	 *
-	 * @param aFn The traversal function.
-	 */
-	SourceNode.prototype.walkSourceContents =
-	  function SourceNode_walkSourceContents(aFn) {
-	    for (var i = 0, len = this.children.length; i < len; i++) {
-	      if (this.children[i][isSourceNode]) {
-	        this.children[i].walkSourceContents(aFn);
-	      }
-	    }
-
-	    var sources = Object.keys(this.sourceContents);
-	    for (var i = 0, len = sources.length; i < len; i++) {
-	      aFn(util.fromSetString(sources[i]), this.sourceContents[sources[i]]);
-	    }
-	  };
-
-	/**
-	 * Return the string representation of this source node. Walks over the tree
-	 * and concatenates all the various snippets together to one string.
-	 */
-	SourceNode.prototype.toString = function SourceNode_toString() {
-	  var str = "";
-	  this.walk(function (chunk) {
-	    str += chunk;
-	  });
-	  return str;
-	};
-
-	/**
-	 * Returns the string representation of this source node along with a source
-	 * map.
-	 */
-	SourceNode.prototype.toStringWithSourceMap = function SourceNode_toStringWithSourceMap(aArgs) {
-	  var generated = {
-	    code: "",
-	    line: 1,
-	    column: 0
-	  };
-	  var map = new SourceMapGenerator(aArgs);
-	  var sourceMappingActive = false;
-	  var lastOriginalSource = null;
-	  var lastOriginalLine = null;
-	  var lastOriginalColumn = null;
-	  var lastOriginalName = null;
-	  this.walk(function (chunk, original) {
-	    generated.code += chunk;
-	    if (original.source !== null
-	        && original.line !== null
-	        && original.column !== null) {
-	      if(lastOriginalSource !== original.source
-	         || lastOriginalLine !== original.line
-	         || lastOriginalColumn !== original.column
-	         || lastOriginalName !== original.name) {
-	        map.addMapping({
-	          source: original.source,
-	          original: {
-	            line: original.line,
-	            column: original.column
-	          },
-	          generated: {
-	            line: generated.line,
-	            column: generated.column
-	          },
-	          name: original.name
-	        });
-	      }
-	      lastOriginalSource = original.source;
-	      lastOriginalLine = original.line;
-	      lastOriginalColumn = original.column;
-	      lastOriginalName = original.name;
-	      sourceMappingActive = true;
-	    } else if (sourceMappingActive) {
-	      map.addMapping({
-	        generated: {
-	          line: generated.line,
-	          column: generated.column
-	        }
-	      });
-	      lastOriginalSource = null;
-	      sourceMappingActive = false;
-	    }
-	    for (var idx = 0, length = chunk.length; idx < length; idx++) {
-	      if (chunk.charCodeAt(idx) === NEWLINE_CODE) {
-	        generated.line++;
-	        generated.column = 0;
-	        // Mappings end at eol
-	        if (idx + 1 === length) {
-	          lastOriginalSource = null;
-	          sourceMappingActive = false;
-	        } else if (sourceMappingActive) {
-	          map.addMapping({
-	            source: original.source,
-	            original: {
-	              line: original.line,
-	              column: original.column
-	            },
-	            generated: {
-	              line: generated.line,
-	              column: generated.column
-	            },
-	            name: original.name
-	          });
-	        }
-	      } else {
-	        generated.column++;
-	      }
-	    }
-	  });
-	  this.walkSourceContents(function (sourceFile, sourceContent) {
-	    map.setSourceContent(sourceFile, sourceContent);
-	  });
-
-	  return { code: generated.code, map: map };
-	};
-
-	sourceNode.SourceNode = SourceNode;
-	return sourceNode;
-}
-
-var hasRequiredSourceMap$1;
-
-function requireSourceMap$1 () {
-	if (hasRequiredSourceMap$1) return sourceMap;
-	hasRequiredSourceMap$1 = 1;
-	sourceMap.SourceMapGenerator = requireSourceMapGenerator().SourceMapGenerator;
-	sourceMap.SourceMapConsumer = requireSourceMapConsumer().SourceMapConsumer;
-	sourceMap.SourceNode = requireSourceNode().SourceNode;
-	return sourceMap;
-}
-
-var hasRequiredSourceMap;
-
-function requireSourceMap () {
-	if (hasRequiredSourceMap) return sourceMap$1;
-	hasRequiredSourceMap = 1;
-
-	Object.defineProperty(sourceMap$1, "__esModule", {
-	  value: true
-	});
-	sourceMap$1.default = void 0;
-
-	function _sourceMap() {
-	  const data = _interopRequireDefault(requireSourceMap$1());
-
-	  _sourceMap = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-	class SourceMap {
-	  constructor(opts, code) {
-	    this._cachedMap = null;
-	    this._code = code;
-	    this._opts = opts;
-	    this._rawMappings = [];
-	  }
-
-	  get() {
-	    if (!this._cachedMap) {
-	      const map = this._cachedMap = new (_sourceMap().default.SourceMapGenerator)({
-	        sourceRoot: this._opts.sourceRoot
-	      });
-	      const code = this._code;
-
-	      if (typeof code === "string") {
-	        map.setSourceContent(this._opts.sourceFileName, code);
-	      } else if (typeof code === "object") {
-	        Object.keys(code).forEach(sourceFileName => {
-	          map.setSourceContent(sourceFileName, code[sourceFileName]);
-	        });
-	      }
-
-	      this._rawMappings.forEach(map.addMapping, map);
-	    }
-
-	    return this._cachedMap.toJSON();
-	  }
-
-	  getRawMappings() {
-	    return this._rawMappings.slice();
-	  }
-
-	  mark(generatedLine, generatedColumn, line, column, identifierName, filename, force) {
-	    if (this._lastGenLine !== generatedLine && line === null) return;
-
-	    if (!force && this._lastGenLine === generatedLine && this._lastSourceLine === line && this._lastSourceColumn === column) {
-	      return;
-	    }
-
-	    this._cachedMap = null;
-	    this._lastGenLine = generatedLine;
-	    this._lastSourceLine = line;
-	    this._lastSourceColumn = column;
-
-	    this._rawMappings.push({
-	      name: identifierName || undefined,
-	      generated: {
-	        line: generatedLine,
-	        column: generatedColumn
-	      },
-	      source: line == null ? undefined : filename || this._opts.sourceFileName,
-	      original: line == null ? undefined : {
-	        line: line,
-	        column: column
-	      }
-	    });
-	  }
-
-	}
-
-	sourceMap$1.default = SourceMap;
-	return sourceMap$1;
-}
-
-var printer = {};
-
-var _trimmedEndIndex;
-var hasRequired_trimmedEndIndex;
-
-function require_trimmedEndIndex () {
-	if (hasRequired_trimmedEndIndex) return _trimmedEndIndex;
-	hasRequired_trimmedEndIndex = 1;
-	var reWhitespace = /\s/;
-
-	/**
-	 * Used by `_.trim` and `_.trimEnd` to get the index of the last non-whitespace
-	 * character of `string`.
-	 *
-	 * @private
-	 * @param {string} string The string to inspect.
-	 * @returns {number} Returns the index of the last non-whitespace character.
-	 */
-	function trimmedEndIndex(string) {
-	  var index = string.length;
-
-	  while (index-- && reWhitespace.test(string.charAt(index))) {}
-	  return index;
-	}
-
-	_trimmedEndIndex = trimmedEndIndex;
-	return _trimmedEndIndex;
-}
-
-var _baseTrim;
-var hasRequired_baseTrim;
-
-function require_baseTrim () {
-	if (hasRequired_baseTrim) return _baseTrim;
-	hasRequired_baseTrim = 1;
-	var trimmedEndIndex = require_trimmedEndIndex();
-
-	/** Used to match leading whitespace. */
-	var reTrimStart = /^\s+/;
-
-	/**
-	 * The base implementation of `_.trim`.
-	 *
-	 * @private
-	 * @param {string} string The string to trim.
-	 * @returns {string} Returns the trimmed string.
-	 */
-	function baseTrim(string) {
-	  return string
-	    ? string.slice(0, trimmedEndIndex(string) + 1).replace(reTrimStart, '')
-	    : string;
-	}
-
-	_baseTrim = baseTrim;
-	return _baseTrim;
-}
-
-var isObject_1;
-var hasRequiredIsObject;
-
-function requireIsObject () {
-	if (hasRequiredIsObject) return isObject_1;
-	hasRequiredIsObject = 1;
-	function isObject(value) {
-	  var type = typeof value;
-	  return value != null && (type == 'object' || type == 'function');
-	}
-
-	isObject_1 = isObject;
-	return isObject_1;
-}
-
-var _freeGlobal;
-var hasRequired_freeGlobal;
-
-function require_freeGlobal () {
-	if (hasRequired_freeGlobal) return _freeGlobal;
-	hasRequired_freeGlobal = 1;
-	var freeGlobal = typeof commonjsGlobal == 'object' && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
-
-	_freeGlobal = freeGlobal;
-	return _freeGlobal;
-}
-
-var _root;
-var hasRequired_root;
-
-function require_root () {
-	if (hasRequired_root) return _root;
-	hasRequired_root = 1;
-	var freeGlobal = require_freeGlobal();
-
-	/** Detect free variable `self`. */
-	var freeSelf = typeof self == 'object' && self && self.Object === Object && self;
-
-	/** Used as a reference to the global object. */
-	var root = freeGlobal || freeSelf || Function('return this')();
-
-	_root = root;
-	return _root;
-}
-
-var _Symbol;
-var hasRequired_Symbol;
-
-function require_Symbol () {
-	if (hasRequired_Symbol) return _Symbol;
-	hasRequired_Symbol = 1;
-	var root = require_root();
-
-	/** Built-in value references. */
-	var Symbol = root.Symbol;
-
-	_Symbol = Symbol;
-	return _Symbol;
-}
-
-var _getRawTag;
-var hasRequired_getRawTag;
-
-function require_getRawTag () {
-	if (hasRequired_getRawTag) return _getRawTag;
-	hasRequired_getRawTag = 1;
-	var Symbol = require_Symbol();
-
-	/** Used for built-in method references. */
-	var objectProto = Object.prototype;
-
-	/** Used to check objects for own properties. */
-	var hasOwnProperty = objectProto.hasOwnProperty;
-
-	/**
-	 * Used to resolve the
-	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
-	 * of values.
-	 */
-	var nativeObjectToString = objectProto.toString;
-
-	/** Built-in value references. */
-	var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
-
-	/**
-	 * A specialized version of `baseGetTag` which ignores `Symbol.toStringTag` values.
-	 *
-	 * @private
-	 * @param {*} value The value to query.
-	 * @returns {string} Returns the raw `toStringTag`.
-	 */
-	function getRawTag(value) {
-	  var isOwn = hasOwnProperty.call(value, symToStringTag),
-	      tag = value[symToStringTag];
-
-	  try {
-	    value[symToStringTag] = undefined;
-	    var unmasked = true;
-	  } catch (e) {}
-
-	  var result = nativeObjectToString.call(value);
-	  if (unmasked) {
-	    if (isOwn) {
-	      value[symToStringTag] = tag;
-	    } else {
-	      delete value[symToStringTag];
-	    }
-	  }
-	  return result;
-	}
-
-	_getRawTag = getRawTag;
-	return _getRawTag;
-}
-
-var _objectToString;
-var hasRequired_objectToString;
-
-function require_objectToString () {
-	if (hasRequired_objectToString) return _objectToString;
-	hasRequired_objectToString = 1;
-	var objectProto = Object.prototype;
-
-	/**
-	 * Used to resolve the
-	 * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
-	 * of values.
-	 */
-	var nativeObjectToString = objectProto.toString;
-
-	/**
-	 * Converts `value` to a string using `Object.prototype.toString`.
-	 *
-	 * @private
-	 * @param {*} value The value to convert.
-	 * @returns {string} Returns the converted string.
-	 */
-	function objectToString(value) {
-	  return nativeObjectToString.call(value);
-	}
-
-	_objectToString = objectToString;
-	return _objectToString;
-}
-
-var _baseGetTag;
-var hasRequired_baseGetTag;
-
-function require_baseGetTag () {
-	if (hasRequired_baseGetTag) return _baseGetTag;
-	hasRequired_baseGetTag = 1;
-	var Symbol = require_Symbol(),
-	    getRawTag = require_getRawTag(),
-	    objectToString = require_objectToString();
-
-	/** `Object#toString` result references. */
-	var nullTag = '[object Null]',
-	    undefinedTag = '[object Undefined]';
-
-	/** Built-in value references. */
-	var symToStringTag = Symbol ? Symbol.toStringTag : undefined;
-
-	/**
-	 * The base implementation of `getTag` without fallbacks for buggy environments.
-	 *
-	 * @private
-	 * @param {*} value The value to query.
-	 * @returns {string} Returns the `toStringTag`.
-	 */
-	function baseGetTag(value) {
-	  if (value == null) {
-	    return value === undefined ? undefinedTag : nullTag;
-	  }
-	  return (symToStringTag && symToStringTag in Object(value))
-	    ? getRawTag(value)
-	    : objectToString(value);
-	}
-
-	_baseGetTag = baseGetTag;
-	return _baseGetTag;
-}
-
-var isObjectLike_1;
-var hasRequiredIsObjectLike;
-
-function requireIsObjectLike () {
-	if (hasRequiredIsObjectLike) return isObjectLike_1;
-	hasRequiredIsObjectLike = 1;
-	function isObjectLike(value) {
-	  return value != null && typeof value == 'object';
-	}
-
-	isObjectLike_1 = isObjectLike;
-	return isObjectLike_1;
-}
-
-var isSymbol_1;
-var hasRequiredIsSymbol;
-
-function requireIsSymbol () {
-	if (hasRequiredIsSymbol) return isSymbol_1;
-	hasRequiredIsSymbol = 1;
-	var baseGetTag = require_baseGetTag(),
-	    isObjectLike = requireIsObjectLike();
-
-	/** `Object#toString` result references. */
-	var symbolTag = '[object Symbol]';
-
-	/**
-	 * Checks if `value` is classified as a `Symbol` primitive or object.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to check.
-	 * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
-	 * @example
-	 *
-	 * _.isSymbol(Symbol.iterator);
-	 * // => true
-	 *
-	 * _.isSymbol('abc');
-	 * // => false
-	 */
-	function isSymbol(value) {
-	  return typeof value == 'symbol' ||
-	    (isObjectLike(value) && baseGetTag(value) == symbolTag);
-	}
-
-	isSymbol_1 = isSymbol;
-	return isSymbol_1;
-}
-
-var toNumber_1;
-var hasRequiredToNumber;
-
-function requireToNumber () {
-	if (hasRequiredToNumber) return toNumber_1;
-	hasRequiredToNumber = 1;
-	var baseTrim = require_baseTrim(),
-	    isObject = requireIsObject(),
-	    isSymbol = requireIsSymbol();
-
-	/** Used as references for various `Number` constants. */
-	var NAN = 0 / 0;
-
-	/** Used to detect bad signed hexadecimal string values. */
-	var reIsBadHex = /^[-+]0x[0-9a-f]+$/i;
-
-	/** Used to detect binary string values. */
-	var reIsBinary = /^0b[01]+$/i;
-
-	/** Used to detect octal string values. */
-	var reIsOctal = /^0o[0-7]+$/i;
-
-	/** Built-in method references without a dependency on `root`. */
-	var freeParseInt = parseInt;
-
-	/**
-	 * Converts `value` to a number.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to process.
-	 * @returns {number} Returns the number.
-	 * @example
-	 *
-	 * _.toNumber(3.2);
-	 * // => 3.2
-	 *
-	 * _.toNumber(Number.MIN_VALUE);
-	 * // => 5e-324
-	 *
-	 * _.toNumber(Infinity);
-	 * // => Infinity
-	 *
-	 * _.toNumber('3.2');
-	 * // => 3.2
-	 */
-	function toNumber(value) {
-	  if (typeof value == 'number') {
-	    return value;
-	  }
-	  if (isSymbol(value)) {
-	    return NAN;
-	  }
-	  if (isObject(value)) {
-	    var other = typeof value.valueOf == 'function' ? value.valueOf() : value;
-	    value = isObject(other) ? (other + '') : other;
-	  }
-	  if (typeof value != 'string') {
-	    return value === 0 ? value : +value;
-	  }
-	  value = baseTrim(value);
-	  var isBinary = reIsBinary.test(value);
-	  return (isBinary || reIsOctal.test(value))
-	    ? freeParseInt(value.slice(2), isBinary ? 2 : 8)
-	    : (reIsBadHex.test(value) ? NAN : +value);
-	}
-
-	toNumber_1 = toNumber;
-	return toNumber_1;
-}
-
-var toFinite_1;
-var hasRequiredToFinite;
-
-function requireToFinite () {
-	if (hasRequiredToFinite) return toFinite_1;
-	hasRequiredToFinite = 1;
-	var toNumber = requireToNumber();
-
-	/** Used as references for various `Number` constants. */
-	var INFINITY = 1 / 0,
-	    MAX_INTEGER = 1.7976931348623157e+308;
-
-	/**
-	 * Converts `value` to a finite number.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.12.0
-	 * @category Lang
-	 * @param {*} value The value to convert.
-	 * @returns {number} Returns the converted number.
-	 * @example
-	 *
-	 * _.toFinite(3.2);
-	 * // => 3.2
-	 *
-	 * _.toFinite(Number.MIN_VALUE);
-	 * // => 5e-324
-	 *
-	 * _.toFinite(Infinity);
-	 * // => 1.7976931348623157e+308
-	 *
-	 * _.toFinite('3.2');
-	 * // => 3.2
-	 */
-	function toFinite(value) {
-	  if (!value) {
-	    return value === 0 ? value : 0;
-	  }
-	  value = toNumber(value);
-	  if (value === INFINITY || value === -INFINITY) {
-	    var sign = (value < 0 ? -1 : 1);
-	    return sign * MAX_INTEGER;
-	  }
-	  return value === value ? value : 0;
-	}
-
-	toFinite_1 = toFinite;
-	return toFinite_1;
-}
-
-var toInteger_1;
-var hasRequiredToInteger;
-
-function requireToInteger () {
-	if (hasRequiredToInteger) return toInteger_1;
-	hasRequiredToInteger = 1;
-	var toFinite = requireToFinite();
-
-	/**
-	 * Converts `value` to an integer.
-	 *
-	 * **Note:** This method is loosely based on
-	 * [`ToInteger`](http://www.ecma-international.org/ecma-262/7.0/#sec-tointeger).
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to convert.
-	 * @returns {number} Returns the converted integer.
-	 * @example
-	 *
-	 * _.toInteger(3.2);
-	 * // => 3
-	 *
-	 * _.toInteger(Number.MIN_VALUE);
-	 * // => 0
-	 *
-	 * _.toInteger(Infinity);
-	 * // => 1.7976931348623157e+308
-	 *
-	 * _.toInteger('3.2');
-	 * // => 3
-	 */
-	function toInteger(value) {
-	  var result = toFinite(value),
-	      remainder = result % 1;
-
-	  return result === result ? (remainder ? result - remainder : result) : 0;
-	}
-
-	toInteger_1 = toInteger;
-	return toInteger_1;
-}
-
-var isInteger_1;
-var hasRequiredIsInteger;
-
-function requireIsInteger () {
-	if (hasRequiredIsInteger) return isInteger_1;
-	hasRequiredIsInteger = 1;
-	var toInteger = requireToInteger();
-
-	/**
-	 * Checks if `value` is an integer.
-	 *
-	 * **Note:** This method is based on
-	 * [`Number.isInteger`](https://mdn.io/Number/isInteger).
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to check.
-	 * @returns {boolean} Returns `true` if `value` is an integer, else `false`.
-	 * @example
-	 *
-	 * _.isInteger(3);
-	 * // => true
-	 *
-	 * _.isInteger(Number.MIN_VALUE);
-	 * // => false
-	 *
-	 * _.isInteger(Infinity);
-	 * // => false
-	 *
-	 * _.isInteger('3');
-	 * // => false
-	 */
-	function isInteger(value) {
-	  return typeof value == 'number' && value == toInteger(value);
-	}
-
-	isInteger_1 = isInteger;
-	return isInteger_1;
-}
-
-var _baseRepeat;
-var hasRequired_baseRepeat;
-
-function require_baseRepeat () {
-	if (hasRequired_baseRepeat) return _baseRepeat;
-	hasRequired_baseRepeat = 1;
-	var MAX_SAFE_INTEGER = 9007199254740991;
-
-	/* Built-in method references for those with the same name as other `lodash` methods. */
-	var nativeFloor = Math.floor;
-
-	/**
-	 * The base implementation of `_.repeat` which doesn't coerce arguments.
-	 *
-	 * @private
-	 * @param {string} string The string to repeat.
-	 * @param {number} n The number of times to repeat the string.
-	 * @returns {string} Returns the repeated string.
-	 */
-	function baseRepeat(string, n) {
-	  var result = '';
-	  if (!string || n < 1 || n > MAX_SAFE_INTEGER) {
-	    return result;
-	  }
-	  // Leverage the exponentiation by squaring algorithm for a faster repeat.
-	  // See https://en.wikipedia.org/wiki/Exponentiation_by_squaring for more details.
-	  do {
-	    if (n % 2) {
-	      result += string;
-	    }
-	    n = nativeFloor(n / 2);
-	    if (n) {
-	      string += string;
-	    }
-	  } while (n);
-
-	  return result;
-	}
-
-	_baseRepeat = baseRepeat;
-	return _baseRepeat;
-}
-
-var eq_1;
-var hasRequiredEq;
-
-function requireEq () {
-	if (hasRequiredEq) return eq_1;
-	hasRequiredEq = 1;
-	function eq(value, other) {
-	  return value === other || (value !== value && other !== other);
-	}
-
-	eq_1 = eq;
-	return eq_1;
-}
-
-var isFunction_1;
-var hasRequiredIsFunction;
-
-function requireIsFunction () {
-	if (hasRequiredIsFunction) return isFunction_1;
-	hasRequiredIsFunction = 1;
-	var baseGetTag = require_baseGetTag(),
-	    isObject = requireIsObject();
-
-	/** `Object#toString` result references. */
-	var asyncTag = '[object AsyncFunction]',
-	    funcTag = '[object Function]',
-	    genTag = '[object GeneratorFunction]',
-	    proxyTag = '[object Proxy]';
-
-	/**
-	 * Checks if `value` is classified as a `Function` object.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 0.1.0
-	 * @category Lang
-	 * @param {*} value The value to check.
-	 * @returns {boolean} Returns `true` if `value` is a function, else `false`.
-	 * @example
-	 *
-	 * _.isFunction(_);
-	 * // => true
-	 *
-	 * _.isFunction(/abc/);
-	 * // => false
-	 */
-	function isFunction(value) {
-	  if (!isObject(value)) {
-	    return false;
-	  }
-	  // The use of `Object#toString` avoids issues with the `typeof` operator
-	  // in Safari 9 which returns 'object' for typed arrays and other constructors.
-	  var tag = baseGetTag(value);
-	  return tag == funcTag || tag == genTag || tag == asyncTag || tag == proxyTag;
-	}
-
-	isFunction_1 = isFunction;
-	return isFunction_1;
-}
-
-var isLength_1;
-var hasRequiredIsLength;
-
-function requireIsLength () {
-	if (hasRequiredIsLength) return isLength_1;
-	hasRequiredIsLength = 1;
-	var MAX_SAFE_INTEGER = 9007199254740991;
-
-	/**
-	 * Checks if `value` is a valid array-like length.
-	 *
-	 * **Note:** This method is loosely based on
-	 * [`ToLength`](http://ecma-international.org/ecma-262/7.0/#sec-tolength).
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to check.
-	 * @returns {boolean} Returns `true` if `value` is a valid length, else `false`.
-	 * @example
-	 *
-	 * _.isLength(3);
-	 * // => true
-	 *
-	 * _.isLength(Number.MIN_VALUE);
-	 * // => false
-	 *
-	 * _.isLength(Infinity);
-	 * // => false
-	 *
-	 * _.isLength('3');
-	 * // => false
-	 */
-	function isLength(value) {
-	  return typeof value == 'number' &&
-	    value > -1 && value % 1 == 0 && value <= MAX_SAFE_INTEGER;
-	}
-
-	isLength_1 = isLength;
-	return isLength_1;
-}
-
-var isArrayLike_1;
-var hasRequiredIsArrayLike;
-
-function requireIsArrayLike () {
-	if (hasRequiredIsArrayLike) return isArrayLike_1;
-	hasRequiredIsArrayLike = 1;
-	var isFunction = requireIsFunction(),
-	    isLength = requireIsLength();
-
-	/**
-	 * Checks if `value` is array-like. A value is considered array-like if it's
-	 * not a function and has a `value.length` that's an integer greater than or
-	 * equal to `0` and less than or equal to `Number.MAX_SAFE_INTEGER`.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to check.
-	 * @returns {boolean} Returns `true` if `value` is array-like, else `false`.
-	 * @example
-	 *
-	 * _.isArrayLike([1, 2, 3]);
-	 * // => true
-	 *
-	 * _.isArrayLike(document.body.children);
-	 * // => true
-	 *
-	 * _.isArrayLike('abc');
-	 * // => true
-	 *
-	 * _.isArrayLike(_.noop);
-	 * // => false
-	 */
-	function isArrayLike(value) {
-	  return value != null && isLength(value.length) && !isFunction(value);
-	}
-
-	isArrayLike_1 = isArrayLike;
-	return isArrayLike_1;
-}
-
-var _isIndex;
-var hasRequired_isIndex;
-
-function require_isIndex () {
-	if (hasRequired_isIndex) return _isIndex;
-	hasRequired_isIndex = 1;
-	var MAX_SAFE_INTEGER = 9007199254740991;
-
-	/** Used to detect unsigned integer values. */
-	var reIsUint = /^(?:0|[1-9]\d*)$/;
-
-	/**
-	 * Checks if `value` is a valid array-like index.
-	 *
-	 * @private
-	 * @param {*} value The value to check.
-	 * @param {number} [length=MAX_SAFE_INTEGER] The upper bounds of a valid index.
-	 * @returns {boolean} Returns `true` if `value` is a valid index, else `false`.
-	 */
-	function isIndex(value, length) {
-	  var type = typeof value;
-	  length = length == null ? MAX_SAFE_INTEGER : length;
-
-	  return !!length &&
-	    (type == 'number' ||
-	      (type != 'symbol' && reIsUint.test(value))) &&
-	        (value > -1 && value % 1 == 0 && value < length);
-	}
-
-	_isIndex = isIndex;
-	return _isIndex;
-}
-
-var _isIterateeCall;
-var hasRequired_isIterateeCall;
-
-function require_isIterateeCall () {
-	if (hasRequired_isIterateeCall) return _isIterateeCall;
-	hasRequired_isIterateeCall = 1;
-	var eq = requireEq(),
-	    isArrayLike = requireIsArrayLike(),
-	    isIndex = require_isIndex(),
-	    isObject = requireIsObject();
-
-	/**
-	 * Checks if the given arguments are from an iteratee call.
-	 *
-	 * @private
-	 * @param {*} value The potential iteratee value argument.
-	 * @param {*} index The potential iteratee index or key argument.
-	 * @param {*} object The potential iteratee object argument.
-	 * @returns {boolean} Returns `true` if the arguments are from an iteratee call,
-	 *  else `false`.
-	 */
-	function isIterateeCall(value, index, object) {
-	  if (!isObject(object)) {
-	    return false;
-	  }
-	  var type = typeof index;
-	  if (type == 'number'
-	        ? (isArrayLike(object) && isIndex(index, object.length))
-	        : (type == 'string' && index in object)
-	      ) {
-	    return eq(object[index], value);
-	  }
-	  return false;
-	}
-
-	_isIterateeCall = isIterateeCall;
-	return _isIterateeCall;
-}
-
-var _arrayMap;
-var hasRequired_arrayMap;
-
-function require_arrayMap () {
-	if (hasRequired_arrayMap) return _arrayMap;
-	hasRequired_arrayMap = 1;
-	function arrayMap(array, iteratee) {
-	  var index = -1,
-	      length = array == null ? 0 : array.length,
-	      result = Array(length);
-
-	  while (++index < length) {
-	    result[index] = iteratee(array[index], index, array);
-	  }
-	  return result;
-	}
-
-	_arrayMap = arrayMap;
-	return _arrayMap;
-}
-
-var isArray_1;
-var hasRequiredIsArray;
-
-function requireIsArray () {
-	if (hasRequiredIsArray) return isArray_1;
-	hasRequiredIsArray = 1;
-	var isArray = Array.isArray;
-
-	isArray_1 = isArray;
-	return isArray_1;
-}
-
-var _baseToString;
-var hasRequired_baseToString;
-
-function require_baseToString () {
-	if (hasRequired_baseToString) return _baseToString;
-	hasRequired_baseToString = 1;
-	var Symbol = require_Symbol(),
-	    arrayMap = require_arrayMap(),
-	    isArray = requireIsArray(),
-	    isSymbol = requireIsSymbol();
-
-	/** Used as references for various `Number` constants. */
-	var INFINITY = 1 / 0;
-
-	/** Used to convert symbols to primitives and strings. */
-	var symbolProto = Symbol ? Symbol.prototype : undefined,
-	    symbolToString = symbolProto ? symbolProto.toString : undefined;
-
-	/**
-	 * The base implementation of `_.toString` which doesn't convert nullish
-	 * values to empty strings.
-	 *
-	 * @private
-	 * @param {*} value The value to process.
-	 * @returns {string} Returns the string.
-	 */
-	function baseToString(value) {
-	  // Exit early for strings to avoid a performance hit in some environments.
-	  if (typeof value == 'string') {
-	    return value;
-	  }
-	  if (isArray(value)) {
-	    // Recursively convert values (susceptible to call stack limits).
-	    return arrayMap(value, baseToString) + '';
-	  }
-	  if (isSymbol(value)) {
-	    return symbolToString ? symbolToString.call(value) : '';
-	  }
-	  var result = (value + '');
-	  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
-	}
-
-	_baseToString = baseToString;
-	return _baseToString;
-}
-
-var toString_1;
-var hasRequiredToString;
-
-function requireToString () {
-	if (hasRequiredToString) return toString_1;
-	hasRequiredToString = 1;
-	var baseToString = require_baseToString();
-
-	/**
-	 * Converts `value` to a string. An empty string is returned for `null`
-	 * and `undefined` values. The sign of `-0` is preserved.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 4.0.0
-	 * @category Lang
-	 * @param {*} value The value to convert.
-	 * @returns {string} Returns the converted string.
-	 * @example
-	 *
-	 * _.toString(null);
-	 * // => ''
-	 *
-	 * _.toString(-0);
-	 * // => '-0'
-	 *
-	 * _.toString([1, 2, 3]);
-	 * // => '1,2,3'
-	 */
-	function toString(value) {
-	  return value == null ? '' : baseToString(value);
-	}
-
-	toString_1 = toString;
-	return toString_1;
-}
-
-var repeat_1;
-var hasRequiredRepeat;
-
-function requireRepeat () {
-	if (hasRequiredRepeat) return repeat_1;
-	hasRequiredRepeat = 1;
-	var baseRepeat = require_baseRepeat(),
-	    isIterateeCall = require_isIterateeCall(),
-	    toInteger = requireToInteger(),
-	    toString = requireToString();
-
-	/**
-	 * Repeats the given string `n` times.
-	 *
-	 * @static
-	 * @memberOf _
-	 * @since 3.0.0
-	 * @category String
-	 * @param {string} [string=''] The string to repeat.
-	 * @param {number} [n=1] The number of times to repeat the string.
-	 * @param- {Object} [guard] Enables use as an iteratee for methods like `_.map`.
-	 * @returns {string} Returns the repeated string.
-	 * @example
-	 *
-	 * _.repeat('*', 3);
-	 * // => '***'
-	 *
-	 * _.repeat('abc', 2);
-	 * // => 'abcabc'
-	 *
-	 * _.repeat('abc', 0);
-	 * // => ''
-	 */
-	function repeat(string, n, guard) {
-	  if ((guard ? isIterateeCall(string, n, guard) : n === undefined)) {
-	    n = 1;
-	  } else {
-	    n = toInteger(n);
-	  }
-	  return baseRepeat(toString(string), n);
-	}
-
-	repeat_1 = repeat;
-	return repeat_1;
-}
-
-var buffer = {};
-
-var trimRight;
-var hasRequiredTrimRight;
-
-function requireTrimRight () {
-	if (hasRequiredTrimRight) return trimRight;
-	hasRequiredTrimRight = 1;
-	trimRight = function (str) {
-		var tail = str.length;
-
-		while (/[\s\uFEFF\u00A0]/.test(str[tail - 1])) {
-			tail--;
-		}
-
-		return str.slice(0, tail);
-	};
-	return trimRight;
-}
-
-var hasRequiredBuffer;
-
-function requireBuffer () {
-	if (hasRequiredBuffer) return buffer;
-	hasRequiredBuffer = 1;
-
-	Object.defineProperty(buffer, "__esModule", {
-	  value: true
-	});
-	buffer.default = void 0;
-
-	function _trimRight() {
-	  const data = _interopRequireDefault(requireTrimRight());
-
-	  _trimRight = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-	const SPACES_RE = /^[ \t]+$/;
-
-	class Buffer {
-	  constructor(map) {
-	    this._map = null;
-	    this._buf = [];
-	    this._last = "";
-	    this._queue = [];
-	    this._position = {
-	      line: 1,
-	      column: 0
-	    };
-	    this._sourcePosition = {
-	      identifierName: null,
-	      line: null,
-	      column: null,
-	      filename: null
-	    };
-	    this._disallowedPop = null;
-	    this._map = map;
-	  }
-
-	  get() {
-	    this._flush();
-
-	    const map = this._map;
-	    const result = {
-	      code: (0, _trimRight().default)(this._buf.join("")),
-	      map: null,
-	      rawMappings: map && map.getRawMappings()
-	    };
-
-	    if (map) {
-	      Object.defineProperty(result, "map", {
-	        configurable: true,
-	        enumerable: true,
-
-	        get() {
-	          return this.map = map.get();
-	        },
-
-	        set(value) {
-	          Object.defineProperty(this, "map", {
-	            value,
-	            writable: true
-	          });
-	        }
-
-	      });
-	    }
-
-	    return result;
-	  }
-
-	  append(str) {
-	    this._flush();
-
-	    const {
-	      line,
-	      column,
-	      filename,
-	      identifierName,
-	      force
-	    } = this._sourcePosition;
-
-	    this._append(str, line, column, identifierName, filename, force);
-	  }
-
-	  queue(str) {
-	    if (str === "\n") {
-	      while (this._queue.length > 0 && SPACES_RE.test(this._queue[0][0])) {
-	        this._queue.shift();
-	      }
-	    }
-
-	    const {
-	      line,
-	      column,
-	      filename,
-	      identifierName,
-	      force
-	    } = this._sourcePosition;
-
-	    this._queue.unshift([str, line, column, identifierName, filename, force]);
-	  }
-
-	  _flush() {
-	    let item;
-
-	    while (item = this._queue.pop()) this._append(...item);
-	  }
-
-	  _append(str, line, column, identifierName, filename, force) {
-	    if (this._map && str[0] !== "\n") {
-	      this._map.mark(this._position.line, this._position.column, line, column, identifierName, filename, force);
-	    }
-
-	    this._buf.push(str);
-
-	    this._last = str[str.length - 1];
-
-	    for (let i = 0; i < str.length; i++) {
-	      if (str[i] === "\n") {
-	        this._position.line++;
-	        this._position.column = 0;
-	      } else {
-	        this._position.column++;
-	      }
-	    }
-	  }
-
-	  removeTrailingNewline() {
-	    if (this._queue.length > 0 && this._queue[0][0] === "\n") {
-	      this._queue.shift();
-	    }
-	  }
-
-	  removeLastSemicolon() {
-	    if (this._queue.length > 0 && this._queue[0][0] === ";") {
-	      this._queue.shift();
-	    }
-	  }
-
-	  endsWith(suffix) {
-	    if (suffix.length === 1) {
-	      let last;
-
-	      if (this._queue.length > 0) {
-	        const str = this._queue[0][0];
-	        last = str[str.length - 1];
-	      } else {
-	        last = this._last;
-	      }
-
-	      return last === suffix;
-	    }
-
-	    const end = this._last + this._queue.reduce((acc, item) => item[0] + acc, "");
-
-	    if (suffix.length <= end.length) {
-	      return end.slice(-suffix.length) === suffix;
-	    }
-
-	    return false;
-	  }
-
-	  hasContent() {
-	    return this._queue.length > 0 || !!this._last;
-	  }
-
-	  exactSource(loc, cb) {
-	    this.source("start", loc, true);
-	    cb();
-	    this.source("end", loc);
-
-	    this._disallowPop("start", loc);
-	  }
-
-	  source(prop, loc, force) {
-	    if (prop && !loc) return;
-
-	    this._normalizePosition(prop, loc, this._sourcePosition, force);
-	  }
-
-	  withSource(prop, loc, cb) {
-	    if (!this._map) return cb();
-	    const originalLine = this._sourcePosition.line;
-	    const originalColumn = this._sourcePosition.column;
-	    const originalFilename = this._sourcePosition.filename;
-	    const originalIdentifierName = this._sourcePosition.identifierName;
-	    this.source(prop, loc);
-	    cb();
-
-	    if ((!this._sourcePosition.force || this._sourcePosition.line !== originalLine || this._sourcePosition.column !== originalColumn || this._sourcePosition.filename !== originalFilename) && (!this._disallowedPop || this._disallowedPop.line !== originalLine || this._disallowedPop.column !== originalColumn || this._disallowedPop.filename !== originalFilename)) {
-	      this._sourcePosition.line = originalLine;
-	      this._sourcePosition.column = originalColumn;
-	      this._sourcePosition.filename = originalFilename;
-	      this._sourcePosition.identifierName = originalIdentifierName;
-	      this._sourcePosition.force = false;
-	      this._disallowedPop = null;
-	    }
-	  }
-
-	  _disallowPop(prop, loc) {
-	    if (prop && !loc) return;
-	    this._disallowedPop = this._normalizePosition(prop, loc);
-	  }
-
-	  _normalizePosition(prop, loc, targetObj, force) {
-	    const pos = loc ? loc[prop] : null;
-
-	    if (targetObj === undefined) {
-	      targetObj = {
-	        identifierName: null,
-	        line: null,
-	        column: null,
-	        filename: null,
-	        force: false
-	      };
-	    }
-
-	    const origLine = targetObj.line;
-	    const origColumn = targetObj.column;
-	    const origFilename = targetObj.filename;
-	    targetObj.identifierName = prop === "start" && loc && loc.identifierName || null;
-	    targetObj.line = pos ? pos.line : null;
-	    targetObj.column = pos ? pos.column : null;
-	    targetObj.filename = loc && loc.filename || null;
-
-	    if (force || targetObj.line !== origLine || targetObj.column !== origColumn || targetObj.filename !== origFilename) {
-	      targetObj.force = force;
-	    }
-
-	    return targetObj;
-	  }
-
-	  getCurrentColumn() {
-	    const extra = this._queue.reduce((acc, item) => item[0] + acc, "");
-
-	    const lastIndex = extra.lastIndexOf("\n");
-	    return lastIndex === -1 ? this._position.column + extra.length : extra.length - 1 - lastIndex;
-	  }
-
-	  getCurrentLine() {
-	    const extra = this._queue.reduce((acc, item) => item[0] + acc, "");
-
-	    let count = 0;
-
-	    for (let i = 0; i < extra.length; i++) {
-	      if (extra[i] === "\n") count++;
-	    }
-
-	    return this._position.line + count;
-	  }
-
-	}
-
-	buffer.default = Buffer;
-	return buffer;
-}
-
-var node = {};
-
-var whitespace = {};
-
-var hasRequiredWhitespace;
-
-function requireWhitespace () {
-	if (hasRequiredWhitespace) return whitespace;
-	hasRequiredWhitespace = 1;
-
-	Object.defineProperty(whitespace, "__esModule", {
-	  value: true
-	});
-	whitespace.list = whitespace.nodes = void 0;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function crawl(node, state = {}) {
-	  if (t().isMemberExpression(node)) {
-	    crawl(node.object, state);
-	    if (node.computed) crawl(node.property, state);
-	  } else if (t().isBinary(node) || t().isAssignmentExpression(node)) {
-	    crawl(node.left, state);
-	    crawl(node.right, state);
-	  } else if (t().isCallExpression(node)) {
-	    state.hasCall = true;
-	    crawl(node.callee, state);
-	  } else if (t().isFunction(node)) {
-	    state.hasFunction = true;
-	  } else if (t().isIdentifier(node)) {
-	    state.hasHelper = state.hasHelper || isHelper(node.callee);
-	  }
-
-	  return state;
-	}
-
-	function isHelper(node) {
-	  if (t().isMemberExpression(node)) {
-	    return isHelper(node.object) || isHelper(node.property);
-	  } else if (t().isIdentifier(node)) {
-	    return node.name === "require" || node.name[0] === "_";
-	  } else if (t().isCallExpression(node)) {
-	    return isHelper(node.callee);
-	  } else if (t().isBinary(node) || t().isAssignmentExpression(node)) {
-	    return t().isIdentifier(node.left) && isHelper(node.left) || isHelper(node.right);
-	  } else {
-	    return false;
-	  }
-	}
-
-	function isType(node) {
-	  return t().isLiteral(node) || t().isObjectExpression(node) || t().isArrayExpression(node) || t().isIdentifier(node) || t().isMemberExpression(node);
-	}
-
-	const nodes = {
-	  AssignmentExpression(node) {
-	    const state = crawl(node.right);
-
-	    if (state.hasCall && state.hasHelper || state.hasFunction) {
-	      return {
-	        before: state.hasFunction,
-	        after: true
-	      };
-	    }
-	  },
-
-	  SwitchCase(node, parent) {
-	    return {
-	      before: node.consequent.length || parent.cases[0] === node,
-	      after: !node.consequent.length && parent.cases[parent.cases.length - 1] === node
-	    };
-	  },
-
-	  LogicalExpression(node) {
-	    if (t().isFunction(node.left) || t().isFunction(node.right)) {
-	      return {
-	        after: true
-	      };
-	    }
-	  },
-
-	  Literal(node) {
-	    if (node.value === "use strict") {
-	      return {
-	        after: true
-	      };
-	    }
-	  },
-
-	  CallExpression(node) {
-	    if (t().isFunction(node.callee) || isHelper(node)) {
-	      return {
-	        before: true,
-	        after: true
-	      };
-	    }
-	  },
-
-	  VariableDeclaration(node) {
-	    for (let i = 0; i < node.declarations.length; i++) {
-	      const declar = node.declarations[i];
-	      let enabled = isHelper(declar.id) && !isType(declar.init);
-
-	      if (!enabled) {
-	        const state = crawl(declar.init);
-	        enabled = isHelper(declar.init) && state.hasCall || state.hasFunction;
-	      }
-
-	      if (enabled) {
-	        return {
-	          before: true,
-	          after: true
-	        };
-	      }
-	    }
-	  },
-
-	  IfStatement(node) {
-	    if (t().isBlockStatement(node.consequent)) {
-	      return {
-	        before: true,
-	        after: true
-	      };
-	    }
-	  }
-
-	};
-	whitespace.nodes = nodes;
-
-	nodes.ObjectProperty = nodes.ObjectTypeProperty = nodes.ObjectMethod = function (node, parent) {
-	  if (parent.properties[0] === node) {
-	    return {
-	      before: true
-	    };
-	  }
-	};
-
-	nodes.ObjectTypeCallProperty = function (node, parent) {
-	  if (parent.callProperties[0] === node && (!parent.properties || !parent.properties.length)) {
-	    return {
-	      before: true
-	    };
-	  }
-	};
-
-	nodes.ObjectTypeIndexer = function (node, parent) {
-	  if (parent.indexers[0] === node && (!parent.properties || !parent.properties.length) && (!parent.callProperties || !parent.callProperties.length)) {
-	    return {
-	      before: true
-	    };
-	  }
-	};
-
-	nodes.ObjectTypeInternalSlot = function (node, parent) {
-	  if (parent.internalSlots[0] === node && (!parent.properties || !parent.properties.length) && (!parent.callProperties || !parent.callProperties.length) && (!parent.indexers || !parent.indexers.length)) {
-	    return {
-	      before: true
-	    };
-	  }
-	};
-
-	const list = {
-	  VariableDeclaration(node) {
-	    return node.declarations.map(decl => decl.init);
-	  },
-
-	  ArrayExpression(node) {
-	    return node.elements;
-	  },
-
-	  ObjectExpression(node) {
-	    return node.properties;
-	  }
-
-	};
-	whitespace.list = list;
-	[["Function", true], ["Class", true], ["Loop", true], ["LabeledStatement", true], ["SwitchStatement", true], ["TryStatement", true]].forEach(function ([type, amounts]) {
-	  if (typeof amounts === "boolean") {
-	    amounts = {
-	      after: amounts,
-	      before: amounts
-	    };
-	  }
-
-	  [type].concat(t().FLIPPED_ALIAS_KEYS[type] || []).forEach(function (type) {
-	    nodes[type] = function () {
-	      return amounts;
-	    };
-	  });
-	});
-	return whitespace;
-}
-
-var parentheses = {};
-
-var hasRequiredParentheses;
-
-function requireParentheses () {
-	if (hasRequiredParentheses) return parentheses;
-	hasRequiredParentheses = 1;
-
-	Object.defineProperty(parentheses, "__esModule", {
-	  value: true
-	});
-	parentheses.FunctionTypeAnnotation = parentheses.NullableTypeAnnotation = NullableTypeAnnotation;
-	parentheses.UpdateExpression = UpdateExpression;
-	parentheses.ObjectExpression = ObjectExpression;
-	parentheses.DoExpression = DoExpression;
-	parentheses.Binary = Binary;
-	parentheses.IntersectionTypeAnnotation = parentheses.UnionTypeAnnotation = UnionTypeAnnotation;
-	parentheses.TSAsExpression = TSAsExpression;
-	parentheses.TSTypeAssertion = TSTypeAssertion;
-	parentheses.BinaryExpression = BinaryExpression;
-	parentheses.SequenceExpression = SequenceExpression;
-	parentheses.AwaitExpression = parentheses.YieldExpression = YieldExpression;
-	parentheses.ClassExpression = ClassExpression;
-	parentheses.UnaryLike = UnaryLike;
-	parentheses.FunctionExpression = FunctionExpression;
-	parentheses.ArrowFunctionExpression = ArrowFunctionExpression;
-	parentheses.ConditionalExpression = ConditionalExpression;
-	parentheses.OptionalMemberExpression = OptionalMemberExpression;
-	parentheses.AssignmentExpression = AssignmentExpression;
-	parentheses.NewExpression = NewExpression;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	const PRECEDENCE = {
-	  "||": 0,
-	  "&&": 1,
-	  "|": 2,
-	  "^": 3,
-	  "&": 4,
-	  "==": 5,
-	  "===": 5,
-	  "!=": 5,
-	  "!==": 5,
-	  "<": 6,
-	  ">": 6,
-	  "<=": 6,
-	  ">=": 6,
-	  in: 6,
-	  instanceof: 6,
-	  ">>": 7,
-	  "<<": 7,
-	  ">>>": 7,
-	  "+": 8,
-	  "-": 8,
-	  "*": 9,
-	  "/": 9,
-	  "%": 9,
-	  "**": 10
-	};
-
-	const isClassExtendsClause = (node, parent) => (t().isClassDeclaration(parent) || t().isClassExpression(parent)) && parent.superClass === node;
-
-	function NullableTypeAnnotation(node, parent) {
-	  return t().isArrayTypeAnnotation(parent);
-	}
-
-	function UpdateExpression(node, parent) {
-	  return t().isMemberExpression(parent, {
-	    object: node
-	  }) || t().isCallExpression(parent, {
-	    callee: node
-	  }) || t().isNewExpression(parent, {
-	    callee: node
-	  }) || isClassExtendsClause(node, parent);
-	}
-
-	function ObjectExpression(node, parent, printStack) {
-	  return isFirstInStatement(printStack, {
-	    considerArrow: true
-	  });
-	}
-
-	function DoExpression(node, parent, printStack) {
-	  return isFirstInStatement(printStack);
-	}
-
-	function Binary(node, parent) {
-	  if (node.operator === "**" && t().isBinaryExpression(parent, {
-	    operator: "**"
-	  })) {
-	    return parent.left === node;
-	  }
-
-	  if (isClassExtendsClause(node, parent)) {
-	    return true;
-	  }
-
-	  if ((t().isCallExpression(parent) || t().isNewExpression(parent)) && parent.callee === node || t().isUnaryLike(parent) || t().isMemberExpression(parent) && parent.object === node || t().isAwaitExpression(parent)) {
-	    return true;
-	  }
-
-	  if (t().isBinary(parent)) {
-	    const parentOp = parent.operator;
-	    const parentPos = PRECEDENCE[parentOp];
-	    const nodeOp = node.operator;
-	    const nodePos = PRECEDENCE[nodeOp];
-
-	    if (parentPos === nodePos && parent.right === node && !t().isLogicalExpression(parent) || parentPos > nodePos) {
-	      return true;
-	    }
-	  }
-
-	  return false;
-	}
-
-	function UnionTypeAnnotation(node, parent) {
-	  return t().isArrayTypeAnnotation(parent) || t().isNullableTypeAnnotation(parent) || t().isIntersectionTypeAnnotation(parent) || t().isUnionTypeAnnotation(parent);
-	}
-
-	function TSAsExpression() {
-	  return true;
-	}
-
-	function TSTypeAssertion() {
-	  return true;
-	}
-
-	function BinaryExpression(node, parent) {
-	  return node.operator === "in" && (t().isVariableDeclarator(parent) || t().isFor(parent));
-	}
-
-	function SequenceExpression(node, parent) {
-	  if (t().isForStatement(parent) || t().isThrowStatement(parent) || t().isReturnStatement(parent) || t().isIfStatement(parent) && parent.test === node || t().isWhileStatement(parent) && parent.test === node || t().isForInStatement(parent) && parent.right === node || t().isSwitchStatement(parent) && parent.discriminant === node || t().isExpressionStatement(parent) && parent.expression === node) {
-	    return false;
-	  }
-
-	  return true;
-	}
-
-	function YieldExpression(node, parent) {
-	  return t().isBinary(parent) || t().isUnaryLike(parent) || t().isCallExpression(parent) || t().isMemberExpression(parent) || t().isNewExpression(parent) || t().isAwaitExpression(parent) && t().isYieldExpression(node) || t().isConditionalExpression(parent) && node === parent.test || isClassExtendsClause(node, parent);
-	}
-
-	function ClassExpression(node, parent, printStack) {
-	  return isFirstInStatement(printStack, {
-	    considerDefaultExports: true
-	  });
-	}
-
-	function UnaryLike(node, parent) {
-	  return t().isMemberExpression(parent, {
-	    object: node
-	  }) || t().isCallExpression(parent, {
-	    callee: node
-	  }) || t().isNewExpression(parent, {
-	    callee: node
-	  }) || t().isBinaryExpression(parent, {
-	    operator: "**",
-	    left: node
-	  }) || isClassExtendsClause(node, parent);
-	}
-
-	function FunctionExpression(node, parent, printStack) {
-	  return isFirstInStatement(printStack, {
-	    considerDefaultExports: true
-	  });
-	}
-
-	function ArrowFunctionExpression(node, parent) {
-	  return t().isExportDeclaration(parent) || ConditionalExpression(node, parent);
-	}
-
-	function ConditionalExpression(node, parent) {
-	  if (t().isUnaryLike(parent) || t().isBinary(parent) || t().isConditionalExpression(parent, {
-	    test: node
-	  }) || t().isAwaitExpression(parent) || t().isOptionalMemberExpression(parent) || t().isTaggedTemplateExpression(parent) || t().isTSTypeAssertion(parent) || t().isTSAsExpression(parent)) {
-	    return true;
-	  }
-
-	  return UnaryLike(node, parent);
-	}
-
-	function OptionalMemberExpression(node, parent) {
-	  return t().isCallExpression(parent) || t().isMemberExpression(parent);
-	}
-
-	function AssignmentExpression(node) {
-	  if (t().isObjectPattern(node.left)) {
-	    return true;
-	  } else {
-	    return ConditionalExpression(...arguments);
-	  }
-	}
-
-	function NewExpression(node, parent) {
-	  return isClassExtendsClause(node, parent);
-	}
-
-	function isFirstInStatement(printStack, {
-	  considerArrow = false,
-	  considerDefaultExports = false
-	} = {}) {
-	  let i = printStack.length - 1;
-	  let node = printStack[i];
-	  i--;
-	  let parent = printStack[i];
-
-	  while (i > 0) {
-	    if (t().isExpressionStatement(parent, {
-	      expression: node
-	    }) || t().isTaggedTemplateExpression(parent) || considerDefaultExports && t().isExportDefaultDeclaration(parent, {
-	      declaration: node
-	    }) || considerArrow && t().isArrowFunctionExpression(parent, {
-	      body: node
-	    })) {
-	      return true;
-	    }
-
-	    if (t().isCallExpression(parent, {
-	      callee: node
-	    }) || t().isSequenceExpression(parent) && parent.expressions[0] === node || t().isMemberExpression(parent, {
-	      object: node
-	    }) || t().isConditional(parent, {
-	      test: node
-	    }) || t().isBinary(parent, {
-	      left: node
-	    }) || t().isAssignmentExpression(parent, {
-	      left: node
-	    })) {
-	      node = parent;
-	      i--;
-	      parent = printStack[i];
-	    } else {
-	      return false;
-	    }
-	  }
-
-	  return false;
-	}
-	return parentheses;
-}
-
-var hasRequiredNode;
-
-function requireNode () {
-	if (hasRequiredNode) return node;
-	hasRequiredNode = 1;
-
-	Object.defineProperty(node, "__esModule", {
-	  value: true
-	});
-	node.needsWhitespace = needsWhitespace;
-	node.needsWhitespaceBefore = needsWhitespaceBefore;
-	node.needsWhitespaceAfter = needsWhitespaceAfter;
-	node.needsParens = needsParens;
-
-	var whitespace = _interopRequireWildcard(requireWhitespace());
-
-	var parens = _interopRequireWildcard(requireParentheses());
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function expandAliases(obj) {
-	  const newObj = {};
-
-	  function add(type, func) {
-	    const fn = newObj[type];
-	    newObj[type] = fn ? function (node, parent, stack) {
-	      const result = fn(node, parent, stack);
-	      return result == null ? func(node, parent, stack) : result;
-	    } : func;
-	  }
-
-	  for (const type of Object.keys(obj)) {
-	    const aliases = t().FLIPPED_ALIAS_KEYS[type];
-
-	    if (aliases) {
-	      for (const alias of aliases) {
-	        add(alias, obj[type]);
-	      }
-	    } else {
-	      add(type, obj[type]);
-	    }
-	  }
-
-	  return newObj;
-	}
-
-	const expandedParens = expandAliases(parens);
-	const expandedWhitespaceNodes = expandAliases(whitespace.nodes);
-	const expandedWhitespaceList = expandAliases(whitespace.list);
-
-	function find(obj, node, parent, printStack) {
-	  const fn = obj[node.type];
-	  return fn ? fn(node, parent, printStack) : null;
-	}
-
-	function isOrHasCallExpression(node) {
-	  if (t().isCallExpression(node)) {
-	    return true;
-	  }
-
-	  if (t().isMemberExpression(node)) {
-	    return isOrHasCallExpression(node.object) || !node.computed && isOrHasCallExpression(node.property);
-	  } else {
-	    return false;
-	  }
-	}
-
-	function needsWhitespace(node, parent, type) {
-	  if (!node) return 0;
-
-	  if (t().isExpressionStatement(node)) {
-	    node = node.expression;
-	  }
-
-	  let linesInfo = find(expandedWhitespaceNodes, node, parent);
-
-	  if (!linesInfo) {
-	    const items = find(expandedWhitespaceList, node, parent);
-
-	    if (items) {
-	      for (let i = 0; i < items.length; i++) {
-	        linesInfo = needsWhitespace(items[i], node, type);
-	        if (linesInfo) break;
-	      }
-	    }
-	  }
-
-	  if (typeof linesInfo === "object" && linesInfo !== null) {
-	    return linesInfo[type] || 0;
-	  }
-
-	  return 0;
-	}
-
-	function needsWhitespaceBefore(node, parent) {
-	  return needsWhitespace(node, parent, "before");
-	}
-
-	function needsWhitespaceAfter(node, parent) {
-	  return needsWhitespace(node, parent, "after");
-	}
-
-	function needsParens(node, parent, printStack) {
-	  if (!parent) return false;
-
-	  if (t().isNewExpression(parent) && parent.callee === node) {
-	    if (isOrHasCallExpression(node)) return true;
-	  }
-
-	  return find(expandedParens, node, parent, printStack);
-	}
-	return node;
-}
-
-var generators = {};
-
-var templateLiterals = {};
-
-var hasRequiredTemplateLiterals;
-
-function requireTemplateLiterals () {
-	if (hasRequiredTemplateLiterals) return templateLiterals;
-	hasRequiredTemplateLiterals = 1;
-
-	Object.defineProperty(templateLiterals, "__esModule", {
-	  value: true
-	});
-	templateLiterals.TaggedTemplateExpression = TaggedTemplateExpression;
-	templateLiterals.TemplateElement = TemplateElement;
-	templateLiterals.TemplateLiteral = TemplateLiteral;
-
-	function TaggedTemplateExpression(node) {
-	  this.print(node.tag, node);
-	  this.print(node.typeParameters, node);
-	  this.print(node.quasi, node);
-	}
-
-	function TemplateElement(node, parent) {
-	  const isFirst = parent.quasis[0] === node;
-	  const isLast = parent.quasis[parent.quasis.length - 1] === node;
-	  const value = (isFirst ? "`" : "}") + node.value.raw + (isLast ? "`" : "${");
-	  this.token(value);
-	}
-
-	function TemplateLiteral(node) {
-	  const quasis = node.quasis;
-
-	  for (let i = 0; i < quasis.length; i++) {
-	    this.print(quasis[i], node);
-
-	    if (i + 1 < quasis.length) {
-	      this.print(node.expressions[i], node);
-	    }
-	  }
-	}
-	return templateLiterals;
-}
-
-var expressions = {};
-
-var hasRequiredExpressions;
-
-function requireExpressions () {
-	if (hasRequiredExpressions) return expressions;
-	hasRequiredExpressions = 1;
-
-	Object.defineProperty(expressions, "__esModule", {
-	  value: true
-	});
-	expressions.UnaryExpression = UnaryExpression;
-	expressions.DoExpression = DoExpression;
-	expressions.ParenthesizedExpression = ParenthesizedExpression;
-	expressions.UpdateExpression = UpdateExpression;
-	expressions.ConditionalExpression = ConditionalExpression;
-	expressions.NewExpression = NewExpression;
-	expressions.SequenceExpression = SequenceExpression;
-	expressions.ThisExpression = ThisExpression;
-	expressions.Super = Super;
-	expressions.Decorator = Decorator;
-	expressions.OptionalMemberExpression = OptionalMemberExpression;
-	expressions.OptionalCallExpression = OptionalCallExpression;
-	expressions.CallExpression = CallExpression;
-	expressions.Import = Import;
-	expressions.EmptyStatement = EmptyStatement;
-	expressions.ExpressionStatement = ExpressionStatement;
-	expressions.AssignmentPattern = AssignmentPattern;
-	expressions.LogicalExpression = expressions.BinaryExpression = expressions.AssignmentExpression = AssignmentExpression;
-	expressions.BindExpression = BindExpression;
-	expressions.MemberExpression = MemberExpression;
-	expressions.MetaProperty = MetaProperty;
-	expressions.PrivateName = PrivateName;
-	expressions.AwaitExpression = expressions.YieldExpression = void 0;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	var n = _interopRequireWildcard(requireNode());
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function UnaryExpression(node) {
-	  if (node.operator === "void" || node.operator === "delete" || node.operator === "typeof" || node.operator === "throw") {
-	    this.word(node.operator);
-	    this.space();
-	  } else {
-	    this.token(node.operator);
-	  }
-
-	  this.print(node.argument, node);
-	}
-
-	function DoExpression(node) {
-	  this.word("do");
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function ParenthesizedExpression(node) {
-	  this.token("(");
-	  this.print(node.expression, node);
-	  this.token(")");
-	}
-
-	function UpdateExpression(node) {
-	  if (node.prefix) {
-	    this.token(node.operator);
-	    this.print(node.argument, node);
-	  } else {
-	    this.startTerminatorless(true);
-	    this.print(node.argument, node);
-	    this.endTerminatorless();
-	    this.token(node.operator);
-	  }
-	}
-
-	function ConditionalExpression(node) {
-	  this.print(node.test, node);
-	  this.space();
-	  this.token("?");
-	  this.space();
-	  this.print(node.consequent, node);
-	  this.space();
-	  this.token(":");
-	  this.space();
-	  this.print(node.alternate, node);
-	}
-
-	function NewExpression(node, parent) {
-	  this.word("new");
-	  this.space();
-	  this.print(node.callee, node);
-
-	  if (this.format.minified && node.arguments.length === 0 && !node.optional && !t().isCallExpression(parent, {
-	    callee: node
-	  }) && !t().isMemberExpression(parent) && !t().isNewExpression(parent)) {
-	    return;
-	  }
-
-	  this.print(node.typeArguments, node);
-	  this.print(node.typeParameters, node);
-
-	  if (node.optional) {
-	    this.token("?.");
-	  }
-
-	  this.token("(");
-	  this.printList(node.arguments, node);
-	  this.token(")");
-	}
-
-	function SequenceExpression(node) {
-	  this.printList(node.expressions, node);
-	}
-
-	function ThisExpression() {
-	  this.word("this");
-	}
-
-	function Super() {
-	  this.word("super");
-	}
-
-	function Decorator(node) {
-	  this.token("@");
-	  this.print(node.expression, node);
-	  this.newline();
-	}
-
-	function OptionalMemberExpression(node) {
-	  this.print(node.object, node);
-
-	  if (!node.computed && t().isMemberExpression(node.property)) {
-	    throw new TypeError("Got a MemberExpression for MemberExpression property");
-	  }
-
-	  let computed = node.computed;
-
-	  if (t().isLiteral(node.property) && typeof node.property.value === "number") {
-	    computed = true;
-	  }
-
-	  if (node.optional) {
-	    this.token("?.");
-	  }
-
-	  if (computed) {
-	    this.token("[");
-	    this.print(node.property, node);
-	    this.token("]");
-	  } else {
-	    if (!node.optional) {
-	      this.token(".");
-	    }
-
-	    this.print(node.property, node);
-	  }
-	}
-
-	function OptionalCallExpression(node) {
-	  this.print(node.callee, node);
-	  this.print(node.typeArguments, node);
-	  this.print(node.typeParameters, node);
-
-	  if (node.optional) {
-	    this.token("?.");
-	  }
-
-	  this.token("(");
-	  this.printList(node.arguments, node);
-	  this.token(")");
-	}
-
-	function CallExpression(node) {
-	  this.print(node.callee, node);
-	  this.print(node.typeArguments, node);
-	  this.print(node.typeParameters, node);
-	  this.token("(");
-	  this.printList(node.arguments, node);
-	  this.token(")");
-	}
-
-	function Import() {
-	  this.word("import");
-	}
-
-	function buildYieldAwait(keyword) {
-	  return function (node) {
-	    this.word(keyword);
-
-	    if (node.delegate) {
-	      this.token("*");
-	    }
-
-	    if (node.argument) {
-	      this.space();
-	      const terminatorState = this.startTerminatorless();
-	      this.print(node.argument, node);
-	      this.endTerminatorless(terminatorState);
-	    }
-	  };
-	}
-
-	const YieldExpression = buildYieldAwait("yield");
-	expressions.YieldExpression = YieldExpression;
-	const AwaitExpression = buildYieldAwait("await");
-	expressions.AwaitExpression = AwaitExpression;
-
-	function EmptyStatement() {
-	  this.semicolon(true);
-	}
-
-	function ExpressionStatement(node) {
-	  this.print(node.expression, node);
-	  this.semicolon();
-	}
-
-	function AssignmentPattern(node) {
-	  this.print(node.left, node);
-	  if (node.left.optional) this.token("?");
-	  this.print(node.left.typeAnnotation, node);
-	  this.space();
-	  this.token("=");
-	  this.space();
-	  this.print(node.right, node);
-	}
-
-	function AssignmentExpression(node, parent) {
-	  const parens = this.inForStatementInitCounter && node.operator === "in" && !n.needsParens(node, parent);
-
-	  if (parens) {
-	    this.token("(");
-	  }
-
-	  this.print(node.left, node);
-	  this.space();
-
-	  if (node.operator === "in" || node.operator === "instanceof") {
-	    this.word(node.operator);
-	  } else {
-	    this.token(node.operator);
-	  }
-
-	  this.space();
-	  this.print(node.right, node);
-
-	  if (parens) {
-	    this.token(")");
-	  }
-	}
-
-	function BindExpression(node) {
-	  this.print(node.object, node);
-	  this.token("::");
-	  this.print(node.callee, node);
-	}
-
-	function MemberExpression(node) {
-	  this.print(node.object, node);
-
-	  if (!node.computed && t().isMemberExpression(node.property)) {
-	    throw new TypeError("Got a MemberExpression for MemberExpression property");
-	  }
-
-	  let computed = node.computed;
-
-	  if (t().isLiteral(node.property) && typeof node.property.value === "number") {
-	    computed = true;
-	  }
-
-	  if (computed) {
-	    this.token("[");
-	    this.print(node.property, node);
-	    this.token("]");
-	  } else {
-	    this.token(".");
-	    this.print(node.property, node);
-	  }
-	}
-
-	function MetaProperty(node) {
-	  this.print(node.meta, node);
-	  this.token(".");
-	  this.print(node.property, node);
-	}
-
-	function PrivateName(node) {
-	  this.token("#");
-	  this.print(node.id, node);
-	}
-	return expressions;
-}
-
-var statements = {};
-
-var hasRequiredStatements;
-
-function requireStatements () {
-	if (hasRequiredStatements) return statements;
-	hasRequiredStatements = 1;
-
-	Object.defineProperty(statements, "__esModule", {
-	  value: true
-	});
-	statements.WithStatement = WithStatement;
-	statements.IfStatement = IfStatement;
-	statements.ForStatement = ForStatement;
-	statements.WhileStatement = WhileStatement;
-	statements.DoWhileStatement = DoWhileStatement;
-	statements.LabeledStatement = LabeledStatement;
-	statements.TryStatement = TryStatement;
-	statements.CatchClause = CatchClause;
-	statements.SwitchStatement = SwitchStatement;
-	statements.SwitchCase = SwitchCase;
-	statements.DebuggerStatement = DebuggerStatement;
-	statements.VariableDeclaration = VariableDeclaration;
-	statements.VariableDeclarator = VariableDeclarator;
-	statements.ThrowStatement = statements.BreakStatement = statements.ReturnStatement = statements.ContinueStatement = statements.ForOfStatement = statements.ForInStatement = void 0;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function WithStatement(node) {
-	  this.word("with");
-	  this.space();
-	  this.token("(");
-	  this.print(node.object, node);
-	  this.token(")");
-	  this.printBlock(node);
-	}
-
-	function IfStatement(node) {
-	  this.word("if");
-	  this.space();
-	  this.token("(");
-	  this.print(node.test, node);
-	  this.token(")");
-	  this.space();
-	  const needsBlock = node.alternate && t().isIfStatement(getLastStatement(node.consequent));
-
-	  if (needsBlock) {
-	    this.token("{");
-	    this.newline();
-	    this.indent();
-	  }
-
-	  this.printAndIndentOnComments(node.consequent, node);
-
-	  if (needsBlock) {
-	    this.dedent();
-	    this.newline();
-	    this.token("}");
-	  }
-
-	  if (node.alternate) {
-	    if (this.endsWith("}")) this.space();
-	    this.word("else");
-	    this.space();
-	    this.printAndIndentOnComments(node.alternate, node);
-	  }
-	}
-
-	function getLastStatement(statement) {
-	  if (!t().isStatement(statement.body)) return statement;
-	  return getLastStatement(statement.body);
-	}
-
-	function ForStatement(node) {
-	  this.word("for");
-	  this.space();
-	  this.token("(");
-	  this.inForStatementInitCounter++;
-	  this.print(node.init, node);
-	  this.inForStatementInitCounter--;
-	  this.token(";");
-
-	  if (node.test) {
-	    this.space();
-	    this.print(node.test, node);
-	  }
-
-	  this.token(";");
-
-	  if (node.update) {
-	    this.space();
-	    this.print(node.update, node);
-	  }
-
-	  this.token(")");
-	  this.printBlock(node);
-	}
-
-	function WhileStatement(node) {
-	  this.word("while");
-	  this.space();
-	  this.token("(");
-	  this.print(node.test, node);
-	  this.token(")");
-	  this.printBlock(node);
-	}
-
-	const buildForXStatement = function (op) {
-	  return function (node) {
-	    this.word("for");
-	    this.space();
-
-	    if (op === "of" && node.await) {
-	      this.word("await");
-	      this.space();
-	    }
-
-	    this.token("(");
-	    this.print(node.left, node);
-	    this.space();
-	    this.word(op);
-	    this.space();
-	    this.print(node.right, node);
-	    this.token(")");
-	    this.printBlock(node);
-	  };
-	};
-
-	const ForInStatement = buildForXStatement("in");
-	statements.ForInStatement = ForInStatement;
-	const ForOfStatement = buildForXStatement("of");
-	statements.ForOfStatement = ForOfStatement;
-
-	function DoWhileStatement(node) {
-	  this.word("do");
-	  this.space();
-	  this.print(node.body, node);
-	  this.space();
-	  this.word("while");
-	  this.space();
-	  this.token("(");
-	  this.print(node.test, node);
-	  this.token(")");
-	  this.semicolon();
-	}
-
-	function buildLabelStatement(prefix, key = "label") {
-	  return function (node) {
-	    this.word(prefix);
-	    const label = node[key];
-
-	    if (label) {
-	      this.space();
-	      const isLabel = key == "label";
-	      const terminatorState = this.startTerminatorless(isLabel);
-	      this.print(label, node);
-	      this.endTerminatorless(terminatorState);
-	    }
-
-	    this.semicolon();
-	  };
-	}
-
-	const ContinueStatement = buildLabelStatement("continue");
-	statements.ContinueStatement = ContinueStatement;
-	const ReturnStatement = buildLabelStatement("return", "argument");
-	statements.ReturnStatement = ReturnStatement;
-	const BreakStatement = buildLabelStatement("break");
-	statements.BreakStatement = BreakStatement;
-	const ThrowStatement = buildLabelStatement("throw", "argument");
-	statements.ThrowStatement = ThrowStatement;
-
-	function LabeledStatement(node) {
-	  this.print(node.label, node);
-	  this.token(":");
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function TryStatement(node) {
-	  this.word("try");
-	  this.space();
-	  this.print(node.block, node);
-	  this.space();
-
-	  if (node.handlers) {
-	    this.print(node.handlers[0], node);
-	  } else {
-	    this.print(node.handler, node);
-	  }
-
-	  if (node.finalizer) {
-	    this.space();
-	    this.word("finally");
-	    this.space();
-	    this.print(node.finalizer, node);
-	  }
-	}
-
-	function CatchClause(node) {
-	  this.word("catch");
-	  this.space();
-
-	  if (node.param) {
-	    this.token("(");
-	    this.print(node.param, node);
-	    this.token(")");
-	    this.space();
-	  }
-
-	  this.print(node.body, node);
-	}
-
-	function SwitchStatement(node) {
-	  this.word("switch");
-	  this.space();
-	  this.token("(");
-	  this.print(node.discriminant, node);
-	  this.token(")");
-	  this.space();
-	  this.token("{");
-	  this.printSequence(node.cases, node, {
-	    indent: true,
-
-	    addNewlines(leading, cas) {
-	      if (!leading && node.cases[node.cases.length - 1] === cas) return -1;
-	    }
-
-	  });
-	  this.token("}");
-	}
-
-	function SwitchCase(node) {
-	  if (node.test) {
-	    this.word("case");
-	    this.space();
-	    this.print(node.test, node);
-	    this.token(":");
-	  } else {
-	    this.word("default");
-	    this.token(":");
-	  }
-
-	  if (node.consequent.length) {
-	    this.newline();
-	    this.printSequence(node.consequent, node, {
-	      indent: true
-	    });
-	  }
-	}
-
-	function DebuggerStatement() {
-	  this.word("debugger");
-	  this.semicolon();
-	}
-
-	function variableDeclarationIndent() {
-	  this.token(",");
-	  this.newline();
-	  if (this.endsWith("\n")) for (let i = 0; i < 4; i++) this.space(true);
-	}
-
-	function constDeclarationIndent() {
-	  this.token(",");
-	  this.newline();
-	  if (this.endsWith("\n")) for (let i = 0; i < 6; i++) this.space(true);
-	}
-
-	function VariableDeclaration(node, parent) {
-	  if (node.declare) {
-	    this.word("declare");
-	    this.space();
-	  }
-
-	  this.word(node.kind);
-	  this.space();
-	  let hasInits = false;
-
-	  if (!t().isFor(parent)) {
-	    for (const declar of node.declarations) {
-	      if (declar.init) {
-	        hasInits = true;
-	      }
-	    }
-	  }
-
-	  let separator;
-
-	  if (hasInits) {
-	    separator = node.kind === "const" ? constDeclarationIndent : variableDeclarationIndent;
-	  }
-
-	  this.printList(node.declarations, node, {
-	    separator
-	  });
-
-	  if (t().isFor(parent)) {
-	    if (parent.left === node || parent.init === node) return;
-	  }
-
-	  this.semicolon();
-	}
-
-	function VariableDeclarator(node) {
-	  this.print(node.id, node);
-	  if (node.definite) this.token("!");
-	  this.print(node.id.typeAnnotation, node);
-
-	  if (node.init) {
-	    this.space();
-	    this.token("=");
-	    this.space();
-	    this.print(node.init, node);
-	  }
-	}
-	return statements;
-}
-
-var classes = {};
-
-var hasRequiredClasses;
-
-function requireClasses () {
-	if (hasRequiredClasses) return classes;
-	hasRequiredClasses = 1;
-
-	Object.defineProperty(classes, "__esModule", {
-	  value: true
-	});
-	classes.ClassExpression = classes.ClassDeclaration = ClassDeclaration;
-	classes.ClassBody = ClassBody;
-	classes.ClassProperty = ClassProperty;
-	classes.ClassPrivateProperty = ClassPrivateProperty;
-	classes.ClassMethod = ClassMethod;
-	classes.ClassPrivateMethod = ClassPrivateMethod;
-	classes._classMethodHead = _classMethodHead;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function ClassDeclaration(node, parent) {
-	  if (!this.format.decoratorsBeforeExport || !t().isExportDefaultDeclaration(parent) && !t().isExportNamedDeclaration(parent)) {
-	    this.printJoin(node.decorators, node);
-	  }
-
-	  if (node.declare) {
-	    this.word("declare");
-	    this.space();
-	  }
-
-	  if (node.abstract) {
-	    this.word("abstract");
-	    this.space();
-	  }
-
-	  this.word("class");
-
-	  if (node.id) {
-	    this.space();
-	    this.print(node.id, node);
-	  }
-
-	  this.print(node.typeParameters, node);
-
-	  if (node.superClass) {
-	    this.space();
-	    this.word("extends");
-	    this.space();
-	    this.print(node.superClass, node);
-	    this.print(node.superTypeParameters, node);
-	  }
-
-	  if (node.implements) {
-	    this.space();
-	    this.word("implements");
-	    this.space();
-	    this.printList(node.implements, node);
-	  }
-
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function ClassBody(node) {
-	  this.token("{");
-	  this.printInnerComments(node);
-
-	  if (node.body.length === 0) {
-	    this.token("}");
-	  } else {
-	    this.newline();
-	    this.indent();
-	    this.printSequence(node.body, node);
-	    this.dedent();
-	    if (!this.endsWith("\n")) this.newline();
-	    this.rightBrace();
-	  }
-	}
-
-	function ClassProperty(node) {
-	  this.printJoin(node.decorators, node);
-
-	  if (node.accessibility) {
-	    this.word(node.accessibility);
-	    this.space();
-	  }
-
-	  if (node.static) {
-	    this.word("static");
-	    this.space();
-	  }
-
-	  if (node.abstract) {
-	    this.word("abstract");
-	    this.space();
-	  }
-
-	  if (node.readonly) {
-	    this.word("readonly");
-	    this.space();
-	  }
-
-	  if (node.computed) {
-	    this.token("[");
-	    this.print(node.key, node);
-	    this.token("]");
-	  } else {
-	    this._variance(node);
-
-	    this.print(node.key, node);
-	  }
-
-	  if (node.optional) {
-	    this.token("?");
-	  }
-
-	  if (node.definite) {
-	    this.token("!");
-	  }
-
-	  this.print(node.typeAnnotation, node);
-
-	  if (node.value) {
-	    this.space();
-	    this.token("=");
-	    this.space();
-	    this.print(node.value, node);
-	  }
-
-	  this.semicolon();
-	}
-
-	function ClassPrivateProperty(node) {
-	  if (node.static) {
-	    this.word("static");
-	    this.space();
-	  }
-
-	  this.print(node.key, node);
-	  this.print(node.typeAnnotation, node);
-
-	  if (node.value) {
-	    this.space();
-	    this.token("=");
-	    this.space();
-	    this.print(node.value, node);
-	  }
-
-	  this.semicolon();
-	}
-
-	function ClassMethod(node) {
-	  this._classMethodHead(node);
-
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function ClassPrivateMethod(node) {
-	  this._classMethodHead(node);
-
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function _classMethodHead(node) {
-	  this.printJoin(node.decorators, node);
-
-	  if (node.accessibility) {
-	    this.word(node.accessibility);
-	    this.space();
-	  }
-
-	  if (node.abstract) {
-	    this.word("abstract");
-	    this.space();
-	  }
-
-	  if (node.static) {
-	    this.word("static");
-	    this.space();
-	  }
-
-	  this._methodHead(node);
-	}
-	return classes;
-}
-
-var methods = {};
-
-var hasRequiredMethods;
-
-function requireMethods () {
-	if (hasRequiredMethods) return methods;
-	hasRequiredMethods = 1;
-
-	Object.defineProperty(methods, "__esModule", {
-	  value: true
-	});
-	methods._params = _params;
-	methods._parameters = _parameters;
-	methods._param = _param;
-	methods._methodHead = _methodHead;
-	methods._predicate = _predicate;
-	methods._functionHead = _functionHead;
-	methods.FunctionDeclaration = methods.FunctionExpression = FunctionExpression;
-	methods.ArrowFunctionExpression = ArrowFunctionExpression;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function _params(node) {
-	  this.print(node.typeParameters, node);
-	  this.token("(");
-
-	  this._parameters(node.params, node);
-
-	  this.token(")");
-	  this.print(node.returnType, node);
-	}
-
-	function _parameters(parameters, parent) {
-	  for (let i = 0; i < parameters.length; i++) {
-	    this._param(parameters[i], parent);
-
-	    if (i < parameters.length - 1) {
-	      this.token(",");
-	      this.space();
-	    }
-	  }
-	}
-
-	function _param(parameter, parent) {
-	  this.printJoin(parameter.decorators, parameter);
-	  this.print(parameter, parent);
-	  if (parameter.optional) this.token("?");
-	  this.print(parameter.typeAnnotation, parameter);
-	}
-
-	function _methodHead(node) {
-	  const kind = node.kind;
-	  const key = node.key;
-
-	  if (kind === "get" || kind === "set") {
-	    this.word(kind);
-	    this.space();
-	  }
-
-	  if (node.async) {
-	    this.word("async");
-	    this.space();
-	  }
-
-	  if (kind === "method" || kind === "init") {
-	    if (node.generator) {
-	      this.token("*");
-	    }
-	  }
-
-	  if (node.computed) {
-	    this.token("[");
-	    this.print(key, node);
-	    this.token("]");
-	  } else {
-	    this.print(key, node);
-	  }
-
-	  if (node.optional) {
-	    this.token("?");
-	  }
-
-	  this._params(node);
-	}
-
-	function _predicate(node) {
-	  if (node.predicate) {
-	    if (!node.returnType) {
-	      this.token(":");
-	    }
-
-	    this.space();
-	    this.print(node.predicate, node);
-	  }
-	}
-
-	function _functionHead(node) {
-	  if (node.async) {
-	    this.word("async");
-	    this.space();
-	  }
-
-	  this.word("function");
-	  if (node.generator) this.token("*");
-	  this.space();
-
-	  if (node.id) {
-	    this.print(node.id, node);
-	  }
-
-	  this._params(node);
-
-	  this._predicate(node);
-	}
-
-	function FunctionExpression(node) {
-	  this._functionHead(node);
-
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function ArrowFunctionExpression(node) {
-	  if (node.async) {
-	    this.word("async");
-	    this.space();
-	  }
-
-	  const firstParam = node.params[0];
-
-	  if (node.params.length === 1 && t().isIdentifier(firstParam) && !hasTypes(node, firstParam)) {
-	    if (this.format.retainLines && node.loc && node.body.loc && node.loc.start.line < node.body.loc.start.line) {
-	      this.token("(");
-
-	      if (firstParam.loc && firstParam.loc.start.line > node.loc.start.line) {
-	        this.indent();
-	        this.print(firstParam, node);
-	        this.dedent();
-
-	        this._catchUp("start", node.body.loc);
-	      } else {
-	        this.print(firstParam, node);
-	      }
-
-	      this.token(")");
-	    } else {
-	      this.print(firstParam, node);
-	    }
-	  } else {
-	    this._params(node);
-	  }
-
-	  this._predicate(node);
-
-	  this.space();
-	  this.token("=>");
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function hasTypes(node, param) {
-	  return node.typeParameters || node.returnType || param.typeAnnotation || param.optional || param.trailingComments;
-	}
-	return methods;
-}
-
-var modules = {};
-
-var hasRequiredModules;
-
-function requireModules () {
-	if (hasRequiredModules) return modules;
-	hasRequiredModules = 1;
-
-	Object.defineProperty(modules, "__esModule", {
-	  value: true
-	});
-	modules.ImportSpecifier = ImportSpecifier;
-	modules.ImportDefaultSpecifier = ImportDefaultSpecifier;
-	modules.ExportDefaultSpecifier = ExportDefaultSpecifier;
-	modules.ExportSpecifier = ExportSpecifier;
-	modules.ExportNamespaceSpecifier = ExportNamespaceSpecifier;
-	modules.ExportAllDeclaration = ExportAllDeclaration;
-	modules.ExportNamedDeclaration = ExportNamedDeclaration;
-	modules.ExportDefaultDeclaration = ExportDefaultDeclaration;
-	modules.ImportDeclaration = ImportDeclaration;
-	modules.ImportNamespaceSpecifier = ImportNamespaceSpecifier;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function ImportSpecifier(node) {
-	  if (node.importKind === "type" || node.importKind === "typeof") {
-	    this.word(node.importKind);
-	    this.space();
-	  }
-
-	  this.print(node.imported, node);
-
-	  if (node.local && node.local.name !== node.imported.name) {
-	    this.space();
-	    this.word("as");
-	    this.space();
-	    this.print(node.local, node);
-	  }
-	}
-
-	function ImportDefaultSpecifier(node) {
-	  this.print(node.local, node);
-	}
-
-	function ExportDefaultSpecifier(node) {
-	  this.print(node.exported, node);
-	}
-
-	function ExportSpecifier(node) {
-	  this.print(node.local, node);
-
-	  if (node.exported && node.local.name !== node.exported.name) {
-	    this.space();
-	    this.word("as");
-	    this.space();
-	    this.print(node.exported, node);
-	  }
-	}
-
-	function ExportNamespaceSpecifier(node) {
-	  this.token("*");
-	  this.space();
-	  this.word("as");
-	  this.space();
-	  this.print(node.exported, node);
-	}
-
-	function ExportAllDeclaration(node) {
-	  this.word("export");
-	  this.space();
-
-	  if (node.exportKind === "type") {
-	    this.word("type");
-	    this.space();
-	  }
-
-	  this.token("*");
-	  this.space();
-	  this.word("from");
-	  this.space();
-	  this.print(node.source, node);
-	  this.semicolon();
-	}
-
-	function ExportNamedDeclaration(node) {
-	  if (this.format.decoratorsBeforeExport && t().isClassDeclaration(node.declaration)) {
-	    this.printJoin(node.declaration.decorators, node);
-	  }
-
-	  this.word("export");
-	  this.space();
-	  ExportDeclaration.apply(this, arguments);
-	}
-
-	function ExportDefaultDeclaration(node) {
-	  if (this.format.decoratorsBeforeExport && t().isClassDeclaration(node.declaration)) {
-	    this.printJoin(node.declaration.decorators, node);
-	  }
-
-	  this.word("export");
-	  this.space();
-	  this.word("default");
-	  this.space();
-	  ExportDeclaration.apply(this, arguments);
-	}
-
-	function ExportDeclaration(node) {
-	  if (node.declaration) {
-	    const declar = node.declaration;
-	    this.print(declar, node);
-	    if (!t().isStatement(declar)) this.semicolon();
-	  } else {
-	    if (node.exportKind === "type") {
-	      this.word("type");
-	      this.space();
-	    }
-
-	    const specifiers = node.specifiers.slice(0);
-	    let hasSpecial = false;
-
-	    while (true) {
-	      const first = specifiers[0];
-
-	      if (t().isExportDefaultSpecifier(first) || t().isExportNamespaceSpecifier(first)) {
-	        hasSpecial = true;
-	        this.print(specifiers.shift(), node);
-
-	        if (specifiers.length) {
-	          this.token(",");
-	          this.space();
-	        }
-	      } else {
-	        break;
-	      }
-	    }
-
-	    if (specifiers.length || !specifiers.length && !hasSpecial) {
-	      this.token("{");
-
-	      if (specifiers.length) {
-	        this.space();
-	        this.printList(specifiers, node);
-	        this.space();
-	      }
-
-	      this.token("}");
-	    }
-
-	    if (node.source) {
-	      this.space();
-	      this.word("from");
-	      this.space();
-	      this.print(node.source, node);
-	    }
-
-	    this.semicolon();
-	  }
-	}
-
-	function ImportDeclaration(node) {
-	  this.word("import");
-	  this.space();
-
-	  if (node.importKind === "type" || node.importKind === "typeof") {
-	    this.word(node.importKind);
-	    this.space();
-	  }
-
-	  const specifiers = node.specifiers.slice(0);
-
-	  if (specifiers && specifiers.length) {
-	    while (true) {
-	      const first = specifiers[0];
-
-	      if (t().isImportDefaultSpecifier(first) || t().isImportNamespaceSpecifier(first)) {
-	        this.print(specifiers.shift(), node);
-
-	        if (specifiers.length) {
-	          this.token(",");
-	          this.space();
-	        }
-	      } else {
-	        break;
-	      }
-	    }
-
-	    if (specifiers.length) {
-	      this.token("{");
-	      this.space();
-	      this.printList(specifiers, node);
-	      this.space();
-	      this.token("}");
-	    }
-
-	    this.space();
-	    this.word("from");
-	    this.space();
-	  }
-
-	  this.print(node.source, node);
-	  this.semicolon();
-	}
-
-	function ImportNamespaceSpecifier(node) {
-	  this.token("*");
-	  this.space();
-	  this.word("as");
-	  this.space();
-	  this.print(node.local, node);
-	}
-	return modules;
-}
-
-var types = {};
-
-var jsesc_1;
-var hasRequiredJsesc;
-
-function requireJsesc () {
-	if (hasRequiredJsesc) return jsesc_1;
-	hasRequiredJsesc = 1;
-
-	const object = {};
-	const hasOwnProperty = object.hasOwnProperty;
-	const forOwn = (object, callback) => {
-		for (const key in object) {
-			if (hasOwnProperty.call(object, key)) {
-				callback(key, object[key]);
-			}
-		}
-	};
-
-	const extend = (destination, source) => {
-		if (!source) {
-			return destination;
-		}
-		forOwn(source, (key, value) => {
-			destination[key] = value;
-		});
-		return destination;
-	};
-
-	const forEach = (array, callback) => {
-		const length = array.length;
-		let index = -1;
-		while (++index < length) {
-			callback(array[index]);
-		}
-	};
-
-	const toString = object.toString;
-	const isArray = Array.isArray;
-	const isBuffer = Buffer.isBuffer;
-	const isObject = (value) => {
-		// This is a very simple check, but it’s good enough for what we need.
-		return toString.call(value) == '[object Object]';
-	};
-	const isString = (value) => {
-		return typeof value == 'string' ||
-			toString.call(value) == '[object String]';
-	};
-	const isNumber = (value) => {
-		return typeof value == 'number' ||
-			toString.call(value) == '[object Number]';
-	};
-	const isFunction = (value) => {
-		return typeof value == 'function';
-	};
-	const isMap = (value) => {
-		return toString.call(value) == '[object Map]';
-	};
-	const isSet = (value) => {
-		return toString.call(value) == '[object Set]';
-	};
-
-	/*--------------------------------------------------------------------------*/
-
-	// https://mathiasbynens.be/notes/javascript-escapes#single
-	const singleEscapes = {
-		'"': '\\"',
-		'\'': '\\\'',
-		'\\': '\\\\',
-		'\b': '\\b',
-		'\f': '\\f',
-		'\n': '\\n',
-		'\r': '\\r',
-		'\t': '\\t'
-		// `\v` is omitted intentionally, because in IE < 9, '\v' == 'v'.
-		// '\v': '\\x0B'
-	};
-	const regexSingleEscape = /["'\\\b\f\n\r\t]/;
-
-	const regexDigit = /[0-9]/;
-	const regexWhitelist = /[ !#-&\(-\[\]-_a-~]/;
-
-	const jsesc = (argument, options) => {
-		const increaseIndentation = () => {
-			oldIndent = indent;
-			++options.indentLevel;
-			indent = options.indent.repeat(options.indentLevel);
-		};
-		// Handle options
-		const defaults = {
-			'escapeEverything': false,
-			'minimal': false,
-			'isScriptContext': false,
-			'quotes': 'single',
-			'wrap': false,
-			'es6': false,
-			'json': false,
-			'compact': true,
-			'lowercaseHex': false,
-			'numbers': 'decimal',
-			'indent': '\t',
-			'indentLevel': 0,
-			'__inline1__': false,
-			'__inline2__': false
-		};
-		const json = options && options.json;
-		if (json) {
-			defaults.quotes = 'double';
-			defaults.wrap = true;
-		}
-		options = extend(defaults, options);
-		if (
-			options.quotes != 'single' &&
-			options.quotes != 'double' &&
-			options.quotes != 'backtick'
-		) {
-			options.quotes = 'single';
-		}
-		const quote = options.quotes == 'double' ?
-			'"' :
-			(options.quotes == 'backtick' ?
-				'`' :
-				'\''
-			);
-		const compact = options.compact;
-		const lowercaseHex = options.lowercaseHex;
-		let indent = options.indent.repeat(options.indentLevel);
-		let oldIndent = '';
-		const inline1 = options.__inline1__;
-		const inline2 = options.__inline2__;
-		const newLine = compact ? '' : '\n';
-		let result;
-		let isEmpty = true;
-		const useBinNumbers = options.numbers == 'binary';
-		const useOctNumbers = options.numbers == 'octal';
-		const useDecNumbers = options.numbers == 'decimal';
-		const useHexNumbers = options.numbers == 'hexadecimal';
-
-		if (json && argument && isFunction(argument.toJSON)) {
-			argument = argument.toJSON();
-		}
-
-		if (!isString(argument)) {
-			if (isMap(argument)) {
-				if (argument.size == 0) {
-					return 'new Map()';
-				}
-				if (!compact) {
-					options.__inline1__ = true;
-					options.__inline2__ = false;
-				}
-				return 'new Map(' + jsesc(Array.from(argument), options) + ')';
-			}
-			if (isSet(argument)) {
-				if (argument.size == 0) {
-					return 'new Set()';
-				}
-				return 'new Set(' + jsesc(Array.from(argument), options) + ')';
-			}
-			if (isBuffer(argument)) {
-				if (argument.length == 0) {
-					return 'Buffer.from([])';
-				}
-				return 'Buffer.from(' + jsesc(Array.from(argument), options) + ')';
-			}
-			if (isArray(argument)) {
-				result = [];
-				options.wrap = true;
-				if (inline1) {
-					options.__inline1__ = false;
-					options.__inline2__ = true;
-				}
-				if (!inline2) {
-					increaseIndentation();
-				}
-				forEach(argument, (value) => {
-					isEmpty = false;
-					if (inline2) {
-						options.__inline2__ = false;
-					}
-					result.push(
-						(compact || inline2 ? '' : indent) +
-						jsesc(value, options)
-					);
-				});
-				if (isEmpty) {
-					return '[]';
-				}
-				if (inline2) {
-					return '[' + result.join(', ') + ']';
-				}
-				return '[' + newLine + result.join(',' + newLine) + newLine +
-					(compact ? '' : oldIndent) + ']';
-			} else if (isNumber(argument)) {
-				if (json) {
-					// Some number values (e.g. `Infinity`) cannot be represented in JSON.
-					return JSON.stringify(argument);
-				}
-				if (useDecNumbers) {
-					return String(argument);
-				}
-				if (useHexNumbers) {
-					let hexadecimal = argument.toString(16);
-					if (!lowercaseHex) {
-						hexadecimal = hexadecimal.toUpperCase();
-					}
-					return '0x' + hexadecimal;
-				}
-				if (useBinNumbers) {
-					return '0b' + argument.toString(2);
-				}
-				if (useOctNumbers) {
-					return '0o' + argument.toString(8);
-				}
-			} else if (!isObject(argument)) {
-				if (json) {
-					// For some values (e.g. `undefined`, `function` objects),
-					// `JSON.stringify(value)` returns `undefined` (which isn’t valid
-					// JSON) instead of `'null'`.
-					return JSON.stringify(argument) || 'null';
-				}
-				return String(argument);
-			} else { // it’s an object
-				result = [];
-				options.wrap = true;
-				increaseIndentation();
-				forOwn(argument, (key, value) => {
-					isEmpty = false;
-					result.push(
-						(compact ? '' : indent) +
-						jsesc(key, options) + ':' +
-						(compact ? '' : ' ') +
-						jsesc(value, options)
-					);
-				});
-				if (isEmpty) {
-					return '{}';
-				}
-				return '{' + newLine + result.join(',' + newLine) + newLine +
-					(compact ? '' : oldIndent) + '}';
-			}
-		}
-
-		const string = argument;
-		// Loop over each code unit in the string and escape it
-		let index = -1;
-		const length = string.length;
-		result = '';
-		while (++index < length) {
-			const character = string.charAt(index);
-			if (options.es6) {
-				const first = string.charCodeAt(index);
-				if ( // check if it’s the start of a surrogate pair
-					first >= 0xD800 && first <= 0xDBFF && // high surrogate
-					length > index + 1 // there is a next code unit
-				) {
-					const second = string.charCodeAt(index + 1);
-					if (second >= 0xDC00 && second <= 0xDFFF) { // low surrogate
-						// https://mathiasbynens.be/notes/javascript-encoding#surrogate-formulae
-						const codePoint = (first - 0xD800) * 0x400 + second - 0xDC00 + 0x10000;
-						let hexadecimal = codePoint.toString(16);
-						if (!lowercaseHex) {
-							hexadecimal = hexadecimal.toUpperCase();
-						}
-						result += '\\u{' + hexadecimal + '}';
-						++index;
-						continue;
-					}
-				}
-			}
-			if (!options.escapeEverything) {
-				if (regexWhitelist.test(character)) {
-					// It’s a printable ASCII character that is not `"`, `'` or `\`,
-					// so don’t escape it.
-					result += character;
-					continue;
-				}
-				if (character == '"') {
-					result += quote == character ? '\\"' : character;
-					continue;
-				}
-				if (character == '`') {
-					result += quote == character ? '\\`' : character;
-					continue;
-				}
-				if (character == '\'') {
-					result += quote == character ? '\\\'' : character;
-					continue;
-				}
-			}
-			if (
-				character == '\0' &&
-				!json &&
-				!regexDigit.test(string.charAt(index + 1))
-			) {
-				result += '\\0';
-				continue;
-			}
-			if (regexSingleEscape.test(character)) {
-				// no need for a `hasOwnProperty` check here
-				result += singleEscapes[character];
-				continue;
-			}
-			const charCode = character.charCodeAt(0);
-			if (options.minimal && charCode != 0x2028 && charCode != 0x2029) {
-				result += character;
-				continue;
-			}
-			let hexadecimal = charCode.toString(16);
-			if (!lowercaseHex) {
-				hexadecimal = hexadecimal.toUpperCase();
-			}
-			const longhand = hexadecimal.length > 2 || json;
-			const escaped = '\\' + (longhand ? 'u' : 'x') +
-				('0000' + hexadecimal).slice(longhand ? -4 : -2);
-			result += escaped;
-			continue;
-		}
-		if (options.wrap) {
-			result = quote + result + quote;
-		}
-		if (quote == '`') {
-			result = result.replace(/\$\{/g, '\\\$\{');
-		}
-		if (options.isScriptContext) {
-			// https://mathiasbynens.be/notes/etago
-			return result
-				.replace(/<\/(script|style)/gi, '<\\/$1')
-				.replace(/<!--/g, json ? '\\u003C!--' : '\\x3C!--');
-		}
-		return result;
-	};
-
-	jsesc.version = '2.5.2';
-
-	jsesc_1 = jsesc;
-	return jsesc_1;
-}
-
-var hasRequiredTypes;
-
-function requireTypes () {
-	if (hasRequiredTypes) return types;
-	hasRequiredTypes = 1;
-
-	Object.defineProperty(types, "__esModule", {
-	  value: true
-	});
-	types.Identifier = Identifier;
-	types.SpreadElement = types.RestElement = RestElement;
-	types.ObjectPattern = types.ObjectExpression = ObjectExpression;
-	types.ObjectMethod = ObjectMethod;
-	types.ObjectProperty = ObjectProperty;
-	types.ArrayPattern = types.ArrayExpression = ArrayExpression;
-	types.RegExpLiteral = RegExpLiteral;
-	types.BooleanLiteral = BooleanLiteral;
-	types.NullLiteral = NullLiteral;
-	types.NumericLiteral = NumericLiteral;
-	types.StringLiteral = StringLiteral;
-	types.BigIntLiteral = BigIntLiteral;
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _jsesc() {
-	  const data = _interopRequireDefault(requireJsesc());
-
-	  _jsesc = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function Identifier(node) {
-	  this.exactSource(node.loc, () => {
-	    this.word(node.name);
-	  });
-	}
-
-	function RestElement(node) {
-	  this.token("...");
-	  this.print(node.argument, node);
-	}
-
-	function ObjectExpression(node) {
-	  const props = node.properties;
-	  this.token("{");
-	  this.printInnerComments(node);
-
-	  if (props.length) {
-	    this.space();
-	    this.printList(props, node, {
-	      indent: true,
-	      statement: true
-	    });
-	    this.space();
-	  }
-
-	  this.token("}");
-	}
-
-	function ObjectMethod(node) {
-	  this.printJoin(node.decorators, node);
-
-	  this._methodHead(node);
-
-	  this.space();
-	  this.print(node.body, node);
-	}
-
-	function ObjectProperty(node) {
-	  this.printJoin(node.decorators, node);
-
-	  if (node.computed) {
-	    this.token("[");
-	    this.print(node.key, node);
-	    this.token("]");
-	  } else {
-	    if (t().isAssignmentPattern(node.value) && t().isIdentifier(node.key) && node.key.name === node.value.left.name) {
-	      this.print(node.value, node);
-	      return;
-	    }
-
-	    this.print(node.key, node);
-
-	    if (node.shorthand && t().isIdentifier(node.key) && t().isIdentifier(node.value) && node.key.name === node.value.name) {
-	      return;
-	    }
-	  }
-
-	  this.token(":");
-	  this.space();
-	  this.print(node.value, node);
-	}
-
-	function ArrayExpression(node) {
-	  const elems = node.elements;
-	  const len = elems.length;
-	  this.token("[");
-	  this.printInnerComments(node);
-
-	  for (let i = 0; i < elems.length; i++) {
-	    const elem = elems[i];
-
-	    if (elem) {
-	      if (i > 0) this.space();
-	      this.print(elem, node);
-	      if (i < len - 1) this.token(",");
-	    } else {
-	      this.token(",");
-	    }
-	  }
-
-	  this.token("]");
-	}
-
-	function RegExpLiteral(node) {
-	  this.word(`/${node.pattern}/${node.flags}`);
-	}
-
-	function BooleanLiteral(node) {
-	  this.word(node.value ? "true" : "false");
-	}
-
-	function NullLiteral() {
-	  this.word("null");
-	}
-
-	function NumericLiteral(node) {
-	  const raw = this.getPossibleRaw(node);
-	  const value = node.value + "";
-
-	  if (raw == null) {
-	    this.number(value);
-	  } else if (this.format.minified) {
-	    this.number(raw.length < value.length ? raw : value);
-	  } else {
-	    this.number(raw);
-	  }
-	}
-
-	function StringLiteral(node) {
-	  const raw = this.getPossibleRaw(node);
-
-	  if (!this.format.minified && raw != null) {
-	    this.token(raw);
-	    return;
-	  }
-
-	  const opts = this.format.jsescOption;
-
-	  if (this.format.jsonCompatibleStrings) {
-	    opts.json = true;
-	  }
-
-	  const val = (0, _jsesc().default)(node.value, opts);
-	  return this.token(val);
-	}
-
-	function BigIntLiteral(node) {
-	  const raw = this.getPossibleRaw(node);
-
-	  if (!this.format.minified && raw != null) {
-	    this.token(raw);
-	    return;
-	  }
-
-	  this.token(node.value);
-	}
-	return types;
-}
-
-var flow = {};
-
-var hasRequiredFlow;
-
-function requireFlow () {
-	if (hasRequiredFlow) return flow;
-	hasRequiredFlow = 1;
-	(function (exports) {
-
-		Object.defineProperty(exports, "__esModule", {
-		  value: true
-		});
-		exports.AnyTypeAnnotation = AnyTypeAnnotation;
-		exports.ArrayTypeAnnotation = ArrayTypeAnnotation;
-		exports.BooleanTypeAnnotation = BooleanTypeAnnotation;
-		exports.BooleanLiteralTypeAnnotation = BooleanLiteralTypeAnnotation;
-		exports.NullLiteralTypeAnnotation = NullLiteralTypeAnnotation;
-		exports.DeclareClass = DeclareClass;
-		exports.DeclareFunction = DeclareFunction;
-		exports.InferredPredicate = InferredPredicate;
-		exports.DeclaredPredicate = DeclaredPredicate;
-		exports.DeclareInterface = DeclareInterface;
-		exports.DeclareModule = DeclareModule;
-		exports.DeclareModuleExports = DeclareModuleExports;
-		exports.DeclareTypeAlias = DeclareTypeAlias;
-		exports.DeclareOpaqueType = DeclareOpaqueType;
-		exports.DeclareVariable = DeclareVariable;
-		exports.DeclareExportDeclaration = DeclareExportDeclaration;
-		exports.DeclareExportAllDeclaration = DeclareExportAllDeclaration;
-		exports.ExistsTypeAnnotation = ExistsTypeAnnotation;
-		exports.FunctionTypeAnnotation = FunctionTypeAnnotation;
-		exports.FunctionTypeParam = FunctionTypeParam;
-		exports.GenericTypeAnnotation = exports.ClassImplements = exports.InterfaceExtends = InterfaceExtends;
-		exports._interfaceish = _interfaceish;
-		exports._variance = _variance;
-		exports.InterfaceDeclaration = InterfaceDeclaration;
-		exports.InterfaceTypeAnnotation = InterfaceTypeAnnotation;
-		exports.IntersectionTypeAnnotation = IntersectionTypeAnnotation;
-		exports.MixedTypeAnnotation = MixedTypeAnnotation;
-		exports.EmptyTypeAnnotation = EmptyTypeAnnotation;
-		exports.NullableTypeAnnotation = NullableTypeAnnotation;
-		exports.NumberTypeAnnotation = NumberTypeAnnotation;
-		exports.StringTypeAnnotation = StringTypeAnnotation;
-		exports.ThisTypeAnnotation = ThisTypeAnnotation;
-		exports.TupleTypeAnnotation = TupleTypeAnnotation;
-		exports.TypeofTypeAnnotation = TypeofTypeAnnotation;
-		exports.TypeAlias = TypeAlias;
-		exports.TypeAnnotation = TypeAnnotation;
-		exports.TypeParameterDeclaration = exports.TypeParameterInstantiation = TypeParameterInstantiation;
-		exports.TypeParameter = TypeParameter;
-		exports.OpaqueType = OpaqueType;
-		exports.ObjectTypeAnnotation = ObjectTypeAnnotation;
-		exports.ObjectTypeInternalSlot = ObjectTypeInternalSlot;
-		exports.ObjectTypeCallProperty = ObjectTypeCallProperty;
-		exports.ObjectTypeIndexer = ObjectTypeIndexer;
-		exports.ObjectTypeProperty = ObjectTypeProperty;
-		exports.ObjectTypeSpreadProperty = ObjectTypeSpreadProperty;
-		exports.QualifiedTypeIdentifier = QualifiedTypeIdentifier;
-		exports.UnionTypeAnnotation = UnionTypeAnnotation;
-		exports.TypeCastExpression = TypeCastExpression;
-		exports.Variance = Variance;
-		exports.VoidTypeAnnotation = VoidTypeAnnotation;
-		Object.defineProperty(exports, "NumberLiteralTypeAnnotation", {
-		  enumerable: true,
-		  get: function () {
-		    return _types2.NumericLiteral;
-		  }
-		});
-		Object.defineProperty(exports, "StringLiteralTypeAnnotation", {
-		  enumerable: true,
-		  get: function () {
-		    return _types2.StringLiteral;
-		  }
-		});
-
-		function t() {
-		  const data = _interopRequireWildcard(requireLib$1());
-
-		  t = function () {
-		    return data;
-		  };
-
-		  return data;
-		}
-
-		var _modules = requireModules();
-
-		var _types2 = requireTypes();
-
-		function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-		function AnyTypeAnnotation() {
-		  this.word("any");
-		}
-
-		function ArrayTypeAnnotation(node) {
-		  this.print(node.elementType, node);
-		  this.token("[");
-		  this.token("]");
-		}
-
-		function BooleanTypeAnnotation() {
-		  this.word("boolean");
-		}
-
-		function BooleanLiteralTypeAnnotation(node) {
-		  this.word(node.value ? "true" : "false");
-		}
-
-		function NullLiteralTypeAnnotation() {
-		  this.word("null");
-		}
-
-		function DeclareClass(node, parent) {
-		  if (!t().isDeclareExportDeclaration(parent)) {
-		    this.word("declare");
-		    this.space();
-		  }
-
-		  this.word("class");
-		  this.space();
-
-		  this._interfaceish(node);
-		}
-
-		function DeclareFunction(node, parent) {
-		  if (!t().isDeclareExportDeclaration(parent)) {
-		    this.word("declare");
-		    this.space();
-		  }
-
-		  this.word("function");
-		  this.space();
-		  this.print(node.id, node);
-		  this.print(node.id.typeAnnotation.typeAnnotation, node);
-
-		  if (node.predicate) {
-		    this.space();
-		    this.print(node.predicate, node);
-		  }
-
-		  this.semicolon();
-		}
-
-		function InferredPredicate() {
-		  this.token("%");
-		  this.word("checks");
-		}
-
-		function DeclaredPredicate(node) {
-		  this.token("%");
-		  this.word("checks");
-		  this.token("(");
-		  this.print(node.value, node);
-		  this.token(")");
-		}
-
-		function DeclareInterface(node) {
-		  this.word("declare");
-		  this.space();
-		  this.InterfaceDeclaration(node);
-		}
-
-		function DeclareModule(node) {
-		  this.word("declare");
-		  this.space();
-		  this.word("module");
-		  this.space();
-		  this.print(node.id, node);
-		  this.space();
-		  this.print(node.body, node);
-		}
-
-		function DeclareModuleExports(node) {
-		  this.word("declare");
-		  this.space();
-		  this.word("module");
-		  this.token(".");
-		  this.word("exports");
-		  this.print(node.typeAnnotation, node);
-		}
-
-		function DeclareTypeAlias(node) {
-		  this.word("declare");
-		  this.space();
-		  this.TypeAlias(node);
-		}
-
-		function DeclareOpaqueType(node, parent) {
-		  if (!t().isDeclareExportDeclaration(parent)) {
-		    this.word("declare");
-		    this.space();
-		  }
-
-		  this.OpaqueType(node);
-		}
-
-		function DeclareVariable(node, parent) {
-		  if (!t().isDeclareExportDeclaration(parent)) {
-		    this.word("declare");
-		    this.space();
-		  }
-
-		  this.word("var");
-		  this.space();
-		  this.print(node.id, node);
-		  this.print(node.id.typeAnnotation, node);
-		  this.semicolon();
-		}
-
-		function DeclareExportDeclaration(node) {
-		  this.word("declare");
-		  this.space();
-		  this.word("export");
-		  this.space();
-
-		  if (node.default) {
-		    this.word("default");
-		    this.space();
-		  }
-
-		  FlowExportDeclaration.apply(this, arguments);
-		}
-
-		function DeclareExportAllDeclaration() {
-		  this.word("declare");
-		  this.space();
-
-		  _modules.ExportAllDeclaration.apply(this, arguments);
-		}
-
-		function FlowExportDeclaration(node) {
-		  if (node.declaration) {
-		    const declar = node.declaration;
-		    this.print(declar, node);
-		    if (!t().isStatement(declar)) this.semicolon();
-		  } else {
-		    this.token("{");
-
-		    if (node.specifiers.length) {
-		      this.space();
-		      this.printList(node.specifiers, node);
-		      this.space();
-		    }
-
-		    this.token("}");
-
-		    if (node.source) {
-		      this.space();
-		      this.word("from");
-		      this.space();
-		      this.print(node.source, node);
-		    }
-
-		    this.semicolon();
-		  }
-		}
-
-		function ExistsTypeAnnotation() {
-		  this.token("*");
-		}
-
-		function FunctionTypeAnnotation(node, parent) {
-		  this.print(node.typeParameters, node);
-		  this.token("(");
-		  this.printList(node.params, node);
-
-		  if (node.rest) {
-		    if (node.params.length) {
-		      this.token(",");
-		      this.space();
-		    }
-
-		    this.token("...");
-		    this.print(node.rest, node);
-		  }
-
-		  this.token(")");
-
-		  if (parent.type === "ObjectTypeCallProperty" || parent.type === "DeclareFunction" || parent.type === "ObjectTypeProperty" && parent.method) {
-		    this.token(":");
-		  } else {
-		    this.space();
-		    this.token("=>");
-		  }
-
-		  this.space();
-		  this.print(node.returnType, node);
-		}
-
-		function FunctionTypeParam(node) {
-		  this.print(node.name, node);
-		  if (node.optional) this.token("?");
-
-		  if (node.name) {
-		    this.token(":");
-		    this.space();
-		  }
-
-		  this.print(node.typeAnnotation, node);
-		}
-
-		function InterfaceExtends(node) {
-		  this.print(node.id, node);
-		  this.print(node.typeParameters, node);
-		}
-
-		function _interfaceish(node) {
-		  this.print(node.id, node);
-		  this.print(node.typeParameters, node);
-
-		  if (node.extends.length) {
-		    this.space();
-		    this.word("extends");
-		    this.space();
-		    this.printList(node.extends, node);
-		  }
-
-		  if (node.mixins && node.mixins.length) {
-		    this.space();
-		    this.word("mixins");
-		    this.space();
-		    this.printList(node.mixins, node);
-		  }
-
-		  if (node.implements && node.implements.length) {
-		    this.space();
-		    this.word("implements");
-		    this.space();
-		    this.printList(node.implements, node);
-		  }
-
-		  this.space();
-		  this.print(node.body, node);
-		}
-
-		function _variance(node) {
-		  if (node.variance) {
-		    if (node.variance.kind === "plus") {
-		      this.token("+");
-		    } else if (node.variance.kind === "minus") {
-		      this.token("-");
-		    }
-		  }
-		}
-
-		function InterfaceDeclaration(node) {
-		  this.word("interface");
-		  this.space();
-
-		  this._interfaceish(node);
-		}
-
-		function andSeparator() {
-		  this.space();
-		  this.token("&");
-		  this.space();
-		}
-
-		function InterfaceTypeAnnotation(node) {
-		  this.word("interface");
-
-		  if (node.extends && node.extends.length) {
-		    this.space();
-		    this.word("extends");
-		    this.space();
-		    this.printList(node.extends, node);
-		  }
-
-		  this.space();
-		  this.print(node.body, node);
-		}
-
-		function IntersectionTypeAnnotation(node) {
-		  this.printJoin(node.types, node, {
-		    separator: andSeparator
-		  });
-		}
-
-		function MixedTypeAnnotation() {
-		  this.word("mixed");
-		}
-
-		function EmptyTypeAnnotation() {
-		  this.word("empty");
-		}
-
-		function NullableTypeAnnotation(node) {
-		  this.token("?");
-		  this.print(node.typeAnnotation, node);
-		}
-
-		function NumberTypeAnnotation() {
-		  this.word("number");
-		}
-
-		function StringTypeAnnotation() {
-		  this.word("string");
-		}
-
-		function ThisTypeAnnotation() {
-		  this.word("this");
-		}
-
-		function TupleTypeAnnotation(node) {
-		  this.token("[");
-		  this.printList(node.types, node);
-		  this.token("]");
-		}
-
-		function TypeofTypeAnnotation(node) {
-		  this.word("typeof");
-		  this.space();
-		  this.print(node.argument, node);
-		}
-
-		function TypeAlias(node) {
-		  this.word("type");
-		  this.space();
-		  this.print(node.id, node);
-		  this.print(node.typeParameters, node);
-		  this.space();
-		  this.token("=");
-		  this.space();
-		  this.print(node.right, node);
-		  this.semicolon();
-		}
-
-		function TypeAnnotation(node) {
-		  this.token(":");
-		  this.space();
-		  if (node.optional) this.token("?");
-		  this.print(node.typeAnnotation, node);
-		}
-
-		function TypeParameterInstantiation(node) {
-		  this.token("<");
-		  this.printList(node.params, node, {});
-		  this.token(">");
-		}
-
-		function TypeParameter(node) {
-		  this._variance(node);
-
-		  this.word(node.name);
-
-		  if (node.bound) {
-		    this.print(node.bound, node);
-		  }
-
-		  if (node.default) {
-		    this.space();
-		    this.token("=");
-		    this.space();
-		    this.print(node.default, node);
-		  }
-		}
-
-		function OpaqueType(node) {
-		  this.word("opaque");
-		  this.space();
-		  this.word("type");
-		  this.space();
-		  this.print(node.id, node);
-		  this.print(node.typeParameters, node);
-
-		  if (node.supertype) {
-		    this.token(":");
-		    this.space();
-		    this.print(node.supertype, node);
-		  }
-
-		  if (node.impltype) {
-		    this.space();
-		    this.token("=");
-		    this.space();
-		    this.print(node.impltype, node);
-		  }
-
-		  this.semicolon();
-		}
-
-		function ObjectTypeAnnotation(node) {
-		  if (node.exact) {
-		    this.token("{|");
-		  } else {
-		    this.token("{");
-		  }
-
-		  const props = node.properties.concat(node.callProperties || [], node.indexers || [], node.internalSlots || []);
-
-		  if (props.length) {
-		    this.space();
-		    this.printJoin(props, node, {
-		      addNewlines(leading) {
-		        if (leading && !props[0]) return 1;
-		      },
-
-		      indent: true,
-		      statement: true,
-		      iterator: () => {
-		        if (props.length !== 1) {
-		          this.token(",");
-		          this.space();
-		        }
-		      }
-		    });
-		    this.space();
-		  }
-
-		  if (node.exact) {
-		    this.token("|}");
-		  } else {
-		    this.token("}");
-		  }
-		}
-
-		function ObjectTypeInternalSlot(node) {
-		  if (node.static) {
-		    this.word("static");
-		    this.space();
-		  }
-
-		  this.token("[");
-		  this.token("[");
-		  this.print(node.id, node);
-		  this.token("]");
-		  this.token("]");
-		  if (node.optional) this.token("?");
-
-		  if (!node.method) {
-		    this.token(":");
-		    this.space();
-		  }
-
-		  this.print(node.value, node);
-		}
-
-		function ObjectTypeCallProperty(node) {
-		  if (node.static) {
-		    this.word("static");
-		    this.space();
-		  }
-
-		  this.print(node.value, node);
-		}
-
-		function ObjectTypeIndexer(node) {
-		  if (node.static) {
-		    this.word("static");
-		    this.space();
-		  }
-
-		  this._variance(node);
-
-		  this.token("[");
-
-		  if (node.id) {
-		    this.print(node.id, node);
-		    this.token(":");
-		    this.space();
-		  }
-
-		  this.print(node.key, node);
-		  this.token("]");
-		  this.token(":");
-		  this.space();
-		  this.print(node.value, node);
-		}
-
-		function ObjectTypeProperty(node) {
-		  if (node.proto) {
-		    this.word("proto");
-		    this.space();
-		  }
-
-		  if (node.static) {
-		    this.word("static");
-		    this.space();
-		  }
-
-		  this._variance(node);
-
-		  this.print(node.key, node);
-		  if (node.optional) this.token("?");
-
-		  if (!node.method) {
-		    this.token(":");
-		    this.space();
-		  }
-
-		  this.print(node.value, node);
-		}
-
-		function ObjectTypeSpreadProperty(node) {
-		  this.token("...");
-		  this.print(node.argument, node);
-		}
-
-		function QualifiedTypeIdentifier(node) {
-		  this.print(node.qualification, node);
-		  this.token(".");
-		  this.print(node.id, node);
-		}
-
-		function orSeparator() {
-		  this.space();
-		  this.token("|");
-		  this.space();
-		}
-
-		function UnionTypeAnnotation(node) {
-		  this.printJoin(node.types, node, {
-		    separator: orSeparator
-		  });
-		}
-
-		function TypeCastExpression(node) {
-		  this.token("(");
-		  this.print(node.expression, node);
-		  this.print(node.typeAnnotation, node);
-		  this.token(")");
-		}
-
-		function Variance(node) {
-		  if (node.kind === "plus") {
-		    this.token("+");
-		  } else {
-		    this.token("-");
-		  }
-		}
-
-		function VoidTypeAnnotation() {
-		  this.word("void");
-		}
-} (flow));
-	return flow;
-}
-
-var base = {};
-
-var hasRequiredBase;
-
-function requireBase () {
-	if (hasRequiredBase) return base;
-	hasRequiredBase = 1;
-	(function (exports) {
-
-		Object.defineProperty(exports, "__esModule", {
-		  value: true
-		});
-		exports.File = File;
-		exports.Program = Program;
-		exports.BlockStatement = BlockStatement;
-		exports.Noop = Noop;
-		exports.Directive = Directive;
-		exports.InterpreterDirective = InterpreterDirective;
-		Object.defineProperty(exports, "DirectiveLiteral", {
-		  enumerable: true,
-		  get: function () {
-		    return _types.StringLiteral;
-		  }
-		});
-
-		var _types = requireTypes();
-
-		function File(node) {
-		  if (node.program) {
-		    this.print(node.program.interpreter, node);
-		  }
-
-		  this.print(node.program, node);
-		}
-
-		function Program(node) {
-		  this.printInnerComments(node, false);
-		  this.printSequence(node.directives, node);
-		  if (node.directives && node.directives.length) this.newline();
-		  this.printSequence(node.body, node);
-		}
-
-		function BlockStatement(node) {
-		  this.token("{");
-		  this.printInnerComments(node);
-		  const hasDirectives = node.directives && node.directives.length;
-
-		  if (node.body.length || hasDirectives) {
-		    this.newline();
-		    this.printSequence(node.directives, node, {
-		      indent: true
-		    });
-		    if (hasDirectives) this.newline();
-		    this.printSequence(node.body, node, {
-		      indent: true
-		    });
-		    this.removeTrailingNewline();
-		    this.source("end", node.loc);
-		    if (!this.endsWith("\n")) this.newline();
-		    this.rightBrace();
-		  } else {
-		    this.source("end", node.loc);
-		    this.token("}");
-		  }
-		}
-
-		function Noop() {}
-
-		function Directive(node) {
-		  this.print(node.value, node);
-		  this.semicolon();
-		}
-
-		function InterpreterDirective(node) {
-		  this.token(`#!${node.value}\n`);
-		}
-} (base));
-	return base;
-}
-
-var jsx = {};
-
-var hasRequiredJsx;
-
-function requireJsx () {
-	if (hasRequiredJsx) return jsx;
-	hasRequiredJsx = 1;
-
-	Object.defineProperty(jsx, "__esModule", {
-	  value: true
-	});
-	jsx.JSXAttribute = JSXAttribute;
-	jsx.JSXIdentifier = JSXIdentifier;
-	jsx.JSXNamespacedName = JSXNamespacedName;
-	jsx.JSXMemberExpression = JSXMemberExpression;
-	jsx.JSXSpreadAttribute = JSXSpreadAttribute;
-	jsx.JSXExpressionContainer = JSXExpressionContainer;
-	jsx.JSXSpreadChild = JSXSpreadChild;
-	jsx.JSXText = JSXText;
-	jsx.JSXElement = JSXElement;
-	jsx.JSXOpeningElement = JSXOpeningElement;
-	jsx.JSXClosingElement = JSXClosingElement;
-	jsx.JSXEmptyExpression = JSXEmptyExpression;
-	jsx.JSXFragment = JSXFragment;
-	jsx.JSXOpeningFragment = JSXOpeningFragment;
-	jsx.JSXClosingFragment = JSXClosingFragment;
-
-	function JSXAttribute(node) {
-	  this.print(node.name, node);
-
-	  if (node.value) {
-	    this.token("=");
-	    this.print(node.value, node);
-	  }
-	}
-
-	function JSXIdentifier(node) {
-	  this.word(node.name);
-	}
-
-	function JSXNamespacedName(node) {
-	  this.print(node.namespace, node);
-	  this.token(":");
-	  this.print(node.name, node);
-	}
-
-	function JSXMemberExpression(node) {
-	  this.print(node.object, node);
-	  this.token(".");
-	  this.print(node.property, node);
-	}
-
-	function JSXSpreadAttribute(node) {
-	  this.token("{");
-	  this.token("...");
-	  this.print(node.argument, node);
-	  this.token("}");
-	}
-
-	function JSXExpressionContainer(node) {
-	  this.token("{");
-	  this.print(node.expression, node);
-	  this.token("}");
-	}
-
-	function JSXSpreadChild(node) {
-	  this.token("{");
-	  this.token("...");
-	  this.print(node.expression, node);
-	  this.token("}");
-	}
-
-	function JSXText(node) {
-	  const raw = this.getPossibleRaw(node);
-
-	  if (raw != null) {
-	    this.token(raw);
-	  } else {
-	    this.token(node.value);
-	  }
-	}
-
-	function JSXElement(node) {
-	  const open = node.openingElement;
-	  this.print(open, node);
-	  if (open.selfClosing) return;
-	  this.indent();
-
-	  for (const child of node.children) {
-	    this.print(child, node);
-	  }
-
-	  this.dedent();
-	  this.print(node.closingElement, node);
-	}
-
-	function spaceSeparator() {
-	  this.space();
-	}
-
-	function JSXOpeningElement(node) {
-	  this.token("<");
-	  this.print(node.name, node);
-	  this.print(node.typeParameters, node);
-
-	  if (node.attributes.length > 0) {
-	    this.space();
-	    this.printJoin(node.attributes, node, {
-	      separator: spaceSeparator
-	    });
-	  }
-
-	  if (node.selfClosing) {
-	    this.space();
-	    this.token("/>");
-	  } else {
-	    this.token(">");
-	  }
-	}
-
-	function JSXClosingElement(node) {
-	  this.token("</");
-	  this.print(node.name, node);
-	  this.token(">");
-	}
-
-	function JSXEmptyExpression(node) {
-	  this.printInnerComments(node);
-	}
-
-	function JSXFragment(node) {
-	  this.print(node.openingFragment, node);
-	  this.indent();
-
-	  for (const child of node.children) {
-	    this.print(child, node);
-	  }
-
-	  this.dedent();
-	  this.print(node.closingFragment, node);
-	}
-
-	function JSXOpeningFragment() {
-	  this.token("<");
-	  this.token(">");
-	}
-
-	function JSXClosingFragment() {
-	  this.token("</");
-	  this.token(">");
-	}
-	return jsx;
-}
-
-var typescript = {};
-
-var hasRequiredTypescript;
-
-function requireTypescript () {
-	if (hasRequiredTypescript) return typescript;
-	hasRequiredTypescript = 1;
-
-	Object.defineProperty(typescript, "__esModule", {
-	  value: true
-	});
-	typescript.TSTypeAnnotation = TSTypeAnnotation;
-	typescript.TSTypeParameterDeclaration = typescript.TSTypeParameterInstantiation = TSTypeParameterInstantiation;
-	typescript.TSTypeParameter = TSTypeParameter;
-	typescript.TSParameterProperty = TSParameterProperty;
-	typescript.TSDeclareFunction = TSDeclareFunction;
-	typescript.TSDeclareMethod = TSDeclareMethod;
-	typescript.TSQualifiedName = TSQualifiedName;
-	typescript.TSCallSignatureDeclaration = TSCallSignatureDeclaration;
-	typescript.TSConstructSignatureDeclaration = TSConstructSignatureDeclaration;
-	typescript.TSPropertySignature = TSPropertySignature;
-	typescript.tsPrintPropertyOrMethodName = tsPrintPropertyOrMethodName;
-	typescript.TSMethodSignature = TSMethodSignature;
-	typescript.TSIndexSignature = TSIndexSignature;
-	typescript.TSAnyKeyword = TSAnyKeyword;
-	typescript.TSUnknownKeyword = TSUnknownKeyword;
-	typescript.TSNumberKeyword = TSNumberKeyword;
-	typescript.TSObjectKeyword = TSObjectKeyword;
-	typescript.TSBooleanKeyword = TSBooleanKeyword;
-	typescript.TSStringKeyword = TSStringKeyword;
-	typescript.TSSymbolKeyword = TSSymbolKeyword;
-	typescript.TSVoidKeyword = TSVoidKeyword;
-	typescript.TSUndefinedKeyword = TSUndefinedKeyword;
-	typescript.TSNullKeyword = TSNullKeyword;
-	typescript.TSNeverKeyword = TSNeverKeyword;
-	typescript.TSThisType = TSThisType;
-	typescript.TSFunctionType = TSFunctionType;
-	typescript.TSConstructorType = TSConstructorType;
-	typescript.tsPrintFunctionOrConstructorType = tsPrintFunctionOrConstructorType;
-	typescript.TSTypeReference = TSTypeReference;
-	typescript.TSTypePredicate = TSTypePredicate;
-	typescript.TSTypeQuery = TSTypeQuery;
-	typescript.TSTypeLiteral = TSTypeLiteral;
-	typescript.tsPrintTypeLiteralOrInterfaceBody = tsPrintTypeLiteralOrInterfaceBody;
-	typescript.tsPrintBraced = tsPrintBraced;
-	typescript.TSArrayType = TSArrayType;
-	typescript.TSTupleType = TSTupleType;
-	typescript.TSOptionalType = TSOptionalType;
-	typescript.TSRestType = TSRestType;
-	typescript.TSUnionType = TSUnionType;
-	typescript.TSIntersectionType = TSIntersectionType;
-	typescript.tsPrintUnionOrIntersectionType = tsPrintUnionOrIntersectionType;
-	typescript.TSConditionalType = TSConditionalType;
-	typescript.TSInferType = TSInferType;
-	typescript.TSParenthesizedType = TSParenthesizedType;
-	typescript.TSTypeOperator = TSTypeOperator;
-	typescript.TSIndexedAccessType = TSIndexedAccessType;
-	typescript.TSMappedType = TSMappedType;
-	typescript.TSLiteralType = TSLiteralType;
-	typescript.TSExpressionWithTypeArguments = TSExpressionWithTypeArguments;
-	typescript.TSInterfaceDeclaration = TSInterfaceDeclaration;
-	typescript.TSInterfaceBody = TSInterfaceBody;
-	typescript.TSTypeAliasDeclaration = TSTypeAliasDeclaration;
-	typescript.TSAsExpression = TSAsExpression;
-	typescript.TSTypeAssertion = TSTypeAssertion;
-	typescript.TSEnumDeclaration = TSEnumDeclaration;
-	typescript.TSEnumMember = TSEnumMember;
-	typescript.TSModuleDeclaration = TSModuleDeclaration;
-	typescript.TSModuleBlock = TSModuleBlock;
-	typescript.TSImportEqualsDeclaration = TSImportEqualsDeclaration;
-	typescript.TSExternalModuleReference = TSExternalModuleReference;
-	typescript.TSNonNullExpression = TSNonNullExpression;
-	typescript.TSExportAssignment = TSExportAssignment;
-	typescript.TSNamespaceExportDeclaration = TSNamespaceExportDeclaration;
-	typescript.tsPrintSignatureDeclarationBase = tsPrintSignatureDeclarationBase;
-
-	function TSTypeAnnotation(node) {
-	  this.token(":");
-	  this.space();
-	  if (node.optional) this.token("?");
-	  this.print(node.typeAnnotation, node);
-	}
-
-	function TSTypeParameterInstantiation(node) {
-	  this.token("<");
-	  this.printList(node.params, node, {});
-	  this.token(">");
-	}
-
-	function TSTypeParameter(node) {
-	  this.word(node.name);
-
-	  if (node.constraint) {
-	    this.space();
-	    this.word("extends");
-	    this.space();
-	    this.print(node.constraint, node);
-	  }
-
-	  if (node.default) {
-	    this.space();
-	    this.token("=");
-	    this.space();
-	    this.print(node.default, node);
-	  }
-	}
-
-	function TSParameterProperty(node) {
-	  if (node.accessibility) {
-	    this.word(node.accessibility);
-	    this.space();
-	  }
-
-	  if (node.readonly) {
-	    this.word("readonly");
-	    this.space();
-	  }
-
-	  this._param(node.parameter);
-	}
-
-	function TSDeclareFunction(node) {
-	  if (node.declare) {
-	    this.word("declare");
-	    this.space();
-	  }
-
-	  this._functionHead(node);
-
-	  this.token(";");
-	}
-
-	function TSDeclareMethod(node) {
-	  this._classMethodHead(node);
-
-	  this.token(";");
-	}
-
-	function TSQualifiedName(node) {
-	  this.print(node.left, node);
-	  this.token(".");
-	  this.print(node.right, node);
-	}
-
-	function TSCallSignatureDeclaration(node) {
-	  this.tsPrintSignatureDeclarationBase(node);
-	}
-
-	function TSConstructSignatureDeclaration(node) {
-	  this.word("new");
-	  this.space();
-	  this.tsPrintSignatureDeclarationBase(node);
-	}
-
-	function TSPropertySignature(node) {
-	  const {
-	    readonly,
-	    initializer
-	  } = node;
-
-	  if (readonly) {
-	    this.word("readonly");
-	    this.space();
-	  }
-
-	  this.tsPrintPropertyOrMethodName(node);
-	  this.print(node.typeAnnotation, node);
-
-	  if (initializer) {
-	    this.space();
-	    this.token("=");
-	    this.space();
-	    this.print(initializer, node);
-	  }
-
-	  this.token(";");
-	}
-
-	function tsPrintPropertyOrMethodName(node) {
-	  if (node.computed) {
-	    this.token("[");
-	  }
-
-	  this.print(node.key, node);
-
-	  if (node.computed) {
-	    this.token("]");
-	  }
-
-	  if (node.optional) {
-	    this.token("?");
-	  }
-	}
-
-	function TSMethodSignature(node) {
-	  this.tsPrintPropertyOrMethodName(node);
-	  this.tsPrintSignatureDeclarationBase(node);
-	  this.token(";");
-	}
-
-	function TSIndexSignature(node) {
-	  const {
-	    readonly
-	  } = node;
-
-	  if (readonly) {
-	    this.word("readonly");
-	    this.space();
-	  }
-
-	  this.token("[");
-
-	  this._parameters(node.parameters, node);
-
-	  this.token("]");
-	  this.print(node.typeAnnotation, node);
-	  this.token(";");
-	}
-
-	function TSAnyKeyword() {
-	  this.word("any");
-	}
-
-	function TSUnknownKeyword() {
-	  this.word("unknown");
-	}
-
-	function TSNumberKeyword() {
-	  this.word("number");
-	}
-
-	function TSObjectKeyword() {
-	  this.word("object");
-	}
-
-	function TSBooleanKeyword() {
-	  this.word("boolean");
-	}
-
-	function TSStringKeyword() {
-	  this.word("string");
-	}
-
-	function TSSymbolKeyword() {
-	  this.word("symbol");
-	}
-
-	function TSVoidKeyword() {
-	  this.word("void");
-	}
-
-	function TSUndefinedKeyword() {
-	  this.word("undefined");
-	}
-
-	function TSNullKeyword() {
-	  this.word("null");
-	}
-
-	function TSNeverKeyword() {
-	  this.word("never");
-	}
-
-	function TSThisType() {
-	  this.word("this");
-	}
-
-	function TSFunctionType(node) {
-	  this.tsPrintFunctionOrConstructorType(node);
-	}
-
-	function TSConstructorType(node) {
-	  this.word("new");
-	  this.space();
-	  this.tsPrintFunctionOrConstructorType(node);
-	}
-
-	function tsPrintFunctionOrConstructorType(node) {
-	  const {
-	    typeParameters,
-	    parameters
-	  } = node;
-	  this.print(typeParameters, node);
-	  this.token("(");
-
-	  this._parameters(parameters, node);
-
-	  this.token(")");
-	  this.space();
-	  this.token("=>");
-	  this.space();
-	  this.print(node.typeAnnotation.typeAnnotation, node);
-	}
-
-	function TSTypeReference(node) {
-	  this.print(node.typeName, node);
-	  this.print(node.typeParameters, node);
-	}
-
-	function TSTypePredicate(node) {
-	  this.print(node.parameterName);
-	  this.space();
-	  this.word("is");
-	  this.space();
-	  this.print(node.typeAnnotation.typeAnnotation);
-	}
-
-	function TSTypeQuery(node) {
-	  this.word("typeof");
-	  this.space();
-	  this.print(node.exprName);
-	}
-
-	function TSTypeLiteral(node) {
-	  this.tsPrintTypeLiteralOrInterfaceBody(node.members, node);
-	}
-
-	function tsPrintTypeLiteralOrInterfaceBody(members, node) {
-	  this.tsPrintBraced(members, node);
-	}
-
-	function tsPrintBraced(members, node) {
-	  this.token("{");
-
-	  if (members.length) {
-	    this.indent();
-	    this.newline();
-
-	    for (const member of members) {
-	      this.print(member, node);
-	      this.newline();
-	    }
-
-	    this.dedent();
-	    this.rightBrace();
-	  } else {
-	    this.token("}");
-	  }
-	}
-
-	function TSArrayType(node) {
-	  this.print(node.elementType);
-	  this.token("[]");
-	}
-
-	function TSTupleType(node) {
-	  this.token("[");
-	  this.printList(node.elementTypes, node);
-	  this.token("]");
-	}
-
-	function TSOptionalType(node) {
-	  this.print(node.typeAnnotation, node);
-	  this.token("?");
-	}
-
-	function TSRestType(node) {
-	  this.token("...");
-	  this.print(node.typeAnnotation, node);
-	}
-
-	function TSUnionType(node) {
-	  this.tsPrintUnionOrIntersectionType(node, "|");
-	}
-
-	function TSIntersectionType(node) {
-	  this.tsPrintUnionOrIntersectionType(node, "&");
-	}
-
-	function tsPrintUnionOrIntersectionType(node, sep) {
-	  this.printJoin(node.types, node, {
-	    separator() {
-	      this.space();
-	      this.token(sep);
-	      this.space();
-	    }
-
-	  });
-	}
-
-	function TSConditionalType(node) {
-	  this.print(node.checkType);
-	  this.space();
-	  this.word("extends");
-	  this.space();
-	  this.print(node.extendsType);
-	  this.space();
-	  this.token("?");
-	  this.space();
-	  this.print(node.trueType);
-	  this.space();
-	  this.token(":");
-	  this.space();
-	  this.print(node.falseType);
-	}
-
-	function TSInferType(node) {
-	  this.token("infer");
-	  this.space();
-	  this.print(node.typeParameter);
-	}
-
-	function TSParenthesizedType(node) {
-	  this.token("(");
-	  this.print(node.typeAnnotation, node);
-	  this.token(")");
-	}
-
-	function TSTypeOperator(node) {
-	  this.token(node.operator);
-	  this.space();
-	  this.print(node.typeAnnotation, node);
-	}
-
-	function TSIndexedAccessType(node) {
-	  this.print(node.objectType, node);
-	  this.token("[");
-	  this.print(node.indexType, node);
-	  this.token("]");
-	}
-
-	function TSMappedType(node) {
-	  const {
-	    readonly,
-	    typeParameter,
-	    optional
-	  } = node;
-	  this.token("{");
-	  this.space();
-
-	  if (readonly) {
-	    tokenIfPlusMinus(this, readonly);
-	    this.word("readonly");
-	    this.space();
-	  }
-
-	  this.token("[");
-	  this.word(typeParameter.name);
-	  this.space();
-	  this.word("in");
-	  this.space();
-	  this.print(typeParameter.constraint, typeParameter);
-	  this.token("]");
-
-	  if (optional) {
-	    tokenIfPlusMinus(this, optional);
-	    this.token("?");
-	  }
-
-	  this.token(":");
-	  this.space();
-	  this.print(node.typeAnnotation, node);
-	  this.space();
-	  this.token("}");
-	}
-
-	function tokenIfPlusMinus(self, tok) {
-	  if (tok !== true) {
-	    self.token(tok);
-	  }
-	}
-
-	function TSLiteralType(node) {
-	  this.print(node.literal, node);
-	}
-
-	function TSExpressionWithTypeArguments(node) {
-	  this.print(node.expression, node);
-	  this.print(node.typeParameters, node);
-	}
-
-	function TSInterfaceDeclaration(node) {
-	  const {
-	    declare,
-	    id,
-	    typeParameters,
-	    extends: extendz,
-	    body
-	  } = node;
-
-	  if (declare) {
-	    this.word("declare");
-	    this.space();
-	  }
-
-	  this.word("interface");
-	  this.space();
-	  this.print(id, node);
-	  this.print(typeParameters, node);
-
-	  if (extendz) {
-	    this.space();
-	    this.word("extends");
-	    this.space();
-	    this.printList(extendz, node);
-	  }
-
-	  this.space();
-	  this.print(body, node);
-	}
-
-	function TSInterfaceBody(node) {
-	  this.tsPrintTypeLiteralOrInterfaceBody(node.body, node);
-	}
-
-	function TSTypeAliasDeclaration(node) {
-	  const {
-	    declare,
-	    id,
-	    typeParameters,
-	    typeAnnotation
-	  } = node;
-
-	  if (declare) {
-	    this.word("declare");
-	    this.space();
-	  }
-
-	  this.word("type");
-	  this.space();
-	  this.print(id, node);
-	  this.print(typeParameters, node);
-	  this.space();
-	  this.token("=");
-	  this.space();
-	  this.print(typeAnnotation, node);
-	  this.token(";");
-	}
-
-	function TSAsExpression(node) {
-	  const {
-	    expression,
-	    typeAnnotation
-	  } = node;
-	  this.print(expression, node);
-	  this.space();
-	  this.word("as");
-	  this.space();
-	  this.print(typeAnnotation, node);
-	}
-
-	function TSTypeAssertion(node) {
-	  const {
-	    typeAnnotation,
-	    expression
-	  } = node;
-	  this.token("<");
-	  this.print(typeAnnotation, node);
-	  this.token(">");
-	  this.space();
-	  this.print(expression, node);
-	}
-
-	function TSEnumDeclaration(node) {
-	  const {
-	    declare,
-	    const: isConst,
-	    id,
-	    members
-	  } = node;
-
-	  if (declare) {
-	    this.word("declare");
-	    this.space();
-	  }
-
-	  if (isConst) {
-	    this.word("const");
-	    this.space();
-	  }
-
-	  this.word("enum");
-	  this.space();
-	  this.print(id, node);
-	  this.space();
-	  this.tsPrintBraced(members, node);
-	}
-
-	function TSEnumMember(node) {
-	  const {
-	    id,
-	    initializer
-	  } = node;
-	  this.print(id, node);
-
-	  if (initializer) {
-	    this.space();
-	    this.token("=");
-	    this.space();
-	    this.print(initializer, node);
-	  }
-
-	  this.token(",");
-	}
-
-	function TSModuleDeclaration(node) {
-	  const {
-	    declare,
-	    id
-	  } = node;
-
-	  if (declare) {
-	    this.word("declare");
-	    this.space();
-	  }
-
-	  if (!node.global) {
-	    this.word(id.type === "Identifier" ? "namespace" : "module");
-	    this.space();
-	  }
-
-	  this.print(id, node);
-
-	  if (!node.body) {
-	    this.token(";");
-	    return;
-	  }
-
-	  let body = node.body;
-
-	  while (body.type === "TSModuleDeclaration") {
-	    this.token(".");
-	    this.print(body.id, body);
-	    body = body.body;
-	  }
-
-	  this.space();
-	  this.print(body, node);
-	}
-
-	function TSModuleBlock(node) {
-	  this.tsPrintBraced(node.body, node);
-	}
-
-	function TSImportEqualsDeclaration(node) {
-	  const {
-	    isExport,
-	    id,
-	    moduleReference
-	  } = node;
-
-	  if (isExport) {
-	    this.word("export");
-	    this.space();
-	  }
-
-	  this.word("import");
-	  this.space();
-	  this.print(id, node);
-	  this.space();
-	  this.token("=");
-	  this.space();
-	  this.print(moduleReference, node);
-	  this.token(";");
-	}
-
-	function TSExternalModuleReference(node) {
-	  this.token("require(");
-	  this.print(node.expression, node);
-	  this.token(")");
-	}
-
-	function TSNonNullExpression(node) {
-	  this.print(node.expression, node);
-	  this.token("!");
-	}
-
-	function TSExportAssignment(node) {
-	  this.word("export");
-	  this.space();
-	  this.token("=");
-	  this.space();
-	  this.print(node.expression, node);
-	  this.token(";");
-	}
-
-	function TSNamespaceExportDeclaration(node) {
-	  this.word("export");
-	  this.space();
-	  this.word("as");
-	  this.space();
-	  this.word("namespace");
-	  this.space();
-	  this.print(node.id, node);
-	}
-
-	function tsPrintSignatureDeclarationBase(node) {
-	  const {
-	    typeParameters,
-	    parameters
-	  } = node;
-	  this.print(typeParameters, node);
-	  this.token("(");
-
-	  this._parameters(parameters, node);
-
-	  this.token(")");
-	  this.print(node.typeAnnotation, node);
-	}
-	return typescript;
-}
-
-var hasRequiredGenerators;
-
-function requireGenerators () {
-	if (hasRequiredGenerators) return generators;
-	hasRequiredGenerators = 1;
-	(function (exports) {
-
-		Object.defineProperty(exports, "__esModule", {
-		  value: true
-		});
-
-		var _templateLiterals = requireTemplateLiterals();
-
-		Object.keys(_templateLiterals).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _templateLiterals[key];
-		    }
-		  });
-		});
-
-		var _expressions = requireExpressions();
-
-		Object.keys(_expressions).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _expressions[key];
-		    }
-		  });
-		});
-
-		var _statements = requireStatements();
-
-		Object.keys(_statements).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _statements[key];
-		    }
-		  });
-		});
-
-		var _classes = requireClasses();
-
-		Object.keys(_classes).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _classes[key];
-		    }
-		  });
-		});
-
-		var _methods = requireMethods();
-
-		Object.keys(_methods).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _methods[key];
-		    }
-		  });
-		});
-
-		var _modules = requireModules();
-
-		Object.keys(_modules).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _modules[key];
-		    }
-		  });
-		});
-
-		var _types = requireTypes();
-
-		Object.keys(_types).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _types[key];
-		    }
-		  });
-		});
-
-		var _flow = requireFlow();
-
-		Object.keys(_flow).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _flow[key];
-		    }
-		  });
-		});
-
-		var _base = requireBase();
-
-		Object.keys(_base).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _base[key];
-		    }
-		  });
-		});
-
-		var _jsx = requireJsx();
-
-		Object.keys(_jsx).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _jsx[key];
-		    }
-		  });
-		});
-
-		var _typescript = requireTypescript();
-
-		Object.keys(_typescript).forEach(function (key) {
-		  if (key === "default" || key === "__esModule") return;
-		  Object.defineProperty(exports, key, {
-		    enumerable: true,
-		    get: function () {
-		      return _typescript[key];
-		    }
-		  });
-		});
-} (generators));
-	return generators;
-}
-
-var hasRequiredPrinter;
-
-function requirePrinter () {
-	if (hasRequiredPrinter) return printer;
-	hasRequiredPrinter = 1;
-
-	Object.defineProperty(printer, "__esModule", {
-	  value: true
-	});
-	printer.default = void 0;
-
-	function _isInteger() {
-	  const data = _interopRequireDefault(requireIsInteger());
-
-	  _isInteger = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	function _repeat() {
-	  const data = _interopRequireDefault(requireRepeat());
-
-	  _repeat = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	var _buffer = _interopRequireDefault(requireBuffer());
-
-	var n = _interopRequireWildcard(requireNode());
-
-	function t() {
-	  const data = _interopRequireWildcard(requireLib$1());
-
-	  t = function () {
-	    return data;
-	  };
-
-	  return data;
-	}
-
-	var generatorFunctions = _interopRequireWildcard(requireGenerators());
-
-	function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {}; if (desc.get || desc.set) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } } newObj.default = obj; return newObj; } }
-
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-	const SCIENTIFIC_NOTATION = /e/i;
-	const ZERO_DECIMAL_INTEGER = /\.0+$/;
-	const NON_DECIMAL_LITERAL = /^0[box]/;
-
-	class Printer {
-	  constructor(format, map) {
-	    this.inForStatementInitCounter = 0;
-	    this._printStack = [];
-	    this._indent = 0;
-	    this._insideAux = false;
-	    this._printedCommentStarts = {};
-	    this._parenPushNewlineState = null;
-	    this._noLineTerminator = false;
-	    this._printAuxAfterOnNextUserNode = false;
-	    this._printedComments = new WeakSet();
-	    this._endsWithInteger = false;
-	    this._endsWithWord = false;
-	    this.format = format || {};
-	    this._buf = new _buffer.default(map);
-	  }
-
-	  generate(ast) {
-	    this.print(ast);
-
-	    this._maybeAddAuxComment();
-
-	    return this._buf.get();
-	  }
-
-	  indent() {
-	    if (this.format.compact || this.format.concise) return;
-	    this._indent++;
-	  }
-
-	  dedent() {
-	    if (this.format.compact || this.format.concise) return;
-	    this._indent--;
-	  }
-
-	  semicolon(force = false) {
-	    this._maybeAddAuxComment();
-
-	    this._append(";", !force);
-	  }
-
-	  rightBrace() {
-	    if (this.format.minified) {
-	      this._buf.removeLastSemicolon();
-	    }
-
-	    this.token("}");
-	  }
-
-	  space(force = false) {
-	    if (this.format.compact) return;
-
-	    if (this._buf.hasContent() && !this.endsWith(" ") && !this.endsWith("\n") || force) {
-	      this._space();
-	    }
-	  }
-
-	  word(str) {
-	    if (this._endsWithWord || this.endsWith("/") && str.indexOf("/") === 0) {
-	      this._space();
-	    }
-
-	    this._maybeAddAuxComment();
-
-	    this._append(str);
-
-	    this._endsWithWord = true;
-	  }
-
-	  number(str) {
-	    this.word(str);
-	    this._endsWithInteger = (0, _isInteger().default)(+str) && !NON_DECIMAL_LITERAL.test(str) && !SCIENTIFIC_NOTATION.test(str) && !ZERO_DECIMAL_INTEGER.test(str) && str[str.length - 1] !== ".";
-	  }
-
-	  token(str) {
-	    if (str === "--" && this.endsWith("!") || str[0] === "+" && this.endsWith("+") || str[0] === "-" && this.endsWith("-") || str[0] === "." && this._endsWithInteger) {
-	      this._space();
-	    }
-
-	    this._maybeAddAuxComment();
-
-	    this._append(str);
-	  }
-
-	  newline(i) {
-	    if (this.format.retainLines || this.format.compact) return;
-
-	    if (this.format.concise) {
-	      this.space();
-	      return;
-	    }
-
-	    if (this.endsWith("\n\n")) return;
-	    if (typeof i !== "number") i = 1;
-	    i = Math.min(2, i);
-	    if (this.endsWith("{\n") || this.endsWith(":\n")) i--;
-	    if (i <= 0) return;
-
-	    for (let j = 0; j < i; j++) {
-	      this._newline();
-	    }
-	  }
-
-	  endsWith(str) {
-	    return this._buf.endsWith(str);
-	  }
-
-	  removeTrailingNewline() {
-	    this._buf.removeTrailingNewline();
-	  }
-
-	  exactSource(loc, cb) {
-	    this._catchUp("start", loc);
-
-	    this._buf.exactSource(loc, cb);
-	  }
-
-	  source(prop, loc) {
-	    this._catchUp(prop, loc);
-
-	    this._buf.source(prop, loc);
-	  }
-
-	  withSource(prop, loc, cb) {
-	    this._catchUp(prop, loc);
-
-	    this._buf.withSource(prop, loc, cb);
-	  }
-
-	  _space() {
-	    this._append(" ", true);
-	  }
-
-	  _newline() {
-	    this._append("\n", true);
-	  }
-
-	  _append(str, queue = false) {
-	    this._maybeAddParen(str);
-
-	    this._maybeIndent(str);
-
-	    if (queue) this._buf.queue(str);else this._buf.append(str);
-	    this._endsWithWord = false;
-	    this._endsWithInteger = false;
-	  }
-
-	  _maybeIndent(str) {
-	    if (this._indent && this.endsWith("\n") && str[0] !== "\n") {
-	      this._buf.queue(this._getIndent());
-	    }
-	  }
-
-	  _maybeAddParen(str) {
-	    const parenPushNewlineState = this._parenPushNewlineState;
-	    if (!parenPushNewlineState) return;
-	    this._parenPushNewlineState = null;
-	    let i;
-
-	    for (i = 0; i < str.length && str[i] === " "; i++) continue;
-
-	    if (i === str.length) return;
-	    const cha = str[i];
-
-	    if (cha !== "\n") {
-	      if (cha !== "/") return;
-	      if (i + 1 === str.length) return;
-	      const chaPost = str[i + 1];
-	      if (chaPost !== "/" && chaPost !== "*") return;
-	    }
-
-	    this.token("(");
-	    this.indent();
-	    parenPushNewlineState.printed = true;
-	  }
-
-	  _catchUp(prop, loc) {
-	    if (!this.format.retainLines) return;
-	    const pos = loc ? loc[prop] : null;
-
-	    if (pos && pos.line !== null) {
-	      const count = pos.line - this._buf.getCurrentLine();
-
-	      for (let i = 0; i < count; i++) {
-	        this._newline();
-	      }
-	    }
-	  }
-
-	  _getIndent() {
-	    return (0, _repeat().default)(this.format.indent.style, this._indent);
-	  }
-
-	  startTerminatorless(isLabel = false) {
-	    if (isLabel) {
-	      this._noLineTerminator = true;
-	      return null;
-	    } else {
-	      return this._parenPushNewlineState = {
-	        printed: false
-	      };
-	    }
-	  }
-
-	  endTerminatorless(state) {
-	    this._noLineTerminator = false;
-
-	    if (state && state.printed) {
-	      this.dedent();
-	      this.newline();
-	      this.token(")");
-	    }
-	  }
-
-	  print(node, parent) {
-	    if (!node) return;
-	    const oldConcise = this.format.concise;
-
-	    if (node._compact) {
-	      this.format.concise = true;
-	    }
-
-	    const printMethod = this[node.type];
-
-	    if (!printMethod) {
-	      throw new ReferenceError(`unknown node of type ${JSON.stringify(node.type)} with constructor ${JSON.stringify(node && node.constructor.name)}`);
-	    }
-
-	    this._printStack.push(node);
-
-	    const oldInAux = this._insideAux;
-	    this._insideAux = !node.loc;
-
-	    this._maybeAddAuxComment(this._insideAux && !oldInAux);
-
-	    let needsParens = n.needsParens(node, parent, this._printStack);
-
-	    if (this.format.retainFunctionParens && node.type === "FunctionExpression" && node.extra && node.extra.parenthesized) {
-	      needsParens = true;
-	    }
-
-	    if (needsParens) this.token("(");
-
-	    this._printLeadingComments(node);
-
-	    const loc = t().isProgram(node) || t().isFile(node) ? null : node.loc;
-	    this.withSource("start", loc, () => {
-	      this[node.type](node, parent);
-	    });
-
-	    this._printTrailingComments(node);
-
-	    if (needsParens) this.token(")");
-
-	    this._printStack.pop();
-
-	    this.format.concise = oldConcise;
-	    this._insideAux = oldInAux;
-	  }
-
-	  _maybeAddAuxComment(enteredPositionlessNode) {
-	    if (enteredPositionlessNode) this._printAuxBeforeComment();
-	    if (!this._insideAux) this._printAuxAfterComment();
-	  }
-
-	  _printAuxBeforeComment() {
-	    if (this._printAuxAfterOnNextUserNode) return;
-	    this._printAuxAfterOnNextUserNode = true;
-	    const comment = this.format.auxiliaryCommentBefore;
-
-	    if (comment) {
-	      this._printComment({
-	        type: "CommentBlock",
-	        value: comment
-	      });
-	    }
-	  }
-
-	  _printAuxAfterComment() {
-	    if (!this._printAuxAfterOnNextUserNode) return;
-	    this._printAuxAfterOnNextUserNode = false;
-	    const comment = this.format.auxiliaryCommentAfter;
-
-	    if (comment) {
-	      this._printComment({
-	        type: "CommentBlock",
-	        value: comment
-	      });
-	    }
-	  }
-
-	  getPossibleRaw(node) {
-	    const extra = node.extra;
-
-	    if (extra && extra.raw != null && extra.rawValue != null && node.value === extra.rawValue) {
-	      return extra.raw;
-	    }
-	  }
-
-	  printJoin(nodes, parent, opts = {}) {
-	    if (!nodes || !nodes.length) return;
-	    if (opts.indent) this.indent();
-	    const newlineOpts = {
-	      addNewlines: opts.addNewlines
-	    };
-
-	    for (let i = 0; i < nodes.length; i++) {
-	      const node = nodes[i];
-	      if (!node) continue;
-	      if (opts.statement) this._printNewline(true, node, parent, newlineOpts);
-	      this.print(node, parent);
-
-	      if (opts.iterator) {
-	        opts.iterator(node, i);
-	      }
-
-	      if (opts.separator && i < nodes.length - 1) {
-	        opts.separator.call(this);
-	      }
-
-	      if (opts.statement) this._printNewline(false, node, parent, newlineOpts);
-	    }
-
-	    if (opts.indent) this.dedent();
-	  }
-
-	  printAndIndentOnComments(node, parent) {
-	    const indent = node.leadingComments && node.leadingComments.length > 0;
-	    if (indent) this.indent();
-	    this.print(node, parent);
-	    if (indent) this.dedent();
-	  }
-
-	  printBlock(parent) {
-	    const node = parent.body;
-
-	    if (!t().isEmptyStatement(node)) {
-	      this.space();
-	    }
-
-	    this.print(node, parent);
-	  }
-
-	  _printTrailingComments(node) {
-	    this._printComments(this._getComments(false, node));
-	  }
-
-	  _printLeadingComments(node) {
-	    this._printComments(this._getComments(true, node));
-	  }
-
-	  printInnerComments(node, indent = true) {
-	    if (!node.innerComments || !node.innerComments.length) return;
-	    if (indent) this.indent();
-
-	    this._printComments(node.innerComments);
-
-	    if (indent) this.dedent();
-	  }
-
-	  printSequence(nodes, parent, opts = {}) {
-	    opts.statement = true;
-	    return this.printJoin(nodes, parent, opts);
-	  }
-
-	  printList(items, parent, opts = {}) {
-	    if (opts.separator == null) {
-	      opts.separator = commaSeparator;
-	    }
-
-	    return this.printJoin(items, parent, opts);
-	  }
-
-	  _printNewline(leading, node, parent, opts) {
-	    if (this.format.retainLines || this.format.compact) return;
-
-	    if (this.format.concise) {
-	      this.space();
-	      return;
-	    }
-
-	    let lines = 0;
-
-	    if (this._buf.hasContent()) {
-	      if (!leading) lines++;
-	      if (opts.addNewlines) lines += opts.addNewlines(leading, node) || 0;
-	      const needs = leading ? n.needsWhitespaceBefore : n.needsWhitespaceAfter;
-	      if (needs(node, parent)) lines++;
-	    }
-
-	    this.newline(lines);
-	  }
-
-	  _getComments(leading, node) {
-	    return node && (leading ? node.leadingComments : node.trailingComments) || [];
-	  }
-
-	  _printComment(comment) {
-	    if (!this.format.shouldPrintComment(comment.value)) return;
-	    if (comment.ignore) return;
-	    if (this._printedComments.has(comment)) return;
-
-	    this._printedComments.add(comment);
-
-	    if (comment.start != null) {
-	      if (this._printedCommentStarts[comment.start]) return;
-	      this._printedCommentStarts[comment.start] = true;
-	    }
-
-	    const isBlockComment = comment.type === "CommentBlock";
-	    this.newline(this._buf.hasContent() && !this._noLineTerminator && isBlockComment ? 1 : 0);
-	    if (!this.endsWith("[") && !this.endsWith("{")) this.space();
-	    let val = !isBlockComment && !this._noLineTerminator ? `//${comment.value}\n` : `/*${comment.value}*/`;
-
-	    if (isBlockComment && this.format.indent.adjustMultilineComment) {
-	      const offset = comment.loc && comment.loc.start.column;
-
-	      if (offset) {
-	        const newlineRegex = new RegExp("\\n\\s{1," + offset + "}", "g");
-	        val = val.replace(newlineRegex, "\n");
-	      }
-
-	      const indentSize = Math.max(this._getIndent().length, this._buf.getCurrentColumn());
-	      val = val.replace(/\n(?!$)/g, `\n${(0, _repeat().default)(" ", indentSize)}`);
-	    }
-
-	    if (this.endsWith("/")) this._space();
-	    this.withSource("start", comment.loc, () => {
-	      this._append(val);
-	    });
-	    this.newline(isBlockComment && !this._noLineTerminator ? 1 : 0);
-	  }
-
-	  _printComments(comments) {
-	    if (!comments || !comments.length) return;
-
-	    for (const comment of comments) {
-	      this._printComment(comment);
-	    }
-	  }
-
-	}
-
-	printer.default = Printer;
-	Object.assign(Printer.prototype, generatorFunctions);
-
-	function commaSeparator() {
-	  this.token(",");
-	  this.space();
-	}
-	return printer;
-}
-
-var hasRequiredLib;
-
-function requireLib () {
-	if (hasRequiredLib) return lib;
-	hasRequiredLib = 1;
-
-	Object.defineProperty(lib, "__esModule", {
-	  value: true
-	});
-	lib.default = _default;
-	lib.CodeGenerator = void 0;
-
-	var _sourceMap = _interopRequireDefault(requireSourceMap());
-
-	var _printer = _interopRequireDefault(requirePrinter());
-
-	function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-	class Generator extends _printer.default {
-	  constructor(ast, opts = {}, code) {
-	    const format = normalizeOptions(code, opts);
-	    const map = opts.sourceMaps ? new _sourceMap.default(opts, code) : null;
-	    super(format, map);
-	    this.ast = ast;
-	  }
-
-	  generate() {
-	    return super.generate(this.ast);
-	  }
-
-	}
-
-	function normalizeOptions(code, opts) {
-	  const format = {
-	    auxiliaryCommentBefore: opts.auxiliaryCommentBefore,
-	    auxiliaryCommentAfter: opts.auxiliaryCommentAfter,
-	    shouldPrintComment: opts.shouldPrintComment,
-	    retainLines: opts.retainLines,
-	    retainFunctionParens: opts.retainFunctionParens,
-	    comments: opts.comments == null || opts.comments,
-	    compact: opts.compact,
-	    minified: opts.minified,
-	    concise: opts.concise,
-	    jsonCompatibleStrings: opts.jsonCompatibleStrings,
-	    indent: {
-	      adjustMultilineComment: true,
-	      style: "  ",
-	      base: 0
-	    },
-	    decoratorsBeforeExport: !!opts.decoratorsBeforeExport,
-	    jsescOption: Object.assign({
-	      quotes: "double",
-	      wrap: true
-	    }, opts.jsescOption)
-	  };
-
-	  if (format.minified) {
-	    format.compact = true;
-
-	    format.shouldPrintComment = format.shouldPrintComment || (() => format.comments);
-	  } else {
-	    format.shouldPrintComment = format.shouldPrintComment || (value => format.comments || value.indexOf("@license") >= 0 || value.indexOf("@preserve") >= 0);
-	  }
-
-	  if (format.compact === "auto") {
-	    format.compact = code.length > 500000;
-
-	    if (format.compact) {
-	      console.error("[BABEL] Note: The code generator has deoptimised the styling of " + `${opts.filename} as it exceeds the max of ${"500KB"}.`);
-	    }
-	  }
-
-	  if (format.compact) {
-	    format.indent.adjustMultilineComment = false;
-	  }
-
-	  return format;
-	}
-
-	class CodeGenerator {
-	  constructor(ast, opts, code) {
-	    this._generator = new Generator(ast, opts, code);
-	  }
-
-	  generate() {
-	    return this._generator.generate();
-	  }
-
-	}
-
-	lib.CodeGenerator = CodeGenerator;
-
-	function _default(ast, opts, code) {
-	  const gen = new Generator(ast, opts, code);
-	  return gen.generate();
-	}
-	return lib;
-}
-
-var libExports = requireLib();
-var generate$1 = /*@__PURE__*/getDefaultExportFromCjs(libExports);
-
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation.
 
@@ -27009,6 +18597,9 @@ function printFunction(fn) {
     if (fn.id !== null) {
         definition += fn.id;
     }
+    else {
+        definition += '<<anonymous>>';
+    }
     if (fn.params.length !== 0) {
         definition +=
             '(' +
@@ -27024,12 +18615,13 @@ function printFunction(fn) {
                     .join(', ') +
                 ')';
     }
-    if (definition.length !== 0) {
-        output.push(definition);
+    else {
+        definition += '()';
     }
-    output.push(printType(fn.returnType));
-    output.push(printHIR(fn.body));
+    definition += `: ${printPlace(fn.returns)}`;
+    output.push(definition);
     output.push(...fn.directives);
+    output.push(printHIR(fn.body));
     return output.join('\n');
 }
 function printHIR(ir, options = null) {
@@ -27104,7 +18696,10 @@ function printMixedHIR(value) {
 }
 function printInstruction(instr) {
     const id = `[${instr.id}]`;
-    const value = printInstructionValue(instr.value);
+    let value = printInstructionValue(instr.value);
+    if (instr.effects != null) {
+        value += `\n    ${instr.effects.map(printAliasingEffect).join('\n    ')}`;
+    }
     if (instr.lvalue !== null) {
         return `${id} ${printPlace(instr.lvalue)} = ${value}`;
     }
@@ -27154,7 +18749,10 @@ function printTerminal(terminal) {
             break;
         }
         case 'return': {
-            value = `[${terminal.id}] Return${terminal.value != null ? ' ' + printPlace(terminal.value) : ''}`;
+            value = `[${terminal.id}] Return ${terminal.returnVariant}${terminal.value != null ? ' ' + printPlace(terminal.value) : ''}`;
+            if (terminal.effects != null) {
+                value += `\n    ${terminal.effects.map(printAliasingEffect).join('\n    ')}`;
+            }
             break;
         }
         case 'goto': {
@@ -27216,6 +18814,9 @@ function printTerminal(terminal) {
         }
         case 'maybe-throw': {
             value = `[${terminal.id}] MaybeThrow continuation=bb${terminal.continuation} handler=bb${terminal.handler}`;
+            if (terminal.effects != null) {
+                value += `\n    ${terminal.effects.map(printAliasingEffect).join('\n    ')}`;
+            }
             break;
         }
         case 'scope': {
@@ -27256,7 +18857,7 @@ function printObjectPropertyKey(key) {
     }
 }
 function printInstructionValue(instrValue) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g;
     let value = '';
     switch (instrValue.kind) {
         case 'ArrayExpression': {
@@ -27363,7 +18964,7 @@ function printInstructionValue(instrValue) {
             break;
         }
         case 'UnsupportedNode': {
-            value = `UnsupportedNode(${generate$1(instrValue.node).code})`;
+            value = `UnsupportedNode ${instrValue.node.type}`;
             break;
         }
         case 'LoadLocal': {
@@ -27439,8 +19040,8 @@ function printInstructionValue(instrValue) {
                     return `GlobalMutation`;
                 }
             }).join(', ')) !== null && _b !== void 0 ? _b : '';
-            const type = printType(instrValue.loweredFunc.func.returnType).trim();
-            value = `${kind} ${name} @context[${context}] @effects[${effects}]${type !== '' ? ` return${type}` : ''}:\n${fn}`;
+            const aliasingEffects = (_e = (_d = (_c = instrValue.loweredFunc.func.aliasingEffects) === null || _c === void 0 ? void 0 : _c.map(printAliasingEffect)) === null || _d === void 0 ? void 0 : _d.join(', ')) !== null && _e !== void 0 ? _e : '';
+            value = `${kind} ${name} @context[${context}] @effects[${effects}] @aliasingEffects=[${aliasingEffects}]\n${fn}`;
             break;
         }
         case 'TaggedTemplateExpression': {
@@ -27556,11 +19157,11 @@ function printInstructionValue(instrValue) {
             break;
         }
         case 'StartMemoize': {
-            value = `StartMemoize deps=${(_d = (_c = instrValue.deps) === null || _c === void 0 ? void 0 : _c.map(dep => printManualMemoDependency(dep, false))) !== null && _d !== void 0 ? _d : '(none)'}`;
+            value = `StartMemoize deps=${(_g = (_f = instrValue.deps) === null || _f === void 0 ? void 0 : _f.map(dep => printManualMemoDependency(dep, false))) !== null && _g !== void 0 ? _g : '(none)'}`;
             break;
         }
         case 'FinishMemoize': {
-            value = `FinishMemoize decl=${printPlace(instrValue.decl)}`;
+            value = `FinishMemoize decl=${printPlace(instrValue.decl)}${instrValue.pruned ? ' pruned' : ''}`;
             break;
         }
         default: {
@@ -27699,6 +19300,109 @@ function getFunctionName$2(instrValue, defaultValue) {
         case 'ObjectMethod':
             return defaultValue;
     }
+}
+function printAliasingEffect(effect) {
+    switch (effect.kind) {
+        case 'Assign': {
+            return `Assign ${printPlaceForAliasEffect(effect.into)} = ${printPlaceForAliasEffect(effect.from)}`;
+        }
+        case 'Alias': {
+            return `Alias ${printPlaceForAliasEffect(effect.into)} <- ${printPlaceForAliasEffect(effect.from)}`;
+        }
+        case 'MaybeAlias': {
+            return `MaybeAlias ${printPlaceForAliasEffect(effect.into)} <- ${printPlaceForAliasEffect(effect.from)}`;
+        }
+        case 'Capture': {
+            return `Capture ${printPlaceForAliasEffect(effect.into)} <- ${printPlaceForAliasEffect(effect.from)}`;
+        }
+        case 'ImmutableCapture': {
+            return `ImmutableCapture ${printPlaceForAliasEffect(effect.into)} <- ${printPlaceForAliasEffect(effect.from)}`;
+        }
+        case 'Create': {
+            return `Create ${printPlaceForAliasEffect(effect.into)} = ${effect.value}`;
+        }
+        case 'CreateFrom': {
+            return `Create ${printPlaceForAliasEffect(effect.into)} = kindOf(${printPlaceForAliasEffect(effect.from)})`;
+        }
+        case 'CreateFunction': {
+            return `Function ${printPlaceForAliasEffect(effect.into)} = Function captures=[${effect.captures.map(printPlaceForAliasEffect).join(', ')}]`;
+        }
+        case 'Apply': {
+            const receiverCallee = effect.receiver.identifier.id === effect.function.identifier.id
+                ? printPlaceForAliasEffect(effect.receiver)
+                : `${printPlaceForAliasEffect(effect.receiver)}.${printPlaceForAliasEffect(effect.function)}`;
+            const args = effect.args
+                .map(arg => {
+                if (arg.kind === 'Identifier') {
+                    return printPlaceForAliasEffect(arg);
+                }
+                else if (arg.kind === 'Hole') {
+                    return ' ';
+                }
+                return `...${printPlaceForAliasEffect(arg.place)}`;
+            })
+                .join(', ');
+            let signature = '';
+            if (effect.signature != null) {
+                if (effect.signature.aliasing != null) {
+                    signature = printAliasingSignature(effect.signature.aliasing);
+                }
+                else {
+                    signature = JSON.stringify(effect.signature, null, 2);
+                }
+            }
+            return `Apply ${printPlaceForAliasEffect(effect.into)} = ${receiverCallee}(${args})${signature != '' ? '\n     ' : ''}${signature}`;
+        }
+        case 'Freeze': {
+            return `Freeze ${printPlaceForAliasEffect(effect.value)} ${effect.reason}`;
+        }
+        case 'Mutate':
+        case 'MutateConditionally':
+        case 'MutateTransitive':
+        case 'MutateTransitiveConditionally': {
+            return `${effect.kind} ${printPlaceForAliasEffect(effect.value)}`;
+        }
+        case 'MutateFrozen': {
+            return `MutateFrozen ${printPlaceForAliasEffect(effect.place)} reason=${JSON.stringify(effect.error.category)}`;
+        }
+        case 'MutateGlobal': {
+            return `MutateGlobal ${printPlaceForAliasEffect(effect.place)} reason=${JSON.stringify(effect.error.category)}`;
+        }
+        case 'Impure': {
+            return `Impure ${printPlaceForAliasEffect(effect.place)} reason=${JSON.stringify(effect.error.category)}`;
+        }
+        case 'Render': {
+            return `Render ${printPlaceForAliasEffect(effect.place)}`;
+        }
+        default: {
+            assertExhaustive$1(effect, `Unexpected kind '${effect.kind}'`);
+        }
+    }
+}
+function printPlaceForAliasEffect(place) {
+    return printIdentifier(place.identifier);
+}
+function printAliasingSignature(signature) {
+    const tokens = ['function '];
+    if (signature.temporaries.length !== 0) {
+        tokens.push('<');
+        tokens.push(signature.temporaries.map(temp => `$${temp.identifier.id}`).join(', '));
+        tokens.push('>');
+    }
+    tokens.push('(');
+    tokens.push('this=$' + String(signature.receiver));
+    for (const param of signature.params) {
+        tokens.push(', $' + String(param));
+    }
+    if (signature.rest != null) {
+        tokens.push(`, ...$${String(signature.rest)}`);
+    }
+    tokens.push('): ');
+    tokens.push('$' + String(signature.returns) + ':');
+    for (const effect of signature.effects) {
+        tokens.push('\n  ' + printAliasingEffect(effect));
+    }
+    return tokens.join('');
 }
 
 var _ScopeBlockTraversal_activeScopes;
@@ -27985,6 +19689,44 @@ function* eachPatternOperand(pattern) {
                 }
                 else if (property.kind === 'Spread') {
                     yield property.place;
+                }
+                else {
+                    assertExhaustive$1(property, `Unexpected item kind \`${property.kind}\``);
+                }
+            }
+            break;
+        }
+        default: {
+            assertExhaustive$1(pattern, `Unexpected pattern kind \`${pattern.kind}\``);
+        }
+    }
+}
+function* eachPatternItem(pattern) {
+    switch (pattern.kind) {
+        case 'ArrayPattern': {
+            for (const item of pattern.items) {
+                if (item.kind === 'Identifier') {
+                    yield item;
+                }
+                else if (item.kind === 'Spread') {
+                    yield item;
+                }
+                else if (item.kind === 'Hole') {
+                    continue;
+                }
+                else {
+                    assertExhaustive$1(item, `Unexpected item kind \`${item.kind}\``);
+                }
+            }
+            break;
+        }
+        case 'ObjectPattern': {
+            for (const property of pattern.properties) {
+                if (property.kind === 'ObjectProperty') {
+                    yield property.place;
+                }
+                else if (property.kind === 'Spread') {
+                    yield property;
                 }
                 else {
                     assertExhaustive$1(property, `Unexpected item kind \`${property.kind}\``);
@@ -28356,9 +20098,11 @@ function mapTerminalSuccessors(terminal, fn) {
         case 'return': {
             return {
                 kind: 'return',
+                returnVariant: terminal.returnVariant,
                 loc: terminal.loc,
                 value: terminal.value,
                 id: makeInstructionId(0),
+                effects: terminal.effects,
             };
         }
         case 'throw': {
@@ -28466,6 +20210,7 @@ function mapTerminalSuccessors(terminal, fn) {
                 handler,
                 id: makeInstructionId(0),
                 loc: terminal.loc,
+                effects: terminal.effects,
             };
         }
         case 'try': {
@@ -28961,33 +20706,36 @@ function assertValidBlockNesting(fn) {
 function assertValidMutableRanges(fn) {
     for (const [, block] of fn.body.blocks) {
         for (const phi of block.phis) {
-            visitIdentifier(phi.place.identifier);
-            for (const [, operand] of phi.operands) {
-                visitIdentifier(operand.identifier);
+            visit$2(phi.place, `phi for block bb${block.id}`);
+            for (const [pred, operand] of phi.operands) {
+                visit$2(operand, `phi predecessor bb${pred} for block bb${block.id}`);
             }
         }
         for (const instr of block.instructions) {
             for (const operand of eachInstructionLValue(instr)) {
-                visitIdentifier(operand.identifier);
+                visit$2(operand, `instruction [${instr.id}]`);
             }
             for (const operand of eachInstructionOperand(instr)) {
-                visitIdentifier(operand.identifier);
+                visit$2(operand, `instruction [${instr.id}]`);
             }
         }
         for (const operand of eachTerminalOperand(block.terminal)) {
-            visitIdentifier(operand.identifier);
+            visit$2(operand, `terminal [${block.terminal.id}]`);
         }
     }
 }
-function visitIdentifier(identifier) {
-    validateMutableRange(identifier.mutableRange);
-    if (identifier.scope !== null) {
-        validateMutableRange(identifier.scope.range);
+function visit$2(place, description) {
+    validateMutableRange(place, place.identifier.mutableRange, description);
+    if (place.identifier.scope !== null) {
+        validateMutableRange(place, place.identifier.scope.range, description);
     }
 }
-function validateMutableRange(mutableRange) {
-    invariant((mutableRange.start === 0 && mutableRange.end === 0) ||
-        mutableRange.end > mutableRange.start, 'Identifier scope mutableRange was invalid: [%s:%s]', mutableRange.start, mutableRange.end);
+function validateMutableRange(place, range, description) {
+    CompilerError.invariant((range.start === 0 && range.end === 0) || range.end > range.start, {
+        reason: `Invalid mutable range: [${range.start}:${range.end}]`,
+        description: `${printPlace(place)} in ${description}`,
+        loc: place.loc,
+    });
 }
 
 var _HIRBuilder_instances, _HIRBuilder_completed, _HIRBuilder_current, _HIRBuilder_entry, _HIRBuilder_scopes, _HIRBuilder_context, _HIRBuilder_bindings, _HIRBuilder_env, _HIRBuilder_exceptionHandlerStack, _HIRBuilder_resolveBabelBinding;
@@ -29007,7 +20755,8 @@ class HIRBuilder {
     get environment() {
         return __classPrivateFieldGet(this, _HIRBuilder_env, "f");
     }
-    constructor(env, parentFunction, bindings = null, context = null) {
+    constructor(env, options) {
+        var _a, _b, _c;
         _HIRBuilder_instances.add(this);
         _HIRBuilder_completed.set(this, new Map());
         _HIRBuilder_current.set(this, void 0);
@@ -29020,11 +20769,10 @@ class HIRBuilder {
         this.errors = new CompilerError();
         this.fbtDepth = 0;
         __classPrivateFieldSet(this, _HIRBuilder_env, env, "f");
-        __classPrivateFieldSet(this, _HIRBuilder_bindings, bindings !== null && bindings !== void 0 ? bindings : new Map(), "f");
-        this.parentFunction = parentFunction;
-        __classPrivateFieldSet(this, _HIRBuilder_context, context !== null && context !== void 0 ? context : [], "f");
+        __classPrivateFieldSet(this, _HIRBuilder_bindings, (_a = options === null || options === void 0 ? void 0 : options.bindings) !== null && _a !== void 0 ? _a : new Map(), "f");
+        __classPrivateFieldSet(this, _HIRBuilder_context, (_b = options === null || options === void 0 ? void 0 : options.context) !== null && _b !== void 0 ? _b : new Map(), "f");
         __classPrivateFieldSet(this, _HIRBuilder_entry, makeBlockId(env.nextBlockId), "f");
-        __classPrivateFieldSet(this, _HIRBuilder_current, newBlock(__classPrivateFieldGet(this, _HIRBuilder_entry, "f"), 'block'), "f");
+        __classPrivateFieldSet(this, _HIRBuilder_current, newBlock(__classPrivateFieldGet(this, _HIRBuilder_entry, "f"), (_c = options === null || options === void 0 ? void 0 : options.entryBlockKind) !== null && _c !== void 0 ? _c : 'block'), "f");
     }
     currentBlockKind() {
         return __classPrivateFieldGet(this, _HIRBuilder_current, "f").kind;
@@ -29040,6 +20788,7 @@ class HIRBuilder {
                 handler: exceptionHandler,
                 id: makeInstructionId(0),
                 loc: instruction.loc,
+                effects: null,
             }, continuationBlock);
         }
     }
@@ -29062,7 +20811,7 @@ class HIRBuilder {
         if (babelBinding == null) {
             return { kind: 'Global', name: originalName };
         }
-        const outerBinding = this.parentFunction.scope.parent.getBinding(originalName);
+        const outerBinding = __classPrivateFieldGet(this, _HIRBuilder_env, "f").parentFunction.scope.parent.getBinding(originalName);
         if (babelBinding === outerBinding) {
             const path = babelBinding.path;
             if (path.isImportDefaultSpecifier()) {
@@ -29112,7 +20861,7 @@ class HIRBuilder {
     isContextIdentifier(path) {
         const binding = __classPrivateFieldGet(this, _HIRBuilder_instances, "m", _HIRBuilder_resolveBabelBinding).call(this, path);
         if (binding) {
-            const outerBinding = this.parentFunction.scope.parent.getBinding(path.node.name);
+            const outerBinding = __classPrivateFieldGet(this, _HIRBuilder_env, "f").parentFunction.scope.parent.getBinding(path.node.name);
             if (binding === outerBinding) {
                 return false;
             }
@@ -29125,9 +20874,17 @@ class HIRBuilder {
     resolveBinding(node) {
         var _a, _b;
         if (node.name === 'fbt') {
-            CompilerError.throwTodo({
-                reason: 'Support local variables named "fbt"',
-                loc: (_a = node.loc) !== null && _a !== void 0 ? _a : null,
+            CompilerError.throwDiagnostic({
+                severity: ErrorSeverity.Todo,
+                category: 'Support local variables named `fbt`',
+                description: 'Local variables named `fbt` may conflict with the fbt plugin and are not yet supported',
+                details: [
+                    {
+                        kind: 'error',
+                        message: 'Rename to avoid conflict with fbt plugin',
+                        loc: (_a = node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
+                    },
+                ],
             });
         }
         const originalName = node.name;
@@ -29201,6 +20958,7 @@ class HIRBuilder {
             const nextId = __classPrivateFieldGet(this, _HIRBuilder_env, "f").nextBlockId;
             __classPrivateFieldSet(this, _HIRBuilder_current, newBlock(nextId, nextBlockKind), "f");
         }
+        return blockId;
     }
     terminateWithContinuation(terminal, continuation) {
         const { id: blockId, kind, instructions } = __classPrivateFieldGet(this, _HIRBuilder_current, "f");
@@ -29406,6 +21164,11 @@ function getReversePostorderedBlocks(func) {
             return;
         }
         const block = func.blocks.get(blockId);
+        CompilerError.invariant(block != null, {
+            reason: '[HIRBuilder] Unexpected null block',
+            description: `expected block ${blockId} to exist`,
+            loc: GeneratedSource,
+        });
         const successors = [...eachTerminalSuccessor(block.terminal)].reverse();
         const fallthrough = terminalFallthrough(block.terminal);
         if (fallthrough != null) {
@@ -29547,7 +21310,10 @@ function createAnonId() {
 }
 function addFunction(registry, properties, fn, id = null, isConstructor = false) {
     const shapeId = id !== null && id !== void 0 ? id : createAnonId();
-    addShape(registry, shapeId, properties, Object.assign(Object.assign({}, fn), { hookKind: null }));
+    const aliasing = fn.aliasing != null
+        ? parseAliasingSignatureConfig(fn.aliasing, '<builtin>', GeneratedSource)
+        : null;
+    addShape(registry, shapeId, properties, Object.assign(Object.assign({}, fn), { aliasing, hookKind: null }));
     return {
         kind: 'Function',
         return: fn.returnType,
@@ -29557,12 +21323,129 @@ function addFunction(registry, properties, fn, id = null, isConstructor = false)
 }
 function addHook(registry, fn, id = null) {
     const shapeId = id !== null && id !== void 0 ? id : createAnonId();
-    addShape(registry, shapeId, [], fn);
+    const aliasing = fn.aliasing != null
+        ? parseAliasingSignatureConfig(fn.aliasing, '<builtin>', GeneratedSource)
+        : null;
+    addShape(registry, shapeId, [], Object.assign(Object.assign({}, fn), { aliasing }));
     return {
         kind: 'Function',
         return: fn.returnType,
         shapeId,
         isConstructor: false,
+    };
+}
+function parseAliasingSignatureConfig(typeConfig, moduleName, loc) {
+    const lifetimes = new Map();
+    function define(temp) {
+        CompilerError.invariant(!lifetimes.has(temp), {
+            reason: `Invalid type configuration for module`,
+            description: `Expected aliasing signature to have unique names for receiver, params, rest, returns, and temporaries in module '${moduleName}'`,
+            loc,
+        });
+        const place = signatureArgument(lifetimes.size);
+        lifetimes.set(temp, place);
+        return place;
+    }
+    function lookup(temp) {
+        const place = lifetimes.get(temp);
+        CompilerError.invariant(place != null, {
+            reason: `Invalid type configuration for module`,
+            description: `Expected aliasing signature effects to reference known names from receiver/params/rest/returns/temporaries, but '${temp}' is not a known name in '${moduleName}'`,
+            loc,
+        });
+        return place;
+    }
+    const receiver = define(typeConfig.receiver);
+    const params = typeConfig.params.map(define);
+    const rest = typeConfig.rest != null ? define(typeConfig.rest) : null;
+    const returns = define(typeConfig.returns);
+    const temporaries = typeConfig.temporaries.map(define);
+    const effects = typeConfig.effects.map((effect) => {
+        switch (effect.kind) {
+            case 'ImmutableCapture':
+            case 'CreateFrom':
+            case 'Capture':
+            case 'Alias':
+            case 'Assign': {
+                const from = lookup(effect.from);
+                const into = lookup(effect.into);
+                return {
+                    kind: effect.kind,
+                    from,
+                    into,
+                };
+            }
+            case 'Mutate':
+            case 'MutateTransitiveConditionally': {
+                const value = lookup(effect.value);
+                return { kind: effect.kind, value };
+            }
+            case 'Create': {
+                const into = lookup(effect.into);
+                return {
+                    kind: 'Create',
+                    into,
+                    reason: effect.reason,
+                    value: effect.value,
+                };
+            }
+            case 'Freeze': {
+                const value = lookup(effect.value);
+                return {
+                    kind: 'Freeze',
+                    value,
+                    reason: effect.reason,
+                };
+            }
+            case 'Impure': {
+                const place = lookup(effect.place);
+                return {
+                    kind: 'Impure',
+                    place,
+                    error: CompilerError.throwTodo({
+                        reason: 'Support impure effect declarations',
+                        loc: GeneratedSource,
+                    }),
+                };
+            }
+            case 'Apply': {
+                const receiver = lookup(effect.receiver);
+                const fn = lookup(effect.function);
+                const args = effect.args.map(arg => {
+                    if (typeof arg === 'string') {
+                        return lookup(arg);
+                    }
+                    else if (arg.kind === 'Spread') {
+                        return { kind: 'Spread', place: lookup(arg.place) };
+                    }
+                    else {
+                        return arg;
+                    }
+                });
+                const into = lookup(effect.into);
+                return {
+                    kind: 'Apply',
+                    receiver,
+                    function: fn,
+                    mutatesFunction: effect.mutatesFunction,
+                    args,
+                    into,
+                    loc,
+                    signature: null,
+                };
+            }
+            default: {
+                assertExhaustive$1(effect, `Unexpected effect kind '${effect.kind}'`);
+            }
+        }
+    });
+    return {
+        receiver: receiver.identifier.id,
+        params: params.map(p => p.identifier.id),
+        rest: rest != null ? rest.identifier.id : null,
+        returns: returns.identifier.id,
+        temporaries,
+        effects,
     };
 }
 function addObject(registry, id, properties) {
@@ -29614,6 +21497,9 @@ const BuiltInUseTransitionId = 'BuiltInUseTransition';
 const BuiltInStartTransitionId = 'BuiltInStartTransition';
 const BuiltInFireId = 'BuiltInFire';
 const BuiltInFireFunctionId = 'BuiltInFireFunction';
+const BuiltInUseEffectEventId = 'BuiltInUseEffectEvent';
+const BuiltinEffectEventId = 'BuiltInEffectEventFunction';
+const BuiltInAutodepsId = 'BuiltInAutoDepsId';
 const ReanimatedSharedValueId = 'ReanimatedSharedValueId';
 const BUILTIN_SHAPES = new Map();
 addObject(BUILTIN_SHAPES, BuiltInPropsId, [
@@ -29682,6 +21568,27 @@ addObject(BUILTIN_SHAPES, BuiltInArrayId, [
             returnType: PRIMITIVE_TYPE,
             calleeEffect: Effect.Store,
             returnValueKind: ValueKind.Primitive,
+            aliasing: {
+                receiver: '@receiver',
+                params: [],
+                rest: '@rest',
+                returns: '@returns',
+                temporaries: [],
+                effects: [
+                    { kind: 'Mutate', value: '@receiver' },
+                    {
+                        kind: 'Capture',
+                        from: '@rest',
+                        into: '@receiver',
+                    },
+                    {
+                        kind: 'Create',
+                        into: '@returns',
+                        value: ValueKind.Primitive,
+                        reason: ValueReason.KnownReturnSignature,
+                    },
+                ],
+            },
         }),
     ],
     [
@@ -29707,6 +21614,49 @@ addObject(BUILTIN_SHAPES, BuiltInArrayId, [
             returnValueKind: ValueKind.Mutable,
             noAlias: true,
             mutableOnlyIfOperandsAreMutable: true,
+            aliasing: {
+                receiver: '@receiver',
+                params: ['@callback'],
+                rest: null,
+                returns: '@returns',
+                temporaries: [
+                    '@item',
+                    '@callbackReturn',
+                    '@thisArg',
+                ],
+                effects: [
+                    {
+                        kind: 'Create',
+                        into: '@returns',
+                        value: ValueKind.Mutable,
+                        reason: ValueReason.KnownReturnSignature,
+                    },
+                    {
+                        kind: 'CreateFrom',
+                        from: '@receiver',
+                        into: '@item',
+                    },
+                    {
+                        kind: 'Create',
+                        into: '@thisArg',
+                        value: ValueKind.Primitive,
+                        reason: ValueReason.KnownReturnSignature,
+                    },
+                    {
+                        kind: 'Apply',
+                        receiver: '@thisArg',
+                        args: ['@item', { kind: 'Hole' }, '@receiver'],
+                        function: '@callback',
+                        into: '@callbackReturn',
+                        mutatesFunction: false,
+                    },
+                    {
+                        kind: 'Capture',
+                        from: '@callbackReturn',
+                        into: '@returns',
+                    },
+                ],
+            },
         }),
     ],
     [
@@ -29813,6 +21763,29 @@ addObject(BUILTIN_SHAPES, BuiltInSetId, [
             returnType: { kind: 'Object', shapeId: BuiltInSetId },
             calleeEffect: Effect.Store,
             returnValueKind: ValueKind.Mutable,
+            aliasing: {
+                receiver: '@receiver',
+                params: [],
+                rest: '@rest',
+                returns: '@returns',
+                temporaries: [],
+                effects: [
+                    {
+                        kind: 'Assign',
+                        from: '@receiver',
+                        into: '@returns',
+                    },
+                    {
+                        kind: 'Mutate',
+                        value: '@receiver',
+                    },
+                    {
+                        kind: 'Capture',
+                        from: '@rest',
+                        into: '@receiver',
+                    },
+                ],
+            },
         }),
     ],
     [
@@ -30166,6 +22139,14 @@ addObject(BUILTIN_SHAPES, BuiltInUseRefId, [
 addObject(BUILTIN_SHAPES, BuiltInRefValueId, [
     ['*', { kind: 'Object', shapeId: BuiltInRefValueId }],
 ]);
+addObject(BUILTIN_SHAPES, ReanimatedSharedValueId, []);
+addFunction(BUILTIN_SHAPES, [], {
+    positionalParams: [],
+    restParam: Effect.ConditionallyMutate,
+    returnType: { kind: 'Poly' },
+    calleeEffect: Effect.ConditionallyMutate,
+    returnValueKind: ValueKind.Mutable,
+}, BuiltinEffectEventId);
 addObject(BUILTIN_SHAPES, BuiltInMixedReadonlyId, [
     [
         'toString',
@@ -30343,19 +22324,65 @@ const DefaultNonmutatingHook = addHook(BUILTIN_SHAPES, {
     calleeEffect: Effect.Read,
     hookKind: 'Custom',
     returnValueKind: ValueKind.Frozen,
+    aliasing: {
+        receiver: '@receiver',
+        params: [],
+        rest: '@rest',
+        returns: '@returns',
+        temporaries: [],
+        effects: [
+            {
+                kind: 'Freeze',
+                value: '@rest',
+                reason: ValueReason.HookCaptured,
+            },
+            {
+                kind: 'Create',
+                into: '@returns',
+                value: ValueKind.Frozen,
+                reason: ValueReason.HookReturn,
+            },
+            {
+                kind: 'Alias',
+                from: '@rest',
+                into: '@returns',
+            },
+        ],
+    },
 }, 'DefaultNonmutatingHook');
+function signatureArgument(id) {
+    const place = {
+        kind: 'Identifier',
+        effect: Effect.Unknown,
+        loc: GeneratedSource,
+        reactive: false,
+        identifier: {
+            declarationId: makeDeclarationId(id),
+            id: makeIdentifierId(id),
+            loc: GeneratedSource,
+            mutableRange: { start: makeInstructionId(0), end: makeInstructionId(0) },
+            name: null,
+            scope: null,
+            type: makeType(),
+        },
+    };
+    return place;
+}
 
-function lower$1(func, env, bindings = null, capturedRefs = [], parent = null) {
+function lower$1(func, env, bindings = null, capturedRefs = new Map()) {
     var _a, _b, _c;
-    const builder = new HIRBuilder(env, parent !== null && parent !== void 0 ? parent : func, bindings, capturedRefs);
+    const builder = new HIRBuilder(env, {
+        bindings,
+        context: capturedRefs,
+    });
     const context = [];
-    for (const ref of capturedRefs !== null && capturedRefs !== void 0 ? capturedRefs : []) {
+    for (const [ref, loc] of capturedRefs !== null && capturedRefs !== void 0 ? capturedRefs : []) {
         context.push({
             kind: 'Identifier',
             identifier: builder.resolveBinding(ref),
             effect: Effect.Unknown,
             reactive: false,
-            loc: (_a = ref.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
+            loc,
         });
     }
     let id = null;
@@ -30371,12 +22398,15 @@ function lower$1(func, env, bindings = null, capturedRefs = [], parent = null) {
         if (param.isIdentifier()) {
             const binding = builder.resolveIdentifier(param);
             if (binding.kind !== 'Identifier') {
-                builder.errors.push({
-                    reason: `(BuildHIR::lower) Could not find binding for param \`${param.node.name}\``,
+                builder.errors.pushDiagnostic(CompilerDiagnostic.create({
                     severity: ErrorSeverity.Invariant,
+                    category: 'Could not find binding',
+                    description: `[BuildHIR] Could not find binding for param \`${param.node.name}\`.`,
+                }).withDetail({
+                    kind: 'error',
                     loc: (_a = param.node.loc) !== null && _a !== void 0 ? _a : null,
-                    suggestions: null,
-                });
+                    message: 'Could not find binding',
+                }));
                 return;
             }
             const place = {
@@ -30417,12 +22447,15 @@ function lower$1(func, env, bindings = null, capturedRefs = [], parent = null) {
             lowerAssignment(builder, (_h = param.node.loc) !== null && _h !== void 0 ? _h : GeneratedSource, InstructionKind.Let, param.get('argument'), place, 'Assignment');
         }
         else {
-            builder.errors.push({
-                reason: `(BuildHIR::lower) Handle ${param.node.type} params`,
+            builder.errors.pushDiagnostic(CompilerDiagnostic.create({
                 severity: ErrorSeverity.Todo,
+                category: `Handle ${param.node.type} parameters`,
+                description: `[BuildHIR] Add support for ${param.node.type} parameters.`,
+            }).withDetail({
+                kind: 'error',
                 loc: (_j = param.node.loc) !== null && _j !== void 0 ? _j : null,
-                suggestions: null,
-            });
+                message: 'Unsupported parameter type',
+            }));
         }
     });
     let directives = [];
@@ -30431,9 +22464,11 @@ function lower$1(func, env, bindings = null, capturedRefs = [], parent = null) {
         const fallthrough = builder.reserve('block');
         const terminal = {
             kind: 'return',
+            returnVariant: 'Implicit',
             loc: GeneratedSource,
             value: lowerExpressionToTemporary(builder, body),
             id: makeInstructionId(0),
+            effects: null,
         };
         builder.terminateWithContinuation(terminal, fallthrough);
     }
@@ -30442,19 +22477,22 @@ function lower$1(func, env, bindings = null, capturedRefs = [], parent = null) {
         directives = body.get('directives').map(d => d.node.value.value);
     }
     else {
-        builder.errors.push({
+        builder.errors.pushDiagnostic(CompilerDiagnostic.create({
             severity: ErrorSeverity.InvalidJS,
-            reason: `Unexpected function body kind`,
-            description: `Expected function body to be an expression or a block statement, got \`${body.type}\``,
-            loc: (_b = body.node.loc) !== null && _b !== void 0 ? _b : null,
-            suggestions: null,
-        });
+            category: `Unexpected function body kind`,
+            description: `Expected function body to be an expression or a block statement, got \`${body.type}\`.`,
+        }).withDetail({
+            kind: 'error',
+            loc: (_a = body.node.loc) !== null && _a !== void 0 ? _a : null,
+            message: 'Expected a block statement or expression',
+        }));
     }
     if (builder.errors.hasErrors()) {
         return Err(builder.errors);
     }
     builder.terminate({
         kind: 'return',
+        returnVariant: 'Void',
         loc: GeneratedSource,
         value: lowerValueToTemporary(builder, {
             kind: 'Primitive',
@@ -30462,13 +22500,14 @@ function lower$1(func, env, bindings = null, capturedRefs = [], parent = null) {
             loc: GeneratedSource,
         }),
         id: makeInstructionId(0),
+        effects: null,
     }, null);
     return Ok({
         id,
         params,
-        fnType: parent == null ? env.fnType : 'Other',
+        fnType: bindings == null ? env.fnType : 'Other',
         returnTypeAnnotation: null,
-        returnType: makeType(),
+        returns: createTemporaryPlace(env, (_b = func.node.loc) !== null && _b !== void 0 ? _b : GeneratedSource),
         body: builder.build(),
         context,
         generator: func.node.generator === true,
@@ -30476,11 +22515,12 @@ function lower$1(func, env, bindings = null, capturedRefs = [], parent = null) {
         loc: (_c = func.node.loc) !== null && _c !== void 0 ? _c : GeneratedSource,
         env,
         effects: null,
+        aliasingEffects: null,
         directives,
     });
 }
 function lowerStatement(builder, stmtPath, label = null) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36;
     const stmtNode = stmtPath.node;
     switch (stmtNode.type) {
         case 'ThrowStatement': {
@@ -30520,9 +22560,11 @@ function lowerStatement(builder, stmtPath, label = null) {
             }
             const terminal = {
                 kind: 'return',
+                returnVariant: 'Explicit',
                 loc: (_c = stmt.node.loc) !== null && _c !== void 0 ? _c : GeneratedSource,
                 value,
                 id: makeInstructionId(0),
+                effects: null,
             };
             builder.terminate(terminal, 'block');
             return;
@@ -31273,6 +23315,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                     kind: 'Debugger',
                     loc,
                 },
+                effects: null,
                 loc,
             });
             return;
@@ -31365,12 +23408,78 @@ function lowerStatement(builder, stmtPath, label = null) {
             }, continuationBlock);
             return;
         }
-        case 'TypeAlias':
-        case 'TSInterfaceDeclaration':
-        case 'TSTypeAliasDeclaration': {
+        case 'WithStatement': {
+            builder.errors.push({
+                reason: `JavaScript 'with' syntax is not supported`,
+                description: `'with' syntax is considered deprecated and removed from JavaScript standards, consider alternatives`,
+                severity: ErrorSeverity.UnsupportedJS,
+                loc: (_28 = stmtPath.node.loc) !== null && _28 !== void 0 ? _28 : null,
+                suggestions: null,
+            });
+            lowerValueToTemporary(builder, {
+                kind: 'UnsupportedNode',
+                loc: (_29 = stmtPath.node.loc) !== null && _29 !== void 0 ? _29 : GeneratedSource,
+                node: stmtPath.node,
+            });
             return;
         }
-        case 'ClassDeclaration':
+        case 'ClassDeclaration': {
+            builder.errors.push({
+                reason: 'Inline `class` declarations are not supported',
+                description: `Move class declarations outside of components/hooks`,
+                severity: ErrorSeverity.UnsupportedJS,
+                loc: (_30 = stmtPath.node.loc) !== null && _30 !== void 0 ? _30 : null,
+                suggestions: null,
+            });
+            lowerValueToTemporary(builder, {
+                kind: 'UnsupportedNode',
+                loc: (_31 = stmtPath.node.loc) !== null && _31 !== void 0 ? _31 : GeneratedSource,
+                node: stmtPath.node,
+            });
+            return;
+        }
+        case 'EnumDeclaration':
+        case 'TSEnumDeclaration': {
+            lowerValueToTemporary(builder, {
+                kind: 'UnsupportedNode',
+                loc: (_32 = stmtPath.node.loc) !== null && _32 !== void 0 ? _32 : GeneratedSource,
+                node: stmtPath.node,
+            });
+            return;
+        }
+        case 'ExportAllDeclaration':
+        case 'ExportDefaultDeclaration':
+        case 'ExportNamedDeclaration':
+        case 'ImportDeclaration':
+        case 'TSExportAssignment':
+        case 'TSImportEqualsDeclaration': {
+            builder.errors.push({
+                reason: 'JavaScript `import` and `export` statements may only appear at the top level of a module',
+                severity: ErrorSeverity.InvalidJS,
+                loc: (_33 = stmtPath.node.loc) !== null && _33 !== void 0 ? _33 : null,
+                suggestions: null,
+            });
+            lowerValueToTemporary(builder, {
+                kind: 'UnsupportedNode',
+                loc: (_34 = stmtPath.node.loc) !== null && _34 !== void 0 ? _34 : GeneratedSource,
+                node: stmtPath.node,
+            });
+            return;
+        }
+        case 'TSNamespaceExportDeclaration': {
+            builder.errors.push({
+                reason: 'TypeScript `namespace` statements may only appear at the top level of a module',
+                severity: ErrorSeverity.InvalidJS,
+                loc: (_35 = stmtPath.node.loc) !== null && _35 !== void 0 ? _35 : null,
+                suggestions: null,
+            });
+            lowerValueToTemporary(builder, {
+                kind: 'UnsupportedNode',
+                loc: (_36 = stmtPath.node.loc) !== null && _36 !== void 0 ? _36 : GeneratedSource,
+                node: stmtPath.node,
+            });
+            return;
+        }
         case 'DeclareClass':
         case 'DeclareExportAllDeclaration':
         case 'DeclareExportDeclaration':
@@ -31381,31 +23490,13 @@ function lowerStatement(builder, stmtPath, label = null) {
         case 'DeclareOpaqueType':
         case 'DeclareTypeAlias':
         case 'DeclareVariable':
-        case 'EnumDeclaration':
-        case 'ExportAllDeclaration':
-        case 'ExportDefaultDeclaration':
-        case 'ExportNamedDeclaration':
-        case 'ImportDeclaration':
         case 'InterfaceDeclaration':
         case 'OpaqueType':
         case 'TSDeclareFunction':
-        case 'TSEnumDeclaration':
-        case 'TSExportAssignment':
-        case 'TSImportEqualsDeclaration':
+        case 'TSInterfaceDeclaration':
         case 'TSModuleDeclaration':
-        case 'TSNamespaceExportDeclaration':
-        case 'WithStatement': {
-            builder.errors.push({
-                reason: `(BuildHIR::lowerStatement) Handle ${stmtPath.type} statements`,
-                severity: ErrorSeverity.Todo,
-                loc: (_28 = stmtPath.node.loc) !== null && _28 !== void 0 ? _28 : null,
-                suggestions: null,
-            });
-            lowerValueToTemporary(builder, {
-                kind: 'UnsupportedNode',
-                loc: (_29 = stmtPath.node.loc) !== null && _29 !== void 0 ? _29 : GeneratedSource,
-                node: stmtPath.node,
-            });
+        case 'TSTypeAliasDeclaration':
+        case 'TypeAlias': {
             return;
         }
         default: {
@@ -31472,7 +23563,7 @@ function lowerObjectPropertyKey(builder, property) {
     return null;
 }
 function lowerExpression(builder, exprPath) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23;
     const exprNode = exprPath.node;
     const exprLoc = (_a = exprNode.loc) !== null && _a !== void 0 ? _a : GeneratedSource;
     switch (exprNode.type) {
@@ -31868,6 +23959,7 @@ function lowerExpression(builder, exprPath) {
                     place: leftValue,
                     loc: exprLoc,
                 },
+                effects: null,
                 loc: exprLoc,
             });
             builder.terminateWithContinuation({
@@ -32156,11 +24248,17 @@ function lowerExpression(builder, exprPath) {
                 });
                 for (const [name, locations] of Object.entries(fbtLocations)) {
                     if (locations.length > 1) {
-                        CompilerError.throwTodo({
-                            reason: `Support <${tagName}> tags with multiple <${tagName}:${name}> values`,
-                            loc: (_5 = locations.at(-1)) !== null && _5 !== void 0 ? _5 : GeneratedSource,
-                            description: null,
-                            suggestions: null,
+                        CompilerError.throwDiagnostic({
+                            severity: ErrorSeverity.Todo,
+                            category: 'Support duplicate fbt tags',
+                            description: `Support \`<${tagName}>\` tags with multiple \`<${tagName}:${name}>\` values`,
+                            details: locations.map(loc => {
+                                return {
+                                    kind: 'error',
+                                    message: `Multiple \`<${tagName}:${name}>\` tags found`,
+                                    loc,
+                                };
+                            }),
                         });
                     }
                 }
@@ -32178,7 +24276,7 @@ function lowerExpression(builder, exprPath) {
                 children: children.length === 0 ? null : children,
                 loc: exprLoc,
                 openingLoc: openingLoc,
-                closingLoc: (_7 = (_6 = expr.get('closingElement').node) === null || _6 === void 0 ? void 0 : _6.loc) !== null && _7 !== void 0 ? _7 : GeneratedSource,
+                closingLoc: (_6 = (_5 = expr.get('closingElement').node) === null || _5 === void 0 ? void 0 : _5.loc) !== null && _6 !== void 0 ? _6 : GeneratedSource,
             };
         }
         case 'JSXFragment': {
@@ -32204,7 +24302,7 @@ function lowerExpression(builder, exprPath) {
                 builder.errors.push({
                     reason: '(BuildHIR::lowerExpression) Handle tagged template with interpolations',
                     severity: ErrorSeverity.Todo,
-                    loc: (_8 = exprPath.node.loc) !== null && _8 !== void 0 ? _8 : null,
+                    loc: (_7 = exprPath.node.loc) !== null && _7 !== void 0 ? _7 : null,
                     suggestions: null,
                 });
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
@@ -32212,7 +24310,7 @@ function lowerExpression(builder, exprPath) {
             CompilerError.invariant(expr.get('quasi').get('quasis').length == 1, {
                 reason: "there should be only one quasi as we don't support interpolations yet",
                 description: null,
-                loc: (_9 = expr.node.loc) !== null && _9 !== void 0 ? _9 : null,
+                loc: (_8 = expr.node.loc) !== null && _8 !== void 0 ? _8 : null,
                 suggestions: null,
             });
             const value = expr.get('quasi').get('quasis').at(0).node.value;
@@ -32220,7 +24318,7 @@ function lowerExpression(builder, exprPath) {
                 builder.errors.push({
                     reason: '(BuildHIR::lowerExpression) Handle tagged template where cooked value is different from raw value',
                     severity: ErrorSeverity.Todo,
-                    loc: (_10 = exprPath.node.loc) !== null && _10 !== void 0 ? _10 : null,
+                    loc: (_9 = exprPath.node.loc) !== null && _9 !== void 0 ? _9 : null,
                     suggestions: null,
                 });
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
@@ -32240,7 +24338,7 @@ function lowerExpression(builder, exprPath) {
                 builder.errors.push({
                     reason: `Unexpected quasi and subexpression lengths in template literal`,
                     severity: ErrorSeverity.InvalidJS,
-                    loc: (_11 = exprPath.node.loc) !== null && _11 !== void 0 ? _11 : null,
+                    loc: (_10 = exprPath.node.loc) !== null && _10 !== void 0 ? _10 : null,
                     suggestions: null,
                 });
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
@@ -32249,7 +24347,7 @@ function lowerExpression(builder, exprPath) {
                 builder.errors.push({
                     reason: `(BuildHIR::lowerAssignment) Handle TSType in TemplateLiteral.`,
                     severity: ErrorSeverity.Todo,
-                    loc: (_12 = exprPath.node.loc) !== null && _12 !== void 0 ? _12 : null,
+                    loc: (_11 = exprPath.node.loc) !== null && _11 !== void 0 ? _11 : null,
                     suggestions: null,
                 });
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
@@ -32289,7 +24387,7 @@ function lowerExpression(builder, exprPath) {
                     builder.errors.push({
                         reason: `Only object properties can be deleted`,
                         severity: ErrorSeverity.InvalidJS,
-                        loc: (_13 = expr.node.loc) !== null && _13 !== void 0 ? _13 : null,
+                        loc: (_12 = expr.node.loc) !== null && _12 !== void 0 ? _12 : null,
                         suggestions: [
                             {
                                 description: 'Remove this line',
@@ -32305,7 +24403,7 @@ function lowerExpression(builder, exprPath) {
                 builder.errors.push({
                     reason: `Throw expressions are not supported`,
                     severity: ErrorSeverity.InvalidJS,
-                    loc: (_14 = expr.node.loc) !== null && _14 !== void 0 ? _14 : null,
+                    loc: (_13 = expr.node.loc) !== null && _13 !== void 0 ? _13 : null,
                     suggestions: [
                         {
                             description: 'Remove this line',
@@ -32386,7 +24484,7 @@ function lowerExpression(builder, exprPath) {
                         value: 1,
                         loc: GeneratedSource,
                     }),
-                    loc: (_15 = leftExpr.node.loc) !== null && _15 !== void 0 ? _15 : GeneratedSource,
+                    loc: (_14 = leftExpr.node.loc) !== null && _14 !== void 0 ? _14 : GeneratedSource,
                 });
                 let newValuePlace;
                 if (typeof property === 'string' || typeof property === 'number') {
@@ -32395,7 +24493,7 @@ function lowerExpression(builder, exprPath) {
                         object: Object.assign({}, object),
                         property: makePropertyLiteral(property),
                         value: Object.assign({}, updatedValue),
-                        loc: (_16 = leftExpr.node.loc) !== null && _16 !== void 0 ? _16 : GeneratedSource,
+                        loc: (_15 = leftExpr.node.loc) !== null && _15 !== void 0 ? _15 : GeneratedSource,
                     });
                 }
                 else {
@@ -32404,7 +24502,7 @@ function lowerExpression(builder, exprPath) {
                         object: Object.assign({}, object),
                         property: Object.assign({}, property),
                         value: Object.assign({}, updatedValue),
-                        loc: (_17 = leftExpr.node.loc) !== null && _17 !== void 0 ? _17 : GeneratedSource,
+                        loc: (_16 = leftExpr.node.loc) !== null && _16 !== void 0 ? _16 : GeneratedSource,
                     });
                 }
                 return {
@@ -32418,7 +24516,7 @@ function lowerExpression(builder, exprPath) {
                 builder.errors.push({
                     reason: `(BuildHIR::lowerExpression) Handle UpdateExpression with ${argument.type} argument`,
                     severity: ErrorSeverity.Todo,
-                    loc: (_18 = exprPath.node.loc) !== null && _18 !== void 0 ? _18 : null,
+                    loc: (_17 = exprPath.node.loc) !== null && _17 !== void 0 ? _17 : null,
                     suggestions: null,
                 });
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
@@ -32427,12 +24525,12 @@ function lowerExpression(builder, exprPath) {
                 builder.errors.push({
                     reason: `(BuildHIR::lowerExpression) Handle UpdateExpression to variables captured within lambdas.`,
                     severity: ErrorSeverity.Todo,
-                    loc: (_19 = exprPath.node.loc) !== null && _19 !== void 0 ? _19 : null,
+                    loc: (_18 = exprPath.node.loc) !== null && _18 !== void 0 ? _18 : null,
                     suggestions: null,
                 });
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
-            const lvalue = lowerIdentifierForAssignment(builder, (_20 = argument.node.loc) !== null && _20 !== void 0 ? _20 : GeneratedSource, InstructionKind.Reassign, argument);
+            const lvalue = lowerIdentifierForAssignment(builder, (_19 = argument.node.loc) !== null && _19 !== void 0 ? _19 : GeneratedSource, InstructionKind.Reassign, argument);
             if (lvalue === null) {
                 if (!builder.errors.hasErrors()) {
                     builder.errors.push({
@@ -32479,7 +24577,7 @@ function lowerExpression(builder, exprPath) {
                 kind: 'RegExpLiteral',
                 pattern: expr.node.pattern,
                 flags: expr.node.flags,
-                loc: (_21 = expr.node.loc) !== null && _21 !== void 0 ? _21 : GeneratedSource,
+                loc: (_20 = expr.node.loc) !== null && _20 !== void 0 ? _20 : GeneratedSource,
             };
         }
         case 'TSInstantiationExpression':
@@ -32495,13 +24593,13 @@ function lowerExpression(builder, exprPath) {
                     kind: 'MetaProperty',
                     meta: expr.node.meta.name,
                     property: expr.node.property.name,
-                    loc: (_22 = expr.node.loc) !== null && _22 !== void 0 ? _22 : GeneratedSource,
+                    loc: (_21 = expr.node.loc) !== null && _21 !== void 0 ? _21 : GeneratedSource,
                 };
             }
             builder.errors.push({
                 reason: `(BuildHIR::lowerExpression) Handle MetaProperty expressions other than import.meta`,
                 severity: ErrorSeverity.Todo,
-                loc: (_23 = exprPath.node.loc) !== null && _23 !== void 0 ? _23 : null,
+                loc: (_22 = exprPath.node.loc) !== null && _22 !== void 0 ? _22 : null,
                 suggestions: null,
             });
             return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
@@ -32510,7 +24608,7 @@ function lowerExpression(builder, exprPath) {
             builder.errors.push({
                 reason: `(BuildHIR::lowerExpression) Handle ${exprPath.type} expressions`,
                 severity: ErrorSeverity.Todo,
-                loc: (_24 = exprPath.node.loc) !== null && _24 !== void 0 ? _24 : null,
+                loc: (_23 = exprPath.node.loc) !== null && _23 !== void 0 ? _23 : null,
                 suggestions: null,
             });
             return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
@@ -32693,6 +24791,7 @@ function lowerOptionalCallExpression(builder, expr, parentAlternate) {
                     args,
                     loc,
                 },
+                effects: null,
                 loc,
             });
         }
@@ -32707,6 +24806,7 @@ function lowerOptionalCallExpression(builder, expr, parentAlternate) {
                     args,
                     loc,
                 },
+                effects: null,
                 loc,
             });
         }
@@ -32779,6 +24879,8 @@ function isReorderableExpression(builder, expr, allowLocalIdentifiers) {
                 }
             }
         }
+        case 'TSAsExpression':
+        case 'TSNonNullExpression':
         case 'TypeCastExpression': {
             return isReorderableExpression(builder, expr.get('expression'), allowLocalIdentifiers);
         }
@@ -33139,14 +25241,13 @@ function lowerFunctionToValue(builder, expr) {
     };
 }
 function lowerFunction(builder, expr) {
-    const componentScope = builder.parentFunction.scope;
+    const componentScope = builder.environment.parentFunction.scope;
     const capturedContext = gatherCapturedContext(expr, componentScope);
-    const lowering = lower$1(expr, builder.environment, builder.bindings, [...builder.context, ...capturedContext], builder.parentFunction);
+    const lowering = lower$1(expr, builder.environment, builder.bindings, new Map([...builder.context, ...capturedContext]));
     let loweredFunc;
     if (lowering.isErr()) {
-        lowering
-            .unwrapErr()
-            .details.forEach(detail => builder.errors.pushErrorDetail(detail));
+        const functionErrors = lowering.unwrapErr();
+        builder.errors.merge(functionErrors);
         return null;
     }
     loweredFunc = lowering.unwrap();
@@ -33165,14 +25266,15 @@ function lowerValueToTemporary(builder, value) {
     const place = buildTemporaryPlace(builder, value.loc);
     builder.push({
         id: makeInstructionId(0),
-        value: value,
-        loc: value.loc,
         lvalue: Object.assign({}, place),
+        value: value,
+        effects: null,
+        loc: value.loc,
     });
     return place;
 }
 function lowerIdentifier(builder, exprPath) {
-    var _a;
+    var _a, _b;
     const exprNode = exprPath.node;
     const exprLoc = (_a = exprNode.loc) !== null && _a !== void 0 ? _a : GeneratedSource;
     const binding = builder.resolveIdentifier(exprPath);
@@ -33188,6 +25290,15 @@ function lowerIdentifier(builder, exprPath) {
             return place;
         }
         default: {
+            if (binding.kind === 'Global' && binding.name === 'eval') {
+                builder.errors.push({
+                    reason: `The 'eval' function is not supported`,
+                    description: 'Eval is an anti-pattern in JavaScript, and the code executed cannot be evaluated by React Compiler',
+                    severity: ErrorSeverity.UnsupportedJS,
+                    loc: (_b = exprPath.node.loc) !== null && _b !== void 0 ? _b : null,
+                    suggestions: null,
+                });
+            }
             return lowerValueToTemporary(builder, {
                 kind: 'LoadGlobal',
                 binding,
@@ -33720,12 +25831,13 @@ function captureScopes({ from, to }) {
     return scopes;
 }
 function gatherCapturedContext(fn, componentScope) {
-    const capturedIds = new Set();
+    const capturedIds = new Map();
     const pureScopes = captureScopes({
         from: fn.scope.parent,
         to: componentScope,
     });
     function handleMaybeDependency(path) {
+        var _a, _b;
         let baseIdentifier;
         if (path.isJSXOpeningElement()) {
             const name = path.get('name');
@@ -33744,8 +25856,10 @@ function gatherCapturedContext(fn, componentScope) {
         }
         path.skip();
         const binding = baseIdentifier.scope.getBinding(baseIdentifier.node.name);
-        if (binding !== undefined && pureScopes.has(binding.scope)) {
-            capturedIds.add(binding.identifier);
+        if (binding !== undefined &&
+            pureScopes.has(binding.scope) &&
+            !capturedIds.has(binding.identifier)) {
+            capturedIds.set(binding.identifier, (_b = (_a = path.node.loc) !== null && _a !== void 0 ? _a : binding.identifier.loc) !== null && _b !== void 0 ? _b : GeneratedSource);
         }
     }
     fn.traverse({
@@ -33777,7 +25891,7 @@ function gatherCapturedContext(fn, componentScope) {
             }
         },
     });
-    return [...capturedIds.keys()];
+    return capturedIds;
 }
 function notNull(value) {
     return value !== null;
@@ -37691,6 +29805,96 @@ const TYPED_GLOBALS = [
                     returnValueKind: ValueKind.Mutable,
                 }),
             ],
+            [
+                'entries',
+                addFunction(DEFAULT_SHAPES, [], {
+                    positionalParams: [Effect.Capture],
+                    restParam: null,
+                    returnType: { kind: 'Object', shapeId: BuiltInArrayId },
+                    calleeEffect: Effect.Read,
+                    returnValueKind: ValueKind.Mutable,
+                    aliasing: {
+                        receiver: '@receiver',
+                        params: ['@object'],
+                        rest: null,
+                        returns: '@returns',
+                        temporaries: [],
+                        effects: [
+                            {
+                                kind: 'Create',
+                                into: '@returns',
+                                reason: ValueReason.KnownReturnSignature,
+                                value: ValueKind.Mutable,
+                            },
+                            {
+                                kind: 'Capture',
+                                from: '@object',
+                                into: '@returns',
+                            },
+                        ],
+                    },
+                }),
+            ],
+            [
+                'keys',
+                addFunction(DEFAULT_SHAPES, [], {
+                    positionalParams: [Effect.Read],
+                    restParam: null,
+                    returnType: { kind: 'Object', shapeId: BuiltInArrayId },
+                    calleeEffect: Effect.Read,
+                    returnValueKind: ValueKind.Mutable,
+                    aliasing: {
+                        receiver: '@receiver',
+                        params: ['@object'],
+                        rest: null,
+                        returns: '@returns',
+                        temporaries: [],
+                        effects: [
+                            {
+                                kind: 'Create',
+                                into: '@returns',
+                                reason: ValueReason.KnownReturnSignature,
+                                value: ValueKind.Mutable,
+                            },
+                            {
+                                kind: 'ImmutableCapture',
+                                from: '@object',
+                                into: '@returns',
+                            },
+                        ],
+                    },
+                }),
+            ],
+            [
+                'values',
+                addFunction(DEFAULT_SHAPES, [], {
+                    positionalParams: [Effect.Capture],
+                    restParam: null,
+                    returnType: { kind: 'Object', shapeId: BuiltInArrayId },
+                    calleeEffect: Effect.Read,
+                    returnValueKind: ValueKind.Mutable,
+                    aliasing: {
+                        receiver: '@receiver',
+                        params: ['@object'],
+                        rest: null,
+                        returns: '@returns',
+                        temporaries: [],
+                        effects: [
+                            {
+                                kind: 'Create',
+                                into: '@returns',
+                                reason: ValueReason.KnownReturnSignature,
+                                value: ValueKind.Mutable,
+                            },
+                            {
+                                kind: 'Capture',
+                                from: '@object',
+                                into: '@returns',
+                            },
+                        ],
+                    },
+                }),
+            ],
         ]),
     ],
     [
@@ -38164,6 +30368,37 @@ const REACT_APIS = [
             calleeEffect: Effect.Read,
             hookKind: 'useEffect',
             returnValueKind: ValueKind.Frozen,
+            aliasing: {
+                receiver: '@receiver',
+                params: [],
+                rest: '@rest',
+                returns: '@returns',
+                temporaries: ['@effect'],
+                effects: [
+                    {
+                        kind: 'Freeze',
+                        value: '@rest',
+                        reason: ValueReason.Effect,
+                    },
+                    {
+                        kind: 'Create',
+                        into: '@effect',
+                        value: ValueKind.Frozen,
+                        reason: ValueReason.KnownReturnSignature,
+                    },
+                    {
+                        kind: 'Capture',
+                        from: '@rest',
+                        into: '@effect',
+                    },
+                    {
+                        kind: 'Create',
+                        into: '@returns',
+                        value: ValueKind.Primitive,
+                        reason: ValueReason.KnownReturnSignature,
+                    },
+                ],
+            },
         }, BuiltInUseEffectHookId),
     ],
     [
@@ -38224,6 +30459,23 @@ const REACT_APIS = [
             returnValueKind: ValueKind.Frozen,
         }, BuiltInFireId),
     ],
+    [
+        'useEffectEvent',
+        addHook(DEFAULT_SHAPES, {
+            positionalParams: [],
+            restParam: Effect.Freeze,
+            returnType: {
+                kind: 'Function',
+                return: { kind: 'Poly' },
+                shapeId: BuiltinEffectEventId,
+                isConstructor: false,
+            },
+            calleeEffect: Effect.Read,
+            hookKind: 'useEffectEvent',
+            returnValueKind: ValueKind.Frozen,
+        }, BuiltInUseEffectEventId),
+    ],
+    ['AUTODEPS', addObject(DEFAULT_SHAPES, BuiltInAutodepsId, [])],
 ];
 TYPED_GLOBALS.push([
     'React',
@@ -38315,6 +30567,7 @@ function installTypeConfig(globals, shapes, typeConfig, moduleName, loc) {
                 returnValueKind: typeConfig.returnValueKind,
                 noAlias: typeConfig.noAlias === true,
                 mutableOnlyIfOperandsAreMutable: typeConfig.mutableOnlyIfOperandsAreMutable === true,
+                aliasing: typeConfig.aliasing,
             });
         }
         case 'hook': {
@@ -38326,6 +30579,7 @@ function installTypeConfig(globals, shapes, typeConfig, moduleName, loc) {
                 returnType: installTypeConfig(globals, shapes, typeConfig.returnType, moduleName, loc),
                 returnValueKind: (_c = typeConfig.returnValueKind) !== null && _c !== void 0 ? _c : ValueKind.Frozen,
                 noAlias: typeConfig.noAlias === true,
+                aliasing: typeConfig.aliasing,
             });
         }
         case 'object': {
@@ -38428,6 +30682,96 @@ const ObjectTypeSchema = zod.z.object({
     kind: zod.z.literal('object'),
     properties: ObjectPropertiesSchema.nullable(),
 });
+const LifetimeIdSchema = zod.z.string().refine(id => id.startsWith('@'), {
+    message: "Placeholder names must start with '@'",
+});
+const FreezeEffectSchema = zod.z.object({
+    kind: zod.z.literal('Freeze'),
+    value: LifetimeIdSchema,
+    reason: ValueReasonSchema,
+});
+const MutateEffectSchema = zod.z.object({
+    kind: zod.z.literal('Mutate'),
+    value: LifetimeIdSchema,
+});
+const MutateTransitiveConditionallySchema = zod.z.object({
+    kind: zod.z.literal('MutateTransitiveConditionally'),
+    value: LifetimeIdSchema,
+});
+const CreateEffectSchema = zod.z.object({
+    kind: zod.z.literal('Create'),
+    into: LifetimeIdSchema,
+    value: ValueKindSchema,
+    reason: ValueReasonSchema,
+});
+const AssignEffectSchema = zod.z.object({
+    kind: zod.z.literal('Assign'),
+    from: LifetimeIdSchema,
+    into: LifetimeIdSchema,
+});
+const AliasEffectSchema = zod.z.object({
+    kind: zod.z.literal('Alias'),
+    from: LifetimeIdSchema,
+    into: LifetimeIdSchema,
+});
+const ImmutableCaptureEffectSchema = zod.z.object({
+    kind: zod.z.literal('ImmutableCapture'),
+    from: LifetimeIdSchema,
+    into: LifetimeIdSchema,
+});
+const CaptureEffectSchema = zod.z.object({
+    kind: zod.z.literal('Capture'),
+    from: LifetimeIdSchema,
+    into: LifetimeIdSchema,
+});
+const CreateFromEffectSchema = zod.z.object({
+    kind: zod.z.literal('CreateFrom'),
+    from: LifetimeIdSchema,
+    into: LifetimeIdSchema,
+});
+const ApplyArgSchema = zod.z.union([
+    LifetimeIdSchema,
+    zod.z.object({
+        kind: zod.z.literal('Spread'),
+        place: LifetimeIdSchema,
+    }),
+    zod.z.object({
+        kind: zod.z.literal('Hole'),
+    }),
+]);
+const ApplyEffectSchema = zod.z.object({
+    kind: zod.z.literal('Apply'),
+    receiver: LifetimeIdSchema,
+    function: LifetimeIdSchema,
+    mutatesFunction: zod.z.boolean(),
+    args: zod.z.array(ApplyArgSchema),
+    into: LifetimeIdSchema,
+});
+const ImpureEffectSchema = zod.z.object({
+    kind: zod.z.literal('Impure'),
+    place: LifetimeIdSchema,
+});
+const AliasingEffectSchema = zod.z.union([
+    FreezeEffectSchema,
+    CreateEffectSchema,
+    CreateFromEffectSchema,
+    AssignEffectSchema,
+    AliasEffectSchema,
+    CaptureEffectSchema,
+    ImmutableCaptureEffectSchema,
+    ImpureEffectSchema,
+    MutateEffectSchema,
+    MutateTransitiveConditionallySchema,
+    ApplyEffectSchema,
+]);
+const AliasingSignatureSchema = zod.z.object({
+    receiver: LifetimeIdSchema,
+    params: zod.z.array(LifetimeIdSchema),
+    rest: LifetimeIdSchema.nullable(),
+    returns: LifetimeIdSchema,
+    effects: zod.z.array(AliasingEffectSchema),
+    temporaries: zod.z.array(LifetimeIdSchema),
+});
 const FunctionTypeSchema = zod.z.object({
     kind: zod.z.literal('function'),
     positionalParams: zod.z.array(EffectSchema),
@@ -38439,6 +30783,7 @@ const FunctionTypeSchema = zod.z.object({
     mutableOnlyIfOperandsAreMutable: zod.z.boolean().nullable().optional(),
     impure: zod.z.boolean().nullable().optional(),
     canonicalName: zod.z.string().nullable().optional(),
+    aliasing: AliasingSignatureSchema.nullable().optional(),
 });
 const HookTypeSchema = zod.z.object({
     kind: zod.z.literal('hook'),
@@ -38447,6 +30792,7 @@ const HookTypeSchema = zod.z.object({
     returnType: zod.z.lazy(() => TypeSchema),
     returnValueKind: ValueKindSchema.nullable().optional(),
     noAlias: zod.z.boolean().nullable().optional(),
+    aliasing: AliasingSignatureSchema.nullable().optional(),
 });
 const BuiltInTypeSchema = zod.z.union([
     zod.z.literal('Any'),
@@ -38511,19 +30857,21 @@ const EnvironmentConfigSchema = zod.z.object({
     enablePreserveExistingManualUseMemo: zod.z.boolean().default(false),
     enableForest: zod.z.boolean().default(false),
     enableUseTypeAnnotations: zod.z.boolean().default(false),
+    enableNewMutationAliasingModel: zod.z.boolean().default(true),
     enableOptionalDependencies: zod.z.boolean().default(true),
     enableFire: zod.z.boolean().default(false),
     inferEffectDependencies: zod.z
         .nullable(zod.z.array(zod.z.object({
         function: ExternalFunctionSchema,
-        numRequiredArgs: zod.z.number().min(1, 'numRequiredArgs must be > 0'),
+        autodepsIndex: zod.z.number().min(1, 'autodepsIndex must be > 0'),
     })))
         .default(null),
     inlineJsxTransform: ReactElementSymbolSchema.nullable().default(null),
     validateHooksUsage: zod.z.boolean().default(true),
     validateRefAccessDuringRender: zod.z.boolean().default(true),
     validateNoSetStateInRender: zod.z.boolean().default(true),
-    validateNoSetStateInPassiveEffects: zod.z.boolean().default(false),
+    validateNoSetStateInEffects: zod.z.boolean().default(false),
+    validateNoDerivedComputationsInEffects: zod.z.boolean().default(false),
     validateNoJSXInTryStatements: zod.z.boolean().default(false),
     validateStaticComponents: zod.z.boolean().default(false),
     validateMemoizedEffectDependencies: zod.z.boolean().default(false),
@@ -38548,11 +30896,12 @@ const EnvironmentConfigSchema = zod.z.object({
     enableChangeDetectionForDebugging: ExternalFunctionSchema.nullable().default(null),
     enableCustomTypeDefinitionForReanimated: zod.z.boolean().default(false),
     hookPattern: zod.z.string().nullable().default(null),
-    enableTreatRefLikeIdentifiersAsRefs: zod.z.boolean().default(false),
+    enableTreatRefLikeIdentifiersAsRefs: zod.z.boolean().default(true),
     lowerContextAccess: ExternalFunctionSchema.nullable().default(null),
+    validateNoVoidUseMemo: zod.z.boolean().default(false),
 });
 class Environment {
-    constructor(scope, fnType, compilerMode, config, contextIdentifiers, logger, filename, code, programContext) {
+    constructor(scope, fnType, compilerMode, config, contextIdentifiers, parentFunction, logger, filename, code, programContext) {
         _Environment_instances.add(this);
         _Environment_globals.set(this, void 0);
         _Environment_shapes.set(this, void 0);
@@ -38609,6 +30958,7 @@ class Environment {
             const reanimatedModuleType = getReanimatedModuleType(__classPrivateFieldGet(this, _Environment_shapes, "f"));
             __classPrivateFieldGet(this, _Environment_moduleTypes, "f").set(REANIMATED_MODULE_NAME, reanimatedModuleType);
         }
+        this.parentFunction = parentFunction;
         __classPrivateFieldSet(this, _Environment_contextIdentifiers, contextIdentifiers, "f");
         __classPrivateFieldSet(this, _Environment_hoistedIdentifiers, new Set(), "f");
     }
@@ -38919,20 +31269,22 @@ function mergeConsecutiveBlocks(fn) {
                 suggestions: null,
             });
             const operand = Array.from(phi.operands.values())[0];
+            const lvalue = {
+                kind: 'Identifier',
+                identifier: phi.place.identifier,
+                effect: Effect.ConditionallyMutate,
+                reactive: false,
+                loc: GeneratedSource,
+            };
             const instr = {
                 id: predecessor.terminal.id,
-                lvalue: {
-                    kind: 'Identifier',
-                    identifier: phi.place.identifier,
-                    effect: Effect.ConditionallyMutate,
-                    reactive: false,
-                    loc: GeneratedSource,
-                },
+                lvalue: Object.assign({}, lvalue),
                 value: {
                     kind: 'LoadLocal',
                     place: Object.assign({}, operand),
                     loc: GeneratedSource,
                 },
+                effects: [{ kind: 'Alias', from: Object.assign({}, operand), into: Object.assign({}, lvalue) }],
                 loc: GeneratedSource,
             };
             predecessor.instructions.push(instr);
@@ -38941,6 +31293,17 @@ function mergeConsecutiveBlocks(fn) {
         predecessor.terminal = block.terminal;
         merged.merge(block.id, predecessorId);
         fn.body.blocks.delete(block.id);
+    }
+    for (const [, block] of fn.body.blocks) {
+        for (const phi of block.phis) {
+            for (const [predecessorId, operand] of phi.operands) {
+                const mapped = merged.get(predecessorId);
+                if (mapped !== predecessorId) {
+                    phi.operands.delete(predecessorId);
+                    phi.operands.set(mapped, operand);
+                }
+            }
+        }
     }
     markPredecessors(fn.body);
     for (const [, { terminal }] of fn.body.blocks) {
@@ -40899,6 +33262,7 @@ function inlineJsxTransform(fn, inlineJsxTransformConfig) {
                             type: null,
                             loc: instr.value.loc,
                         },
+                        effects: null,
                         loc: instr.loc,
                     };
                     currentBlockInstructions.push(varInstruction);
@@ -40914,6 +33278,7 @@ function inlineJsxTransform(fn, inlineJsxTransformConfig) {
                             },
                             loc: instr.value.loc,
                         },
+                        effects: null,
                         loc: instr.loc,
                     };
                     currentBlockInstructions.push(devGlobalInstruction);
@@ -40959,6 +33324,7 @@ function inlineJsxTransform(fn, inlineJsxTransformConfig) {
                             type: null,
                             loc: instr.value.loc,
                         },
+                        effects: null,
                         loc: instr.loc,
                     };
                     thenBlockInstructions.push(reassignElseInstruction);
@@ -40996,6 +33362,7 @@ function inlineJsxTransform(fn, inlineJsxTransformConfig) {
                             ],
                             loc: instr.value.loc,
                         },
+                        effects: null,
                         loc: instr.loc,
                     };
                     elseBlockInstructions.push(reactElementInstruction);
@@ -41012,6 +33379,7 @@ function inlineJsxTransform(fn, inlineJsxTransformConfig) {
                             type: null,
                             loc: instr.value.loc,
                         },
+                        effects: null,
                         loc: instr.loc,
                     };
                     elseBlockInstructions.push(reassignConditionalInstruction);
@@ -41082,6 +33450,7 @@ function createSymbolProperty(fn, instr, nextInstructions, propertyName, symbolN
             binding: { kind: 'Global', name: 'Symbol' },
             loc: instr.value.loc,
         },
+        effects: null,
         loc: instr.loc,
     };
     nextInstructions.push(symbolInstruction);
@@ -41095,6 +33464,7 @@ function createSymbolProperty(fn, instr, nextInstructions, propertyName, symbolN
             property: makePropertyLiteral('for'),
             loc: instr.value.loc,
         },
+        effects: null,
         loc: instr.loc,
     };
     nextInstructions.push(symbolForInstruction);
@@ -41107,6 +33477,7 @@ function createSymbolProperty(fn, instr, nextInstructions, propertyName, symbolN
             value: symbolName,
             loc: instr.value.loc,
         },
+        effects: null,
         loc: instr.loc,
     };
     nextInstructions.push(symbolValueInstruction);
@@ -41121,6 +33492,7 @@ function createSymbolProperty(fn, instr, nextInstructions, propertyName, symbolN
             args: [symbolValueInstruction.lvalue],
             loc: instr.value.loc,
         },
+        effects: null,
         loc: instr.loc,
     };
     const $$typeofProperty = {
@@ -41145,6 +33517,7 @@ function createTagProperty(fn, instr, nextInstructions, componentTag) {
                     value: componentTag.name,
                     loc: instr.value.loc,
                 },
+                effects: null,
                 loc: instr.loc,
             };
             tagProperty = {
@@ -41246,6 +33619,7 @@ function createPropsProperties(fn, instr, nextInstructions, propAttributes, chil
                     elements: [...children],
                     loc: instr.value.loc,
                 },
+                effects: null,
                 loc: instr.loc,
             };
             nextInstructions.push(childrenPropInstruction);
@@ -41268,6 +33642,7 @@ function createPropsProperties(fn, instr, nextInstructions, propAttributes, chil
                 value: null,
                 loc: instr.value.loc,
             },
+            effects: null,
             loc: instr.loc,
         };
         refProperty = {
@@ -41288,6 +33663,7 @@ function createPropsProperties(fn, instr, nextInstructions, propAttributes, chil
                 value: null,
                 loc: instr.value.loc,
             },
+            effects: null,
             loc: instr.loc,
         };
         keyProperty = {
@@ -41321,6 +33697,7 @@ function createPropsProperties(fn, instr, nextInstructions, propAttributes, chil
                 properties: props,
                 loc: instr.value.loc,
             },
+            effects: null,
             loc: instr.loc,
         };
         propsProperty = {
@@ -41946,7 +34323,7 @@ let Visitor$a = class Visitor extends ReactiveFunctionVisitor {
 
 var _Context_nextScheduleId, _Context_scheduled, _Context_catchHandlers, _Context_controlFlowStack;
 function buildReactiveFunction(fn) {
-    const cx = new Context$2(fn.body);
+    const cx = new Context$3(fn.body);
     const driver = new Driver(cx);
     const body = driver.traverseBlock(cx.block(fn.body.entry));
     return {
@@ -42961,7 +35338,7 @@ class Driver {
         };
     }
 }
-let Context$2 = class Context {
+let Context$3 = class Context {
     constructor(ir) {
         _Context_nextScheduleId.set(this, 0);
         this.emitted = new Set();
@@ -43275,7 +35652,7 @@ const MEMO_CACHE_SENTINEL = 'react.memo_cache_sentinel';
 const EARLY_RETURN_SENTINEL = 'react.early_return_sentinel';
 function codegenFunction(fn, { uniqueIdentifiers, fbtOperands, }) {
     var _a, _b, _c;
-    const cx = new Context$1(fn.env, (_a = fn.id) !== null && _a !== void 0 ? _a : '[[ anonymous ]]', uniqueIdentifiers, fbtOperands, null);
+    const cx = new Context$2(fn.env, (_a = fn.id) !== null && _a !== void 0 ? _a : '[[ anonymous ]]', uniqueIdentifiers, fbtOperands, null);
     let fastRefreshState = null;
     if (fn.env.config.enableResetCacheOnSourceFileChanges &&
         fn.env.code !== null) {
@@ -43363,7 +35740,7 @@ function codegenFunction(fn, { uniqueIdentifiers, fbtOperands, }) {
         pruneUnusedLValues(reactiveFunction);
         pruneHoistedContexts(reactiveFunction);
         const identifiers = renameVariables(reactiveFunction);
-        const codegen = codegenReactiveFunction(new Context$1(cx.env, (_c = reactiveFunction.id) !== null && _c !== void 0 ? _c : '[[ anonymous ]]', identifiers, cx.fbtOperands), reactiveFunction);
+        const codegen = codegenReactiveFunction(new Context$2(cx.env, (_c = reactiveFunction.id) !== null && _c !== void 0 ? _c : '[[ anonymous ]]', identifiers, cx.fbtOperands), reactiveFunction);
         if (codegen.isErr()) {
             return codegen;
         }
@@ -43374,12 +35751,9 @@ function codegenFunction(fn, { uniqueIdentifiers, fbtOperands, }) {
 }
 function codegenReactiveFunction(cx, fn) {
     for (const param of fn.params) {
-        if (param.kind === 'Identifier') {
-            cx.temp.set(param.identifier.declarationId, null);
-        }
-        else {
-            cx.temp.set(param.place.identifier.declarationId, null);
-        }
+        const place = param.kind === 'Identifier' ? param : param.place;
+        cx.temp.set(place.identifier.declarationId, null);
+        cx.declare(place.identifier);
     }
     const params = fn.params.map(param => convertParameter(param));
     const body = codegenBlock(cx, fn.body);
@@ -43443,7 +35817,7 @@ function convertParameter(param) {
         return libExports$1.restElement(convertIdentifier(param.place.identifier));
     }
 }
-let Context$1 = class Context {
+let Context$2 = class Context {
     constructor(env, fnName, uniqueIdentifiers, fbtOperands, temporaries = null) {
         _Context_nextCacheIndex.set(this, 0);
         _Context_declarations.set(this, new Set());
@@ -43931,7 +36305,7 @@ function codegenTerminal(cx, terminal) {
                     ? codegenPlaceToExpression(cx, case_.test)
                     : null;
                 const block = codegenBlock(cx, case_.block);
-                return libExports$1.switchCase(test, [block]);
+                return libExports$1.switchCase(test, block.body.length === 0 ? [] : [block]);
             }));
         }
         case 'throw': {
@@ -44044,7 +36418,7 @@ function codegenInstructionNullable(cx, instr) {
                 });
                 CompilerError.invariant((value === null || value === void 0 ? void 0 : value.type) === 'FunctionExpression', {
                     reason: 'Expected a function as a function declaration value',
-                    description: null,
+                    description: `Got ${value == null ? String(value) : value.type} at ${printInstruction(instr)}`,
                     loc: instr.value.loc,
                     suggestions: null,
                 });
@@ -44450,7 +36824,7 @@ function codegenInstructionValue(cx, instrValue) {
                             const reactiveFunction = buildReactiveFunction(loweredFunc.func);
                             pruneUnusedLabels(reactiveFunction);
                             pruneUnusedLValues(reactiveFunction);
-                            const fn = codegenReactiveFunction(new Context$1(cx.env, (_e = reactiveFunction.id) !== null && _e !== void 0 ? _e : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction).unwrap();
+                            const fn = codegenReactiveFunction(new Context$2(cx.env, (_e = reactiveFunction.id) !== null && _e !== void 0 ? _e : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction).unwrap();
                             const babelNode = libExports$1.objectMethod('method', key, fn.params, fn.body, false);
                             babelNode.async = fn.async;
                             babelNode.generator = fn.generator;
@@ -44582,7 +36956,7 @@ function codegenInstructionValue(cx, instrValue) {
             pruneUnusedLabels(reactiveFunction);
             pruneUnusedLValues(reactiveFunction);
             pruneHoistedContexts(reactiveFunction);
-            const fn = codegenReactiveFunction(new Context$1(cx.env, (_g = reactiveFunction.id) !== null && _g !== void 0 ? _g : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction).unwrap();
+            const fn = codegenReactiveFunction(new Context$2(cx.env, (_g = reactiveFunction.id) !== null && _g !== void 0 ? _g : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction).unwrap();
             if (instrValue.type === 'ArrowFunctionExpression') {
                 let body = fn.body;
                 if (body.body.length === 1 && loweredFunc.directives.length == 0) {
@@ -44912,7 +37286,12 @@ function codegenLValue(cx, pattern) {
 }
 function codegenValue(cx, loc, value) {
     if (typeof value === 'number') {
-        return libExports$1.numericLiteral(value);
+        if (value < 0) {
+            return libExports$1.unaryExpression('-', libExports$1.numericLiteral(-value), false);
+        }
+        else {
+            return libExports$1.numericLiteral(value);
+        }
     }
     else if (typeof value === 'boolean') {
         return libExports$1.booleanLiteral(value);
@@ -45005,6 +37384,10 @@ function compareScopeDeclaration(a, b) {
 
 function extractScopeDeclarationsFromDestructuring(fn) {
     const state = new State$1(fn.env);
+    for (const param of fn.params) {
+        const place = param.kind === 'Identifier' ? param : param.place;
+        state.declared.add(place.identifier.declarationId);
+    }
     visitReactiveFunction(fn, new Visitor$9(), state);
 }
 let State$1 = class State {
@@ -45105,6 +37488,7 @@ class FindLastUsageVisitor extends ReactiveFunctionVisitor {
 let Transform$4 = class Transform extends ReactiveFunctionTransform {
     constructor(lastUsage) {
         super();
+        this.temporaries = new Map();
         this.lastUsage = lastUsage;
     }
     transformScope(scopeBlock, state) {
@@ -45118,6 +37502,7 @@ let Transform$4 = class Transform extends ReactiveFunctionTransform {
         }
     }
     visitBlock(block, state) {
+        var _a;
         this.traverseBlock(block, state);
         let current = null;
         const merged = [];
@@ -45161,6 +37546,9 @@ let Transform$4 = class Transform extends ReactiveFunctionTransform {
                         case 'UnaryExpression': {
                             if (current !== null && instr.instruction.lvalue !== null) {
                                 current.lvalues.add(instr.instruction.lvalue.identifier.declarationId);
+                                if (instr.instruction.value.kind === 'LoadLocal') {
+                                    this.temporaries.set(instr.instruction.lvalue.identifier.declarationId, instr.instruction.value.place.identifier.declarationId);
+                                }
                             }
                             break;
                         }
@@ -45170,6 +37558,8 @@ let Transform$4 = class Transform extends ReactiveFunctionTransform {
                                     for (const lvalue of eachInstructionLValue(instr.instruction)) {
                                         current.lvalues.add(lvalue.identifier.declarationId);
                                     }
+                                    this.temporaries.set(instr.instruction.value.lvalue.place.identifier
+                                        .declarationId, (_a = this.temporaries.get(instr.instruction.value.value.identifier.declarationId)) !== null && _a !== void 0 ? _a : instr.instruction.value.value.identifier.declarationId);
                                 }
                                 else {
                                     reset();
@@ -45187,7 +37577,7 @@ let Transform$4 = class Transform extends ReactiveFunctionTransform {
                 }
                 case 'scope': {
                     if (current !== null &&
-                        canMergeScopes(current.block, instr) &&
+                        canMergeScopes(current.block, instr, this.temporaries) &&
                         areLValuesLastUsedByScope(instr.scope, current.lvalues, this.lastUsage)) {
                         current.block.scope.range.end = makeInstructionId(Math.max(current.block.scope.range.end, instr.scope.range.end));
                         for (const [key, value] of instr.scope.declarations) {
@@ -45283,7 +37673,7 @@ function areLValuesLastUsedByScope(scope, lvalues, lastUsage) {
     }
     return true;
 }
-function canMergeScopes(current, next) {
+function canMergeScopes(current, next, temporaries) {
     if (current.scope.reassignments.size !== 0 ||
         next.scope.reassignments.size !== 0) {
         return false;
@@ -45293,15 +37683,19 @@ function canMergeScopes(current, next) {
     }
     if (areEqualDependencies(new Set([...current.scope.declarations.values()].map(declaration => ({
         identifier: declaration.identifier,
+        reactive: true,
         path: [],
     }))), next.scope.dependencies) ||
         (next.scope.dependencies.size !== 0 &&
-            [...next.scope.dependencies].every(dep => isAlwaysInvalidatingType(dep.identifier.type) &&
-                Iterable_some(current.scope.declarations.values(), decl => decl.identifier.declarationId === dep.identifier.declarationId)))) {
+            [...next.scope.dependencies].every(dep => dep.path.length === 0 &&
+                isAlwaysInvalidatingType(dep.identifier.type) &&
+                Iterable_some(current.scope.declarations.values(), decl => decl.identifier.declarationId === dep.identifier.declarationId ||
+                    decl.identifier.declarationId ===
+                        temporaries.get(dep.identifier.declarationId))))) {
         return true;
     }
-    log(`  ${printReactiveScopeSummary(current.scope)}`);
-    log(`  ${printReactiveScopeSummary(next.scope)}`);
+    log(`  ${printReactiveScopeSummary(current.scope)} ${[...current.scope.declarations.values()].map(decl => decl.identifier.declarationId)}`);
+    log(`  ${printReactiveScopeSummary(next.scope)} ${[...next.scope.dependencies].map(dep => { var _a; return `${dep.identifier.declarationId} ${(_a = temporaries.get(dep.identifier.declarationId)) !== null && _a !== void 0 ? _a : dep.identifier.declarationId}`; })}`);
     return false;
 }
 function isAlwaysInvalidatingType(type) {
@@ -46188,32 +38582,41 @@ function isEffectSafeOutsideRender(effect) {
 }
 function getWriteErrorReason(abstractValue) {
     if (abstractValue.reason.has(ValueReason.Global)) {
-        return 'Writing to a variable defined outside a component or hook is not allowed. Consider using an effect';
+        return 'Modifying a variable defined outside a component or hook is not allowed. Consider using an effect';
     }
     else if (abstractValue.reason.has(ValueReason.JsxCaptured)) {
-        return 'Updating a value used previously in JSX is not allowed. Consider moving the mutation before the JSX';
+        return 'Modifying a value used previously in JSX is not allowed. Consider moving the modification before the JSX';
     }
     else if (abstractValue.reason.has(ValueReason.Context)) {
-        return `Mutating a value returned from 'useContext()', which should not be mutated`;
+        return `Modifying a value returned from 'useContext()' is not allowed.`;
     }
     else if (abstractValue.reason.has(ValueReason.KnownReturnSignature)) {
-        return 'Mutating a value returned from a function whose return value should not be mutated';
+        return 'Modifying a value returned from a function whose return value should not be mutated';
     }
     else if (abstractValue.reason.has(ValueReason.ReactiveFunctionArgument)) {
-        return 'Mutating component props or hook arguments is not allowed. Consider using a local variable instead';
+        return 'Modifying component props or hook arguments is not allowed. Consider using a local variable instead';
     }
     else if (abstractValue.reason.has(ValueReason.State)) {
-        return "Mutating a value returned from 'useState()', which should not be mutated. Use the setter function to update instead";
+        return "Modifying a value returned from 'useState()', which should not be modified directly. Use the setter function to update instead";
     }
     else if (abstractValue.reason.has(ValueReason.ReducerState)) {
-        return "Mutating a value returned from 'useReducer()', which should not be mutated. Use the dispatch function to update instead";
+        return "Modifying a value returned from 'useReducer()', which should not be modified directly. Use the dispatch function to update instead";
+    }
+    else if (abstractValue.reason.has(ValueReason.Effect)) {
+        return 'Modifying a value used previously in an effect function or as an effect dependency is not allowed. Consider moving the modification before calling useEffect()';
+    }
+    else if (abstractValue.reason.has(ValueReason.HookCaptured)) {
+        return 'Modifying a value previously passed as an argument to a hook is not allowed. Consider moving the modification before calling the hook';
+    }
+    else if (abstractValue.reason.has(ValueReason.HookReturn)) {
+        return 'Modifying a value returned from a hook is not allowed. Consider moving the modification into the hook where the value is constructed';
     }
     else {
-        return 'This mutates a variable that React considers immutable';
+        return 'This modifies a variable that React considers immutable';
     }
 }
 
-var _InferenceState_isFunctionExpression, _InferenceState_values, _InferenceState_variables;
+var _InferenceState_isFunctionExpression$1, _InferenceState_values$1, _InferenceState_variables$1;
 const UndefinedValue = {
     kind: 'Primitive',
     loc: GeneratedSource,
@@ -46221,7 +38624,7 @@ const UndefinedValue = {
 };
 function inferReferenceEffects(fn, options = { isFunctionExpression: false }) {
     var _a;
-    const initialState = InferenceState.empty(fn.env, options.isFunctionExpression);
+    const initialState = InferenceState$1.empty(fn.env, options.isFunctionExpression);
     const value = {
         kind: 'Primitive',
         loc: fn.loc,
@@ -46267,7 +38670,7 @@ function inferReferenceEffects(fn, options = { isFunctionExpression: false }) {
         let value;
         let place;
         if (props) {
-            inferParam(props, initialState, paramKind);
+            inferParam$1(props, initialState, paramKind);
         }
         if (ref) {
             if (ref.kind === 'Identifier') {
@@ -46296,7 +38699,7 @@ function inferReferenceEffects(fn, options = { isFunctionExpression: false }) {
     }
     else {
         for (const param of fn.params) {
-            inferParam(param, initialState, paramKind);
+            inferParam$1(param, initialState, paramKind);
         }
     }
     const statesByBlock = new Map();
@@ -46327,7 +38730,7 @@ function inferReferenceEffects(fn, options = { isFunctionExpression: false }) {
             }
             statesByBlock.set(blockId, incomingState);
             const state = incomingState.clone();
-            inferBlock(fn.env, state, block, functionEffects);
+            inferBlock$1(fn.env, state, block, functionEffects);
             for (const nextBlockId of eachTerminalSuccessor(block.terminal)) {
                 queue(nextBlockId, state);
             }
@@ -46341,21 +38744,21 @@ function inferReferenceEffects(fn, options = { isFunctionExpression: false }) {
         return transformFunctionEffectErrors(functionEffects);
     }
 }
-class InferenceState {
+let InferenceState$1 = class InferenceState {
     constructor(env, isFunctionExpression, values, variables) {
-        _InferenceState_isFunctionExpression.set(this, void 0);
-        _InferenceState_values.set(this, void 0);
-        _InferenceState_variables.set(this, void 0);
+        _InferenceState_isFunctionExpression$1.set(this, void 0);
+        _InferenceState_values$1.set(this, void 0);
+        _InferenceState_variables$1.set(this, void 0);
         this.env = env;
-        __classPrivateFieldSet(this, _InferenceState_isFunctionExpression, isFunctionExpression, "f");
-        __classPrivateFieldSet(this, _InferenceState_values, values, "f");
-        __classPrivateFieldSet(this, _InferenceState_variables, variables, "f");
+        __classPrivateFieldSet(this, _InferenceState_isFunctionExpression$1, isFunctionExpression, "f");
+        __classPrivateFieldSet(this, _InferenceState_values$1, values, "f");
+        __classPrivateFieldSet(this, _InferenceState_variables$1, variables, "f");
     }
     static empty(env, isFunctionExpression) {
         return new InferenceState(env, isFunctionExpression, new Map(), new Map());
     }
     get isFunctionExpression() {
-        return __classPrivateFieldGet(this, _InferenceState_isFunctionExpression, "f");
+        return __classPrivateFieldGet(this, _InferenceState_isFunctionExpression$1, "f");
     }
     initialize(value, kind) {
         CompilerError.invariant(value.kind !== 'LoadLocal', {
@@ -46364,10 +38767,10 @@ class InferenceState {
             loc: value.loc,
             suggestions: null,
         });
-        __classPrivateFieldGet(this, _InferenceState_values, "f").set(value, kind);
+        __classPrivateFieldGet(this, _InferenceState_values$1, "f").set(value, kind);
     }
     values(place) {
-        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(place.identifier.id);
+        const values = __classPrivateFieldGet(this, _InferenceState_variables$1, "f").get(place.identifier.id);
         CompilerError.invariant(values != null, {
             reason: `[hoisting] Expected value kind to be initialized`,
             description: `${printPlace(place)}`,
@@ -46377,7 +38780,7 @@ class InferenceState {
         return Array.from(values);
     }
     kind(place) {
-        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(place.identifier.id);
+        const values = __classPrivateFieldGet(this, _InferenceState_variables$1, "f").get(place.identifier.id);
         CompilerError.invariant(values != null, {
             reason: `[hoisting] Expected value kind to be initialized`,
             description: `${printPlace(place)}`,
@@ -46386,9 +38789,9 @@ class InferenceState {
         });
         let mergedKind = null;
         for (const value of values) {
-            const kind = __classPrivateFieldGet(this, _InferenceState_values, "f").get(value);
+            const kind = __classPrivateFieldGet(this, _InferenceState_values$1, "f").get(value);
             mergedKind =
-                mergedKind !== null ? mergeAbstractValues(mergedKind, kind) : kind;
+                mergedKind !== null ? mergeAbstractValues$1(mergedKind, kind) : kind;
         }
         CompilerError.invariant(mergedKind !== null, {
             reason: `InferReferenceEffects::kind: Expected at least one value`,
@@ -46399,29 +38802,29 @@ class InferenceState {
         return mergedKind;
     }
     alias(place, value) {
-        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(value.identifier.id);
+        const values = __classPrivateFieldGet(this, _InferenceState_variables$1, "f").get(value.identifier.id);
         CompilerError.invariant(values != null, {
             reason: `[hoisting] Expected value for identifier to be initialized`,
             description: `${printIdentifier(value.identifier)}`,
             loc: value.loc,
             suggestions: null,
         });
-        __classPrivateFieldGet(this, _InferenceState_variables, "f").set(place.identifier.id, new Set(values));
+        __classPrivateFieldGet(this, _InferenceState_variables$1, "f").set(place.identifier.id, new Set(values));
     }
     define(place, value) {
-        CompilerError.invariant(__classPrivateFieldGet(this, _InferenceState_values, "f").has(value), {
+        CompilerError.invariant(__classPrivateFieldGet(this, _InferenceState_values$1, "f").has(value), {
             reason: `Expected value to be initialized at '${printSourceLocation(value.loc)}'`,
             description: null,
             loc: value.loc,
             suggestions: null,
         });
-        __classPrivateFieldGet(this, _InferenceState_variables, "f").set(place.identifier.id, new Set([value]));
+        __classPrivateFieldGet(this, _InferenceState_variables$1, "f").set(place.identifier.id, new Set([value]));
     }
     isDefined(place) {
-        return __classPrivateFieldGet(this, _InferenceState_variables, "f").has(place.identifier.id);
+        return __classPrivateFieldGet(this, _InferenceState_variables$1, "f").has(place.identifier.id);
     }
     referenceAndRecordEffects(freezeActions, place, effectKind, reason) {
-        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(place.identifier.id);
+        const values = __classPrivateFieldGet(this, _InferenceState_variables$1, "f").get(place.identifier.id);
         if (values === undefined) {
             CompilerError.invariant(effectKind !== Effect.Store, {
                 reason: '[InferReferenceEffects] Unhandled store reference effect',
@@ -46446,7 +38849,7 @@ class InferenceState {
                         value.lvalue.kind === InstructionKind.Const))) {
                 continue;
             }
-            __classPrivateFieldGet(this, _InferenceState_values, "f").set(value, {
+            __classPrivateFieldGet(this, _InferenceState_values$1, "f").set(value, {
                 kind: ValueKind.Frozen,
                 reason,
                 context: new Set(),
@@ -46455,7 +38858,7 @@ class InferenceState {
                 (this.env.config.enablePreserveExistingMemoizationGuarantees ||
                     this.env.config.enableTransitivelyFreezeFunctionExpressions)) {
                 for (const operand of value.loweredFunc.func.context) {
-                    const operandValues = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(operand.identifier.id);
+                    const operandValues = __classPrivateFieldGet(this, _InferenceState_variables$1, "f").get(operand.identifier.id);
                     if (operandValues !== undefined) {
                         this.freezeValues(operandValues, reason);
                     }
@@ -46464,7 +38867,7 @@ class InferenceState {
         }
     }
     reference(place, effectKind, reason) {
-        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(place.identifier.id);
+        const values = __classPrivateFieldGet(this, _InferenceState_variables$1, "f").get(place.identifier.id);
         CompilerError.invariant(values !== undefined, {
             reason: '[InferReferenceEffects] Expected value to be initialized',
             description: null,
@@ -46568,25 +38971,25 @@ class InferenceState {
     merge(other) {
         let nextValues = null;
         let nextVariables = null;
-        for (const [id, thisValue] of __classPrivateFieldGet(this, _InferenceState_values, "f")) {
-            const otherValue = __classPrivateFieldGet(other, _InferenceState_values, "f").get(id);
+        for (const [id, thisValue] of __classPrivateFieldGet(this, _InferenceState_values$1, "f")) {
+            const otherValue = __classPrivateFieldGet(other, _InferenceState_values$1, "f").get(id);
             if (otherValue !== undefined) {
-                const mergedValue = mergeAbstractValues(thisValue, otherValue);
+                const mergedValue = mergeAbstractValues$1(thisValue, otherValue);
                 if (mergedValue !== thisValue) {
-                    nextValues = nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values, "f"));
+                    nextValues = nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values$1, "f"));
                     nextValues.set(id, mergedValue);
                 }
             }
         }
-        for (const [id, otherValue] of __classPrivateFieldGet(other, _InferenceState_values, "f")) {
-            if (__classPrivateFieldGet(this, _InferenceState_values, "f").has(id)) {
+        for (const [id, otherValue] of __classPrivateFieldGet(other, _InferenceState_values$1, "f")) {
+            if (__classPrivateFieldGet(this, _InferenceState_values$1, "f").has(id)) {
                 continue;
             }
-            nextValues = nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values, "f"));
+            nextValues = nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values$1, "f"));
             nextValues.set(id, otherValue);
         }
-        for (const [id, thisValues] of __classPrivateFieldGet(this, _InferenceState_variables, "f")) {
-            const otherValues = __classPrivateFieldGet(other, _InferenceState_variables, "f").get(id);
+        for (const [id, thisValues] of __classPrivateFieldGet(this, _InferenceState_variables$1, "f")) {
+            const otherValues = __classPrivateFieldGet(other, _InferenceState_variables$1, "f").get(id);
             if (otherValues !== undefined) {
                 let mergedValues = null;
                 for (const otherValue of otherValues) {
@@ -46596,27 +38999,27 @@ class InferenceState {
                     }
                 }
                 if (mergedValues !== null) {
-                    nextVariables = nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f"));
+                    nextVariables = nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables$1, "f"));
                     nextVariables.set(id, mergedValues);
                 }
             }
         }
-        for (const [id, otherValues] of __classPrivateFieldGet(other, _InferenceState_variables, "f")) {
-            if (__classPrivateFieldGet(this, _InferenceState_variables, "f").has(id)) {
+        for (const [id, otherValues] of __classPrivateFieldGet(other, _InferenceState_variables$1, "f")) {
+            if (__classPrivateFieldGet(this, _InferenceState_variables$1, "f").has(id)) {
                 continue;
             }
-            nextVariables = nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f"));
+            nextVariables = nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables$1, "f"));
             nextVariables.set(id, new Set(otherValues));
         }
         if (nextVariables === null && nextValues === null) {
             return null;
         }
         else {
-            return new InferenceState(this.env, __classPrivateFieldGet(this, _InferenceState_isFunctionExpression, "f"), nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values, "f")), nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f")));
+            return new InferenceState(this.env, __classPrivateFieldGet(this, _InferenceState_isFunctionExpression$1, "f"), nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values$1, "f")), nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables$1, "f")));
         }
     }
     clone() {
-        return new InferenceState(this.env, __classPrivateFieldGet(this, _InferenceState_isFunctionExpression, "f"), new Map(__classPrivateFieldGet(this, _InferenceState_values, "f")), new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f")));
+        return new InferenceState(this.env, __classPrivateFieldGet(this, _InferenceState_isFunctionExpression$1, "f"), new Map(__classPrivateFieldGet(this, _InferenceState_values$1, "f")), new Map(__classPrivateFieldGet(this, _InferenceState_variables$1, "f")));
     }
     debug() {
         const result = { values: {}, variables: {} };
@@ -46629,11 +39032,11 @@ class InferenceState {
             }
             return id;
         }
-        for (const [value, kind] of __classPrivateFieldGet(this, _InferenceState_values, "f")) {
+        for (const [value, kind] of __classPrivateFieldGet(this, _InferenceState_values$1, "f")) {
             const id = identify(value);
             result.values[id] = { kind, value: printMixedHIR(value) };
         }
-        for (const [variable, values] of __classPrivateFieldGet(this, _InferenceState_variables, "f")) {
+        for (const [variable, values] of __classPrivateFieldGet(this, _InferenceState_variables$1, "f")) {
             result.variables[`$${variable}`] = [...values].map(identify);
         }
         return result;
@@ -46641,7 +39044,7 @@ class InferenceState {
     inferPhi(phi) {
         const values = new Set();
         for (const [_, operand] of phi.operands) {
-            const operandValues = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(operand.identifier.id);
+            const operandValues = __classPrivateFieldGet(this, _InferenceState_variables$1, "f").get(operand.identifier.id);
             if (operandValues === undefined)
                 continue;
             for (const v of operandValues) {
@@ -46649,12 +39052,12 @@ class InferenceState {
             }
         }
         if (values.size > 0) {
-            __classPrivateFieldGet(this, _InferenceState_variables, "f").set(phi.place.identifier.id, values);
+            __classPrivateFieldGet(this, _InferenceState_variables$1, "f").set(phi.place.identifier.id, values);
         }
     }
-}
-_InferenceState_isFunctionExpression = new WeakMap(), _InferenceState_values = new WeakMap(), _InferenceState_variables = new WeakMap();
-function inferParam(param, initialState, paramKind) {
+};
+_InferenceState_isFunctionExpression$1 = new WeakMap(), _InferenceState_values$1 = new WeakMap(), _InferenceState_variables$1 = new WeakMap();
+function inferParam$1(param, initialState, paramKind) {
     let value;
     let place;
     if (param.kind === 'Identifier') {
@@ -46676,7 +39079,7 @@ function inferParam(param, initialState, paramKind) {
     initialState.initialize(value, paramKind);
     initialState.define(place, value);
 }
-function mergeValues(a, b) {
+function mergeValueKinds(a, b) {
     if (a === b) {
         return a;
     }
@@ -46717,20 +39120,12 @@ function mergeValues(a, b) {
         return ValueKind.Primitive;
     }
 }
-function isSuperset(a, b) {
-    for (const v of b) {
-        if (!a.has(v)) {
-            return false;
-        }
-    }
-    return true;
-}
-function mergeAbstractValues(a, b) {
-    const kind = mergeValues(a.kind, b.kind);
+function mergeAbstractValues$1(a, b) {
+    const kind = mergeValueKinds(a.kind, b.kind);
     if (kind === a.kind &&
         kind === b.kind &&
-        isSuperset(a.reason, b.reason) &&
-        isSuperset(a.context, b.context)) {
+        Set_isSuperset(a.reason, b.reason) &&
+        Set_isSuperset(a.context, b.context)) {
         return a;
     }
     const reason = new Set(a.reason);
@@ -46743,7 +39138,7 @@ function mergeAbstractValues(a, b) {
     }
     return { kind, reason, context };
 }
-function inferBlock(env, state, block, functionEffects) {
+function inferBlock$1(env, state, block, functionEffects) {
     var _a, _b, _c;
     for (const phi of block.phis) {
         state.inferPhi(phi);
@@ -47432,7 +39827,7 @@ function isKnownMutableEffect(effect) {
         }
     }
 }
-function areArgumentsImmutableAndNonMutating(state, args) {
+function areArgumentsImmutableAndNonMutating$1(state, args) {
     for (const arg of args) {
         if (arg.kind === 'Identifier' && arg.identifier.type.kind === 'Function') {
             const fnShape = state.env.getFunctionSignature(arg.identifier.type);
@@ -47509,7 +39904,7 @@ function inferCallEffects(state, instr, freezeActions, signature) {
     if (instrValue.kind === 'MethodCall' &&
         signature !== null &&
         signature.mutableOnlyIfOperandsAreMutable &&
-        areArgumentsImmutableAndNonMutating(state, instrValue.args)) {
+        areArgumentsImmutableAndNonMutating$1(state, instrValue.args)) {
         for (const arg of instrValue.args) {
             const place = arg.kind === 'Identifier' ? arg : arg.place;
             state.referenceAndRecordEffects(freezeActions, place, Effect.Read, ValueReason.Other);
@@ -48059,12 +40454,14 @@ class CollectDependenciesVisitor extends ReactiveFunctionVisitor {
                 };
             }
             case 'UnsupportedNode': {
-                CompilerError.invariant(false, {
-                    reason: `Unexpected unsupported node`,
-                    description: null,
-                    loc: value.loc,
-                    suggestions: null,
-                });
+                const lvalues = [];
+                if (lvalue !== null) {
+                    lvalues.push({ place: lvalue, level: MemoizationLevel.Never });
+                }
+                return {
+                    lvalues,
+                    rvalues: [],
+                };
             }
             default: {
                 assertExhaustive$1(value, `Unexpected value kind \`${value.kind}\``);
@@ -48188,6 +40585,13 @@ class PruneScopesTransform extends ReactiveFunctionTransform {
         if (value.kind === 'StoreLocal' && value.lvalue.kind === 'Reassign') {
             const ids = getOrInsertDefault(this.reassignments, value.lvalue.place.identifier.declarationId, new Set());
             ids.add(value.value.identifier);
+        }
+        else if (value.kind === 'LoadLocal' &&
+            value.place.identifier.scope != null &&
+            instruction.lvalue != null &&
+            instruction.lvalue.identifier.scope == null) {
+            const ids = getOrInsertDefault(this.reassignments, instruction.lvalue.identifier.declarationId, new Set());
+            ids.add(value.place.identifier);
         }
         else if (value.kind === 'FinishMemoize') {
             let decls;
@@ -48907,17 +41311,2462 @@ function areEqualMaps(a, b) {
     return true;
 }
 
+function hashEffect(effect) {
+    var _a;
+    switch (effect.kind) {
+        case 'Apply': {
+            return [
+                effect.kind,
+                effect.receiver.identifier.id,
+                effect.function.identifier.id,
+                effect.mutatesFunction,
+                effect.args
+                    .map(a => {
+                    if (a.kind === 'Hole') {
+                        return '';
+                    }
+                    else if (a.kind === 'Identifier') {
+                        return a.identifier.id;
+                    }
+                    else {
+                        return `...${a.place.identifier.id}`;
+                    }
+                })
+                    .join(','),
+                effect.into.identifier.id,
+            ].join(':');
+        }
+        case 'CreateFrom':
+        case 'ImmutableCapture':
+        case 'Assign':
+        case 'Alias':
+        case 'Capture':
+        case 'MaybeAlias': {
+            return [
+                effect.kind,
+                effect.from.identifier.id,
+                effect.into.identifier.id,
+            ].join(':');
+        }
+        case 'Create': {
+            return [
+                effect.kind,
+                effect.into.identifier.id,
+                effect.value,
+                effect.reason,
+            ].join(':');
+        }
+        case 'Freeze': {
+            return [effect.kind, effect.value.identifier.id, effect.reason].join(':');
+        }
+        case 'Impure':
+        case 'Render': {
+            return [effect.kind, effect.place.identifier.id].join(':');
+        }
+        case 'MutateFrozen':
+        case 'MutateGlobal': {
+            return [
+                effect.kind,
+                effect.place.identifier.id,
+                effect.error.severity,
+                effect.error.category,
+                effect.error.description,
+                printSourceLocation((_a = effect.error.primaryLocation()) !== null && _a !== void 0 ? _a : GeneratedSource),
+            ].join(':');
+        }
+        case 'Mutate':
+        case 'MutateConditionally':
+        case 'MutateTransitive':
+        case 'MutateTransitiveConditionally': {
+            return [effect.kind, effect.value.identifier.id].join(':');
+        }
+        case 'CreateFunction': {
+            return [
+                effect.kind,
+                effect.into.identifier.id,
+                effect.function.loweredFunc.func.returns.identifier.id,
+                effect.captures.map(p => p.identifier.id).join(','),
+            ].join(':');
+        }
+    }
+}
+
+var _InferenceState_isFunctionExpression, _InferenceState_values, _InferenceState_variables;
+function inferMutationAliasingEffects(fn, { isFunctionExpression } = {
+    isFunctionExpression: false,
+}) {
+    const initialState = InferenceState.empty(fn.env, isFunctionExpression);
+    const statesByBlock = new Map();
+    for (const ref of fn.context) {
+        const value = {
+            kind: 'ObjectExpression',
+            properties: [],
+            loc: ref.loc,
+        };
+        initialState.initialize(value, {
+            kind: ValueKind.Context,
+            reason: new Set([ValueReason.Other]),
+        });
+        initialState.define(ref, value);
+    }
+    const paramKind = isFunctionExpression
+        ? {
+            kind: ValueKind.Mutable,
+            reason: new Set([ValueReason.Other]),
+        }
+        : {
+            kind: ValueKind.Frozen,
+            reason: new Set([ValueReason.ReactiveFunctionArgument]),
+        };
+    if (fn.fnType === 'Component') {
+        CompilerError.invariant(fn.params.length <= 2, {
+            reason: 'Expected React component to have not more than two parameters: one for props and for ref',
+            description: null,
+            loc: fn.loc,
+            suggestions: null,
+        });
+        const [props, ref] = fn.params;
+        if (props != null) {
+            inferParam(props, initialState, paramKind);
+        }
+        if (ref != null) {
+            const place = ref.kind === 'Identifier' ? ref : ref.place;
+            const value = {
+                kind: 'ObjectExpression',
+                properties: [],
+                loc: place.loc,
+            };
+            initialState.initialize(value, {
+                kind: ValueKind.Mutable,
+                reason: new Set([ValueReason.Other]),
+            });
+            initialState.define(place, value);
+        }
+    }
+    else {
+        for (const param of fn.params) {
+            inferParam(param, initialState, paramKind);
+        }
+    }
+    const queuedStates = new Map();
+    function queue(blockId, state) {
+        var _a;
+        let queuedState = queuedStates.get(blockId);
+        if (queuedState != null) {
+            state = (_a = queuedState.merge(state)) !== null && _a !== void 0 ? _a : queuedState;
+            queuedStates.set(blockId, state);
+        }
+        else {
+            const prevState = statesByBlock.get(blockId);
+            const nextState = prevState != null ? prevState.merge(state) : state;
+            if (nextState != null) {
+                queuedStates.set(blockId, nextState);
+            }
+        }
+    }
+    queue(fn.body.entry, initialState);
+    const hoistedContextDeclarations = findHoistedContextDeclarations(fn);
+    const context = new Context$1(isFunctionExpression, fn, hoistedContextDeclarations);
+    let iterationCount = 0;
+    while (queuedStates.size !== 0) {
+        iterationCount++;
+        if (iterationCount > 100) {
+            CompilerError.invariant(false, {
+                reason: `[InferMutationAliasingEffects] Potential infinite loop`,
+                description: `A value, temporary place, or effect was not cached properly`,
+                loc: fn.loc,
+            });
+        }
+        for (const [blockId, block] of fn.body.blocks) {
+            const incomingState = queuedStates.get(blockId);
+            queuedStates.delete(blockId);
+            if (incomingState == null) {
+                continue;
+            }
+            statesByBlock.set(blockId, incomingState);
+            const state = incomingState.clone();
+            inferBlock(context, state, block);
+            for (const nextBlockId of eachTerminalSuccessor(block.terminal)) {
+                queue(nextBlockId, state);
+            }
+        }
+    }
+    return Ok(undefined);
+}
+function findHoistedContextDeclarations(fn) {
+    const hoisted = new Map();
+    function visit(place) {
+        if (hoisted.has(place.identifier.declarationId) &&
+            hoisted.get(place.identifier.declarationId) == null) {
+            hoisted.set(place.identifier.declarationId, place);
+        }
+    }
+    for (const block of fn.body.blocks.values()) {
+        for (const instr of block.instructions) {
+            if (instr.value.kind === 'DeclareContext') {
+                const kind = instr.value.lvalue.kind;
+                if (kind == InstructionKind.HoistedConst ||
+                    kind == InstructionKind.HoistedFunction ||
+                    kind == InstructionKind.HoistedLet) {
+                    hoisted.set(instr.value.lvalue.place.identifier.declarationId, null);
+                }
+            }
+            else {
+                for (const operand of eachInstructionValueOperand(instr.value)) {
+                    visit(operand);
+                }
+            }
+        }
+        for (const operand of eachTerminalOperand(block.terminal)) {
+            visit(operand);
+        }
+    }
+    return hoisted;
+}
+let Context$1 = class Context {
+    constructor(isFunctionExpression, fn, hoistedContextDeclarations) {
+        this.internedEffects = new Map();
+        this.instructionSignatureCache = new Map();
+        this.effectInstructionValueCache = new Map();
+        this.applySignatureCache = new Map();
+        this.catchHandlers = new Map();
+        this.functionSignatureCache = new Map();
+        this.isFuctionExpression = isFunctionExpression;
+        this.fn = fn;
+        this.hoistedContextDeclarations = hoistedContextDeclarations;
+    }
+    cacheApplySignature(signature, effect, f) {
+        const inner = getOrInsertDefault(this.applySignatureCache, signature, new Map());
+        return getOrInsertWith(inner, effect, f);
+    }
+    internEffect(effect) {
+        const hash = hashEffect(effect);
+        let interned = this.internedEffects.get(hash);
+        if (interned == null) {
+            this.internedEffects.set(hash, effect);
+            interned = effect;
+        }
+        return interned;
+    }
+};
+function inferParam(param, initialState, paramKind) {
+    const place = param.kind === 'Identifier' ? param : param.place;
+    const value = {
+        kind: 'Primitive',
+        loc: place.loc,
+        value: undefined,
+    };
+    initialState.initialize(value, paramKind);
+    initialState.define(place, value);
+}
+function inferBlock(context, state, block) {
+    for (const phi of block.phis) {
+        state.inferPhi(phi);
+    }
+    for (const instr of block.instructions) {
+        let instructionSignature = context.instructionSignatureCache.get(instr);
+        if (instructionSignature == null) {
+            instructionSignature = computeSignatureForInstruction(context, state.env, instr);
+            context.instructionSignatureCache.set(instr, instructionSignature);
+        }
+        const effects = applySignature(context, state, instructionSignature, instr);
+        instr.effects = effects;
+    }
+    const terminal = block.terminal;
+    if (terminal.kind === 'try' && terminal.handlerBinding != null) {
+        context.catchHandlers.set(terminal.handler, terminal.handlerBinding);
+    }
+    else if (terminal.kind === 'maybe-throw') {
+        const handlerParam = context.catchHandlers.get(terminal.handler);
+        if (handlerParam != null) {
+            CompilerError.invariant(state.kind(handlerParam) != null, {
+                reason: 'Expected catch binding to be intialized with a DeclareLocal Catch instruction',
+                loc: terminal.loc,
+            });
+            const effects = [];
+            for (const instr of block.instructions) {
+                if (instr.value.kind === 'CallExpression' ||
+                    instr.value.kind === 'MethodCall') {
+                    state.appendAlias(handlerParam, instr.lvalue);
+                    const kind = state.kind(instr.lvalue).kind;
+                    if (kind === ValueKind.Mutable || kind == ValueKind.Context) {
+                        effects.push(context.internEffect({
+                            kind: 'Alias',
+                            from: instr.lvalue,
+                            into: handlerParam,
+                        }));
+                    }
+                }
+            }
+            terminal.effects = effects.length !== 0 ? effects : null;
+        }
+    }
+    else if (terminal.kind === 'return') {
+        if (!context.isFuctionExpression) {
+            terminal.effects = [
+                context.internEffect({
+                    kind: 'Freeze',
+                    value: terminal.value,
+                    reason: ValueReason.JsxCaptured,
+                }),
+            ];
+        }
+    }
+}
+function applySignature(context, state, signature, instruction) {
+    var _a;
+    const effects = [];
+    if (instruction.value.kind === 'FunctionExpression' ||
+        instruction.value.kind === 'ObjectMethod') {
+        const aliasingEffects = (_a = instruction.value.loweredFunc.func.aliasingEffects) !== null && _a !== void 0 ? _a : [];
+        const context = new Set(instruction.value.loweredFunc.func.context.map(p => p.identifier.id));
+        for (const effect of aliasingEffects) {
+            if (effect.kind === 'Mutate' || effect.kind === 'MutateTransitive') {
+                if (!context.has(effect.value.identifier.id)) {
+                    continue;
+                }
+                const value = state.kind(effect.value);
+                switch (value.kind) {
+                    case ValueKind.Frozen: {
+                        const reason = getWriteErrorReason({
+                            kind: value.kind,
+                            reason: value.reason,
+                            context: new Set(),
+                        });
+                        const variable = effect.value.identifier.name !== null &&
+                            effect.value.identifier.name.kind === 'named'
+                            ? `\`${effect.value.identifier.name.value}\``
+                            : 'value';
+                        effects.push({
+                            kind: 'MutateFrozen',
+                            place: effect.value,
+                            error: CompilerDiagnostic.create({
+                                severity: ErrorSeverity.InvalidReact,
+                                category: 'This value cannot be modified',
+                                description: `${reason}.`,
+                            }).withDetail({
+                                kind: 'error',
+                                loc: effect.value.loc,
+                                message: `${variable} cannot be modified`,
+                            }),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    const initialized = new Set();
+    for (const effect of signature.effects) {
+        applyEffect(context, state, effect, initialized, effects);
+    }
+    if (!(state.isDefined(instruction.lvalue) && state.kind(instruction.lvalue))) {
+        CompilerError.invariant(false, {
+            reason: `Expected instruction lvalue to be initialized`,
+            loc: instruction.loc,
+        });
+    }
+    return effects.length !== 0 ? effects : null;
+}
+function applyEffect(context, state, _effect, initialized, effects) {
+    var _a, _b, _c, _d;
+    const effect = context.internEffect(_effect);
+    switch (effect.kind) {
+        case 'Freeze': {
+            const didFreeze = state.freeze(effect.value, effect.reason);
+            if (didFreeze) {
+                effects.push(effect);
+            }
+            break;
+        }
+        case 'Create': {
+            CompilerError.invariant(!initialized.has(effect.into.identifier.id), {
+                reason: `Cannot re-initialize variable within an instruction`,
+                description: `Re-initialized ${printPlace(effect.into)} in ${printAliasingEffect(effect)}`,
+                loc: effect.into.loc,
+            });
+            initialized.add(effect.into.identifier.id);
+            let value = context.effectInstructionValueCache.get(effect);
+            if (value == null) {
+                value = {
+                    kind: 'ObjectExpression',
+                    properties: [],
+                    loc: effect.into.loc,
+                };
+                context.effectInstructionValueCache.set(effect, value);
+            }
+            state.initialize(value, {
+                kind: effect.value,
+                reason: new Set([effect.reason]),
+            });
+            state.define(effect.into, value);
+            effects.push(effect);
+            break;
+        }
+        case 'ImmutableCapture': {
+            const kind = state.kind(effect.from).kind;
+            switch (kind) {
+                case ValueKind.Global:
+                case ValueKind.Primitive: {
+                    break;
+                }
+                default: {
+                    effects.push(effect);
+                }
+            }
+            break;
+        }
+        case 'CreateFrom': {
+            CompilerError.invariant(!initialized.has(effect.into.identifier.id), {
+                reason: `Cannot re-initialize variable within an instruction`,
+                description: `Re-initialized ${printPlace(effect.into)} in ${printAliasingEffect(effect)}`,
+                loc: effect.into.loc,
+            });
+            initialized.add(effect.into.identifier.id);
+            const fromValue = state.kind(effect.from);
+            let value = context.effectInstructionValueCache.get(effect);
+            if (value == null) {
+                value = {
+                    kind: 'ObjectExpression',
+                    properties: [],
+                    loc: effect.into.loc,
+                };
+                context.effectInstructionValueCache.set(effect, value);
+            }
+            state.initialize(value, {
+                kind: fromValue.kind,
+                reason: new Set(fromValue.reason),
+            });
+            state.define(effect.into, value);
+            switch (fromValue.kind) {
+                case ValueKind.Primitive:
+                case ValueKind.Global: {
+                    effects.push({
+                        kind: 'Create',
+                        value: fromValue.kind,
+                        into: effect.into,
+                        reason: (_a = [...fromValue.reason][0]) !== null && _a !== void 0 ? _a : ValueReason.Other,
+                    });
+                    break;
+                }
+                case ValueKind.Frozen: {
+                    effects.push({
+                        kind: 'Create',
+                        value: fromValue.kind,
+                        into: effect.into,
+                        reason: (_b = [...fromValue.reason][0]) !== null && _b !== void 0 ? _b : ValueReason.Other,
+                    });
+                    applyEffect(context, state, {
+                        kind: 'ImmutableCapture',
+                        from: effect.from,
+                        into: effect.into,
+                    }, initialized, effects);
+                    break;
+                }
+                default: {
+                    effects.push(effect);
+                }
+            }
+            break;
+        }
+        case 'CreateFunction': {
+            CompilerError.invariant(!initialized.has(effect.into.identifier.id), {
+                reason: `Cannot re-initialize variable within an instruction`,
+                description: `Re-initialized ${printPlace(effect.into)} in ${printAliasingEffect(effect)}`,
+                loc: effect.into.loc,
+            });
+            initialized.add(effect.into.identifier.id);
+            effects.push(effect);
+            const hasCaptures = effect.captures.some(capture => {
+                switch (state.kind(capture).kind) {
+                    case ValueKind.Context:
+                    case ValueKind.Mutable: {
+                        return true;
+                    }
+                    default: {
+                        return false;
+                    }
+                }
+            });
+            const hasTrackedSideEffects = (_c = effect.function.loweredFunc.func.aliasingEffects) === null || _c === void 0 ? void 0 : _c.some(effect => effect.kind === 'MutateFrozen' ||
+                effect.kind === 'MutateGlobal' ||
+                effect.kind === 'Impure');
+            const capturesRef = effect.function.loweredFunc.func.context.some(operand => isRefOrRefValue(operand.identifier));
+            const isMutable = hasCaptures || hasTrackedSideEffects || capturesRef;
+            for (const operand of effect.function.loweredFunc.func.context) {
+                if (operand.effect !== Effect.Capture) {
+                    continue;
+                }
+                const kind = state.kind(operand).kind;
+                if (kind === ValueKind.Primitive ||
+                    kind == ValueKind.Frozen ||
+                    kind == ValueKind.Global) {
+                    operand.effect = Effect.Read;
+                }
+            }
+            state.initialize(effect.function, {
+                kind: isMutable ? ValueKind.Mutable : ValueKind.Frozen,
+                reason: new Set([]),
+            });
+            state.define(effect.into, effect.function);
+            for (const capture of effect.captures) {
+                applyEffect(context, state, {
+                    kind: 'Capture',
+                    from: capture,
+                    into: effect.into,
+                }, initialized, effects);
+            }
+            break;
+        }
+        case 'MaybeAlias':
+        case 'Alias':
+        case 'Capture': {
+            CompilerError.invariant(effect.kind === 'Capture' || initialized.has(effect.into.identifier.id), {
+                reason: `Expected destination value to already be initialized within this instruction for Alias effect`,
+                description: `Destination ${printPlace(effect.into)} is not initialized in this instruction`,
+                loc: effect.into.loc,
+            });
+            const intoKind = state.kind(effect.into).kind;
+            let isMutableDesination;
+            switch (intoKind) {
+                case ValueKind.Context:
+                case ValueKind.Mutable:
+                case ValueKind.MaybeFrozen: {
+                    isMutableDesination = true;
+                    break;
+                }
+                default: {
+                    isMutableDesination = false;
+                    break;
+                }
+            }
+            const fromKind = state.kind(effect.from).kind;
+            let isMutableReferenceType;
+            switch (fromKind) {
+                case ValueKind.Global:
+                case ValueKind.Primitive: {
+                    isMutableReferenceType = false;
+                    break;
+                }
+                case ValueKind.Frozen: {
+                    isMutableReferenceType = false;
+                    applyEffect(context, state, {
+                        kind: 'ImmutableCapture',
+                        from: effect.from,
+                        into: effect.into,
+                    }, initialized, effects);
+                    break;
+                }
+                default: {
+                    isMutableReferenceType = true;
+                    break;
+                }
+            }
+            if (isMutableDesination && isMutableReferenceType) {
+                effects.push(effect);
+            }
+            break;
+        }
+        case 'Assign': {
+            CompilerError.invariant(!initialized.has(effect.into.identifier.id), {
+                reason: `Cannot re-initialize variable within an instruction`,
+                description: `Re-initialized ${printPlace(effect.into)} in ${printAliasingEffect(effect)}`,
+                loc: effect.into.loc,
+            });
+            initialized.add(effect.into.identifier.id);
+            const fromValue = state.kind(effect.from);
+            const fromKind = fromValue.kind;
+            switch (fromKind) {
+                case ValueKind.Frozen: {
+                    applyEffect(context, state, {
+                        kind: 'ImmutableCapture',
+                        from: effect.from,
+                        into: effect.into,
+                    }, initialized, effects);
+                    let value = context.effectInstructionValueCache.get(effect);
+                    if (value == null) {
+                        value = {
+                            kind: 'Primitive',
+                            value: undefined,
+                            loc: effect.from.loc,
+                        };
+                        context.effectInstructionValueCache.set(effect, value);
+                    }
+                    state.initialize(value, {
+                        kind: fromKind,
+                        reason: new Set(fromValue.reason),
+                    });
+                    state.define(effect.into, value);
+                    break;
+                }
+                case ValueKind.Global:
+                case ValueKind.Primitive: {
+                    let value = context.effectInstructionValueCache.get(effect);
+                    if (value == null) {
+                        value = {
+                            kind: 'Primitive',
+                            value: undefined,
+                            loc: effect.from.loc,
+                        };
+                        context.effectInstructionValueCache.set(effect, value);
+                    }
+                    state.initialize(value, {
+                        kind: fromKind,
+                        reason: new Set(fromValue.reason),
+                    });
+                    state.define(effect.into, value);
+                    break;
+                }
+                default: {
+                    state.assign(effect.into, effect.from);
+                    effects.push(effect);
+                    break;
+                }
+            }
+            break;
+        }
+        case 'Apply': {
+            const functionValues = state.values(effect.function);
+            if (functionValues.length === 1 &&
+                functionValues[0].kind === 'FunctionExpression' &&
+                functionValues[0].loweredFunc.func.aliasingEffects != null) {
+                const functionExpr = functionValues[0];
+                let signature = context.functionSignatureCache.get(functionExpr);
+                if (signature == null) {
+                    signature = buildSignatureFromFunctionExpression(state.env, functionExpr);
+                    context.functionSignatureCache.set(functionExpr, signature);
+                }
+                const signatureEffects = context.cacheApplySignature(signature, effect, () => computeEffectsForSignature(state.env, signature, effect.into, effect.receiver, effect.args, functionExpr.loweredFunc.func.context, effect.loc));
+                if (signatureEffects != null) {
+                    applyEffect(context, state, { kind: 'MutateTransitiveConditionally', value: effect.function }, initialized, effects);
+                    for (const signatureEffect of signatureEffects) {
+                        applyEffect(context, state, signatureEffect, initialized, effects);
+                    }
+                    break;
+                }
+            }
+            let signatureEffects = null;
+            if (((_d = effect.signature) === null || _d === void 0 ? void 0 : _d.aliasing) != null) {
+                const signature = effect.signature.aliasing;
+                signatureEffects = context.cacheApplySignature(effect.signature.aliasing, effect, () => computeEffectsForSignature(state.env, signature, effect.into, effect.receiver, effect.args, [], effect.loc));
+            }
+            if (signatureEffects != null) {
+                for (const signatureEffect of signatureEffects) {
+                    applyEffect(context, state, signatureEffect, initialized, effects);
+                }
+            }
+            else if (effect.signature != null) {
+                const legacyEffects = computeEffectsForLegacySignature(state, effect.signature, effect.into, effect.receiver, effect.args, effect.loc);
+                for (const legacyEffect of legacyEffects) {
+                    applyEffect(context, state, legacyEffect, initialized, effects);
+                }
+            }
+            else {
+                applyEffect(context, state, {
+                    kind: 'Create',
+                    into: effect.into,
+                    value: ValueKind.Mutable,
+                    reason: ValueReason.Other,
+                }, initialized, effects);
+                for (const arg of [effect.receiver, effect.function, ...effect.args]) {
+                    if (arg.kind === 'Hole') {
+                        continue;
+                    }
+                    const operand = arg.kind === 'Identifier' ? arg : arg.place;
+                    if (operand !== effect.function || effect.mutatesFunction) {
+                        applyEffect(context, state, {
+                            kind: 'MutateTransitiveConditionally',
+                            value: operand,
+                        }, initialized, effects);
+                    }
+                    const mutateIterator = arg.kind === 'Spread' ? conditionallyMutateIterator(operand) : null;
+                    if (mutateIterator) {
+                        applyEffect(context, state, mutateIterator, initialized, effects);
+                    }
+                    applyEffect(context, state, { kind: 'MaybeAlias', from: operand, into: effect.into }, initialized, effects);
+                    for (const otherArg of [
+                        effect.receiver,
+                        effect.function,
+                        ...effect.args,
+                    ]) {
+                        if (otherArg.kind === 'Hole') {
+                            continue;
+                        }
+                        const other = otherArg.kind === 'Identifier' ? otherArg : otherArg.place;
+                        if (other === arg) {
+                            continue;
+                        }
+                        applyEffect(context, state, {
+                            kind: 'Capture',
+                            from: operand,
+                            into: other,
+                        }, initialized, effects);
+                    }
+                }
+            }
+            break;
+        }
+        case 'Mutate':
+        case 'MutateConditionally':
+        case 'MutateTransitive':
+        case 'MutateTransitiveConditionally': {
+            const mutationKind = state.mutate(effect.kind, effect.value);
+            if (mutationKind === 'mutate') {
+                effects.push(effect);
+            }
+            else if (mutationKind === 'mutate-ref') ;
+            else if (mutationKind !== 'none' &&
+                (effect.kind === 'Mutate' || effect.kind === 'MutateTransitive')) {
+                const value = state.kind(effect.value);
+                if (mutationKind === 'mutate-frozen' &&
+                    context.hoistedContextDeclarations.has(effect.value.identifier.declarationId)) {
+                    const variable = effect.value.identifier.name !== null &&
+                        effect.value.identifier.name.kind === 'named'
+                        ? `\`${effect.value.identifier.name.value}\``
+                        : null;
+                    const hoistedAccess = context.hoistedContextDeclarations.get(effect.value.identifier.declarationId);
+                    const diagnostic = CompilerDiagnostic.create({
+                        severity: ErrorSeverity.InvalidReact,
+                        category: 'Cannot access variable before it is declared',
+                        description: `${variable !== null && variable !== void 0 ? variable : 'This variable'} is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.`,
+                    });
+                    if (hoistedAccess != null && hoistedAccess.loc != effect.value.loc) {
+                        diagnostic.withDetail({
+                            kind: 'error',
+                            loc: hoistedAccess.loc,
+                            message: `${variable !== null && variable !== void 0 ? variable : 'variable'} accessed before it is declared`,
+                        });
+                    }
+                    diagnostic.withDetail({
+                        kind: 'error',
+                        loc: effect.value.loc,
+                        message: `${variable !== null && variable !== void 0 ? variable : 'variable'} is declared here`,
+                    });
+                    applyEffect(context, state, {
+                        kind: 'MutateFrozen',
+                        place: effect.value,
+                        error: diagnostic,
+                    }, initialized, effects);
+                }
+                else {
+                    const reason = getWriteErrorReason({
+                        kind: value.kind,
+                        reason: value.reason,
+                        context: new Set(),
+                    });
+                    const variable = effect.value.identifier.name !== null &&
+                        effect.value.identifier.name.kind === 'named'
+                        ? `\`${effect.value.identifier.name.value}\``
+                        : 'value';
+                    applyEffect(context, state, {
+                        kind: value.kind === ValueKind.Frozen
+                            ? 'MutateFrozen'
+                            : 'MutateGlobal',
+                        place: effect.value,
+                        error: CompilerDiagnostic.create({
+                            severity: ErrorSeverity.InvalidReact,
+                            category: 'This value cannot be modified',
+                            description: `${reason}.`,
+                        }).withDetail({
+                            kind: 'error',
+                            loc: effect.value.loc,
+                            message: `${variable} cannot be modified`,
+                        }),
+                    }, initialized, effects);
+                }
+            }
+            break;
+        }
+        case 'Impure':
+        case 'Render':
+        case 'MutateFrozen':
+        case 'MutateGlobal': {
+            effects.push(effect);
+            break;
+        }
+        default: {
+            assertExhaustive$1(effect, `Unexpected effect kind '${effect.kind}'`);
+        }
+    }
+}
+class InferenceState {
+    constructor(env, isFunctionExpression, values, variables) {
+        _InferenceState_isFunctionExpression.set(this, void 0);
+        _InferenceState_values.set(this, void 0);
+        _InferenceState_variables.set(this, void 0);
+        this.env = env;
+        __classPrivateFieldSet(this, _InferenceState_isFunctionExpression, isFunctionExpression, "f");
+        __classPrivateFieldSet(this, _InferenceState_values, values, "f");
+        __classPrivateFieldSet(this, _InferenceState_variables, variables, "f");
+    }
+    static empty(env, isFunctionExpression) {
+        return new InferenceState(env, isFunctionExpression, new Map(), new Map());
+    }
+    get isFunctionExpression() {
+        return __classPrivateFieldGet(this, _InferenceState_isFunctionExpression, "f");
+    }
+    initialize(value, kind) {
+        CompilerError.invariant(value.kind !== 'LoadLocal', {
+            reason: '[InferMutationAliasingEffects] Expected all top-level identifiers to be defined as variables, not values',
+            description: null,
+            loc: value.loc,
+            suggestions: null,
+        });
+        __classPrivateFieldGet(this, _InferenceState_values, "f").set(value, kind);
+    }
+    values(place) {
+        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(place.identifier.id);
+        CompilerError.invariant(values != null, {
+            reason: `[InferMutationAliasingEffects] Expected value kind to be initialized`,
+            description: `${printPlace(place)}`,
+            loc: place.loc,
+            suggestions: null,
+        });
+        return Array.from(values);
+    }
+    kind(place) {
+        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(place.identifier.id);
+        CompilerError.invariant(values != null, {
+            reason: `[InferMutationAliasingEffects] Expected value kind to be initialized`,
+            description: `${printPlace(place)}`,
+            loc: place.loc,
+            suggestions: null,
+        });
+        let mergedKind = null;
+        for (const value of values) {
+            const kind = __classPrivateFieldGet(this, _InferenceState_values, "f").get(value);
+            mergedKind =
+                mergedKind !== null ? mergeAbstractValues(mergedKind, kind) : kind;
+        }
+        CompilerError.invariant(mergedKind !== null, {
+            reason: `[InferMutationAliasingEffects] Expected at least one value`,
+            description: `No value found at \`${printPlace(place)}\``,
+            loc: place.loc,
+            suggestions: null,
+        });
+        return mergedKind;
+    }
+    assign(place, value) {
+        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(value.identifier.id);
+        CompilerError.invariant(values != null, {
+            reason: `[InferMutationAliasingEffects] Expected value for identifier to be initialized`,
+            description: `${printIdentifier(value.identifier)}`,
+            loc: value.loc,
+            suggestions: null,
+        });
+        __classPrivateFieldGet(this, _InferenceState_variables, "f").set(place.identifier.id, new Set(values));
+    }
+    appendAlias(place, value) {
+        const values = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(value.identifier.id);
+        CompilerError.invariant(values != null, {
+            reason: `[InferMutationAliasingEffects] Expected value for identifier to be initialized`,
+            description: `${printIdentifier(value.identifier)}`,
+            loc: value.loc,
+            suggestions: null,
+        });
+        const prevValues = this.values(place);
+        __classPrivateFieldGet(this, _InferenceState_variables, "f").set(place.identifier.id, new Set([...prevValues, ...values]));
+    }
+    define(place, value) {
+        CompilerError.invariant(__classPrivateFieldGet(this, _InferenceState_values, "f").has(value), {
+            reason: `[InferMutationAliasingEffects] Expected value to be initialized at '${printSourceLocation(value.loc)}'`,
+            description: printInstructionValue(value),
+            loc: value.loc,
+            suggestions: null,
+        });
+        __classPrivateFieldGet(this, _InferenceState_variables, "f").set(place.identifier.id, new Set([value]));
+    }
+    isDefined(place) {
+        return __classPrivateFieldGet(this, _InferenceState_variables, "f").has(place.identifier.id);
+    }
+    freeze(place, reason) {
+        const value = this.kind(place);
+        switch (value.kind) {
+            case ValueKind.Context:
+            case ValueKind.Mutable:
+            case ValueKind.MaybeFrozen: {
+                const values = this.values(place);
+                for (const instrValue of values) {
+                    this.freezeValue(instrValue, reason);
+                }
+                return true;
+            }
+            case ValueKind.Frozen:
+            case ValueKind.Global:
+            case ValueKind.Primitive: {
+                return false;
+            }
+            default: {
+                assertExhaustive$1(value.kind, `Unexpected value kind '${value.kind}'`);
+            }
+        }
+    }
+    freezeValue(value, reason) {
+        __classPrivateFieldGet(this, _InferenceState_values, "f").set(value, {
+            kind: ValueKind.Frozen,
+            reason: new Set([reason]),
+        });
+        if (value.kind === 'FunctionExpression' &&
+            (this.env.config.enablePreserveExistingMemoizationGuarantees ||
+                this.env.config.enableTransitivelyFreezeFunctionExpressions)) {
+            for (const place of value.loweredFunc.func.context) {
+                this.freeze(place, reason);
+            }
+        }
+    }
+    mutate(variant, place) {
+        if (isRefOrRefValue(place.identifier)) {
+            return 'mutate-ref';
+        }
+        const kind = this.kind(place).kind;
+        switch (variant) {
+            case 'MutateConditionally':
+            case 'MutateTransitiveConditionally': {
+                switch (kind) {
+                    case ValueKind.Mutable:
+                    case ValueKind.Context: {
+                        return 'mutate';
+                    }
+                    default: {
+                        return 'none';
+                    }
+                }
+            }
+            case 'Mutate':
+            case 'MutateTransitive': {
+                switch (kind) {
+                    case ValueKind.Mutable:
+                    case ValueKind.Context: {
+                        return 'mutate';
+                    }
+                    case ValueKind.Primitive: {
+                        return 'none';
+                    }
+                    case ValueKind.Frozen: {
+                        return 'mutate-frozen';
+                    }
+                    case ValueKind.Global: {
+                        return 'mutate-global';
+                    }
+                    case ValueKind.MaybeFrozen: {
+                        return 'mutate-frozen';
+                    }
+                    default: {
+                        assertExhaustive$1(kind, `Unexpected kind ${kind}`);
+                    }
+                }
+            }
+            default: {
+                assertExhaustive$1(variant, `Unexpected mutation variant ${variant}`);
+            }
+        }
+    }
+    merge(other) {
+        let nextValues = null;
+        let nextVariables = null;
+        for (const [id, thisValue] of __classPrivateFieldGet(this, _InferenceState_values, "f")) {
+            const otherValue = __classPrivateFieldGet(other, _InferenceState_values, "f").get(id);
+            if (otherValue !== undefined) {
+                const mergedValue = mergeAbstractValues(thisValue, otherValue);
+                if (mergedValue !== thisValue) {
+                    nextValues = nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values, "f"));
+                    nextValues.set(id, mergedValue);
+                }
+            }
+        }
+        for (const [id, otherValue] of __classPrivateFieldGet(other, _InferenceState_values, "f")) {
+            if (__classPrivateFieldGet(this, _InferenceState_values, "f").has(id)) {
+                continue;
+            }
+            nextValues = nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values, "f"));
+            nextValues.set(id, otherValue);
+        }
+        for (const [id, thisValues] of __classPrivateFieldGet(this, _InferenceState_variables, "f")) {
+            const otherValues = __classPrivateFieldGet(other, _InferenceState_variables, "f").get(id);
+            if (otherValues !== undefined) {
+                let mergedValues = null;
+                for (const otherValue of otherValues) {
+                    if (!thisValues.has(otherValue)) {
+                        mergedValues = mergedValues !== null && mergedValues !== void 0 ? mergedValues : new Set(thisValues);
+                        mergedValues.add(otherValue);
+                    }
+                }
+                if (mergedValues !== null) {
+                    nextVariables = nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f"));
+                    nextVariables.set(id, mergedValues);
+                }
+            }
+        }
+        for (const [id, otherValues] of __classPrivateFieldGet(other, _InferenceState_variables, "f")) {
+            if (__classPrivateFieldGet(this, _InferenceState_variables, "f").has(id)) {
+                continue;
+            }
+            nextVariables = nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f"));
+            nextVariables.set(id, new Set(otherValues));
+        }
+        if (nextVariables === null && nextValues === null) {
+            return null;
+        }
+        else {
+            return new InferenceState(this.env, __classPrivateFieldGet(this, _InferenceState_isFunctionExpression, "f"), nextValues !== null && nextValues !== void 0 ? nextValues : new Map(__classPrivateFieldGet(this, _InferenceState_values, "f")), nextVariables !== null && nextVariables !== void 0 ? nextVariables : new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f")));
+        }
+    }
+    clone() {
+        return new InferenceState(this.env, __classPrivateFieldGet(this, _InferenceState_isFunctionExpression, "f"), new Map(__classPrivateFieldGet(this, _InferenceState_values, "f")), new Map(__classPrivateFieldGet(this, _InferenceState_variables, "f")));
+    }
+    debug() {
+        const result = { values: {}, variables: {} };
+        const objects = new Map();
+        function identify(value) {
+            let id = objects.get(value);
+            if (id == null) {
+                id = objects.size;
+                objects.set(value, id);
+            }
+            return id;
+        }
+        for (const [value, kind] of __classPrivateFieldGet(this, _InferenceState_values, "f")) {
+            const id = identify(value);
+            result.values[id] = {
+                abstract: this.debugAbstractValue(kind),
+                value: printInstructionValue(value),
+            };
+        }
+        for (const [variable, values] of __classPrivateFieldGet(this, _InferenceState_variables, "f")) {
+            result.variables[`$${variable}`] = [...values].map(identify);
+        }
+        return result;
+    }
+    debugAbstractValue(value) {
+        return {
+            kind: value.kind,
+            reason: [...value.reason],
+        };
+    }
+    inferPhi(phi) {
+        const values = new Set();
+        for (const [_, operand] of phi.operands) {
+            const operandValues = __classPrivateFieldGet(this, _InferenceState_variables, "f").get(operand.identifier.id);
+            if (operandValues === undefined)
+                continue;
+            for (const v of operandValues) {
+                values.add(v);
+            }
+        }
+        if (values.size > 0) {
+            __classPrivateFieldGet(this, _InferenceState_variables, "f").set(phi.place.identifier.id, values);
+        }
+    }
+}
+_InferenceState_isFunctionExpression = new WeakMap(), _InferenceState_values = new WeakMap(), _InferenceState_variables = new WeakMap();
+function mergeAbstractValues(a, b) {
+    const kind = mergeValueKinds(a.kind, b.kind);
+    if (kind === a.kind &&
+        kind === b.kind &&
+        Set_isSuperset(a.reason, b.reason)) {
+        return a;
+    }
+    const reason = new Set(a.reason);
+    for (const r of b.reason) {
+        reason.add(r);
+    }
+    return { kind, reason };
+}
+function conditionallyMutateIterator(place) {
+    if (!(isArrayType(place.identifier) ||
+        isSetType(place.identifier) ||
+        isMapType(place.identifier))) {
+        return {
+            kind: 'MutateTransitiveConditionally',
+            value: place,
+        };
+    }
+    return null;
+}
+function computeSignatureForInstruction(context, env, instr) {
+    const { lvalue, value } = instr;
+    const effects = [];
+    switch (value.kind) {
+        case 'ArrayExpression': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Mutable,
+                reason: ValueReason.Other,
+            });
+            for (const element of value.elements) {
+                if (element.kind === 'Identifier') {
+                    effects.push({
+                        kind: 'Capture',
+                        from: element,
+                        into: lvalue,
+                    });
+                }
+                else if (element.kind === 'Spread') {
+                    const mutateIterator = conditionallyMutateIterator(element.place);
+                    if (mutateIterator != null) {
+                        effects.push(mutateIterator);
+                    }
+                    effects.push({
+                        kind: 'Capture',
+                        from: element.place,
+                        into: lvalue,
+                    });
+                }
+                else {
+                    continue;
+                }
+            }
+            break;
+        }
+        case 'ObjectExpression': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Mutable,
+                reason: ValueReason.Other,
+            });
+            for (const property of value.properties) {
+                if (property.kind === 'ObjectProperty') {
+                    effects.push({
+                        kind: 'Capture',
+                        from: property.place,
+                        into: lvalue,
+                    });
+                }
+                else {
+                    effects.push({
+                        kind: 'Capture',
+                        from: property.place,
+                        into: lvalue,
+                    });
+                }
+            }
+            break;
+        }
+        case 'Await': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Mutable,
+                reason: ValueReason.Other,
+            });
+            effects.push({ kind: 'MutateTransitiveConditionally', value: value.value });
+            effects.push({
+                kind: 'Capture',
+                from: value.value,
+                into: lvalue,
+            });
+            break;
+        }
+        case 'NewExpression':
+        case 'CallExpression':
+        case 'MethodCall': {
+            let callee;
+            let receiver;
+            let mutatesCallee;
+            if (value.kind === 'NewExpression') {
+                callee = value.callee;
+                receiver = value.callee;
+                mutatesCallee = false;
+            }
+            else if (value.kind === 'CallExpression') {
+                callee = value.callee;
+                receiver = value.callee;
+                mutatesCallee = true;
+            }
+            else if (value.kind === 'MethodCall') {
+                callee = value.property;
+                receiver = value.receiver;
+                mutatesCallee = false;
+            }
+            else {
+                assertExhaustive$1(value, `Unexpected value kind '${value.kind}'`);
+            }
+            const signature = getFunctionCallSignature(env, callee.identifier.type);
+            effects.push({
+                kind: 'Apply',
+                receiver,
+                function: callee,
+                mutatesFunction: mutatesCallee,
+                args: value.args,
+                into: lvalue,
+                signature,
+                loc: value.loc,
+            });
+            break;
+        }
+        case 'PropertyDelete':
+        case 'ComputedDelete': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            effects.push({ kind: 'Mutate', value: value.object });
+            break;
+        }
+        case 'PropertyLoad':
+        case 'ComputedLoad': {
+            if (isPrimitiveType(lvalue.identifier)) {
+                effects.push({
+                    kind: 'Create',
+                    into: lvalue,
+                    value: ValueKind.Primitive,
+                    reason: ValueReason.Other,
+                });
+            }
+            else {
+                effects.push({
+                    kind: 'CreateFrom',
+                    from: value.object,
+                    into: lvalue,
+                });
+            }
+            break;
+        }
+        case 'PropertyStore':
+        case 'ComputedStore': {
+            effects.push({ kind: 'Mutate', value: value.object });
+            effects.push({
+                kind: 'Capture',
+                from: value.value,
+                into: value.object,
+            });
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            break;
+        }
+        case 'ObjectMethod':
+        case 'FunctionExpression': {
+            effects.push({
+                kind: 'CreateFunction',
+                into: lvalue,
+                function: value,
+                captures: value.loweredFunc.func.context.filter(operand => operand.effect === Effect.Capture),
+            });
+            break;
+        }
+        case 'GetIterator': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Mutable,
+                reason: ValueReason.Other,
+            });
+            if (isArrayType(value.collection.identifier) ||
+                isMapType(value.collection.identifier) ||
+                isSetType(value.collection.identifier)) {
+                effects.push({
+                    kind: 'Capture',
+                    from: value.collection,
+                    into: lvalue,
+                });
+            }
+            else {
+                effects.push({ kind: 'Alias', from: value.collection, into: lvalue });
+                effects.push({
+                    kind: 'MutateTransitiveConditionally',
+                    value: value.collection,
+                });
+            }
+            break;
+        }
+        case 'IteratorNext': {
+            effects.push({ kind: 'MutateConditionally', value: value.iterator });
+            effects.push({
+                kind: 'CreateFrom',
+                from: value.collection,
+                into: lvalue,
+            });
+            break;
+        }
+        case 'NextPropertyOf': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            break;
+        }
+        case 'JsxExpression':
+        case 'JsxFragment': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Frozen,
+                reason: ValueReason.JsxCaptured,
+            });
+            for (const operand of eachInstructionValueOperand(value)) {
+                effects.push({
+                    kind: 'Freeze',
+                    value: operand,
+                    reason: ValueReason.JsxCaptured,
+                });
+                effects.push({
+                    kind: 'Capture',
+                    from: operand,
+                    into: lvalue,
+                });
+            }
+            if (value.kind === 'JsxExpression') {
+                if (value.tag.kind === 'Identifier') {
+                    effects.push({
+                        kind: 'Render',
+                        place: value.tag,
+                    });
+                }
+                if (value.children != null) {
+                    for (const child of value.children) {
+                        effects.push({
+                            kind: 'Render',
+                            place: child,
+                        });
+                    }
+                }
+            }
+            break;
+        }
+        case 'DeclareLocal': {
+            effects.push({
+                kind: 'Create',
+                into: value.lvalue.place,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            break;
+        }
+        case 'Destructure': {
+            for (const patternItem of eachPatternItem(value.lvalue.pattern)) {
+                const place = patternItem.kind === 'Identifier' ? patternItem : patternItem.place;
+                if (isPrimitiveType(place.identifier)) {
+                    effects.push({
+                        kind: 'Create',
+                        into: place,
+                        value: ValueKind.Primitive,
+                        reason: ValueReason.Other,
+                    });
+                }
+                else if (patternItem.kind === 'Identifier') {
+                    effects.push({
+                        kind: 'CreateFrom',
+                        from: value.value,
+                        into: place,
+                    });
+                }
+                else {
+                    effects.push({
+                        kind: 'Create',
+                        into: place,
+                        reason: ValueReason.Other,
+                        value: ValueKind.Mutable,
+                    });
+                    effects.push({
+                        kind: 'Capture',
+                        from: value.value,
+                        into: place,
+                    });
+                }
+            }
+            effects.push({ kind: 'Assign', from: value.value, into: lvalue });
+            break;
+        }
+        case 'LoadContext': {
+            effects.push({ kind: 'CreateFrom', from: value.place, into: lvalue });
+            break;
+        }
+        case 'DeclareContext': {
+            const kind = value.lvalue.kind;
+            if (!context.hoistedContextDeclarations.has(value.lvalue.place.identifier.declarationId) ||
+                kind === InstructionKind.HoistedConst ||
+                kind === InstructionKind.HoistedFunction ||
+                kind === InstructionKind.HoistedLet) {
+                effects.push({
+                    kind: 'Create',
+                    into: value.lvalue.place,
+                    value: ValueKind.Mutable,
+                    reason: ValueReason.Other,
+                });
+            }
+            else {
+                effects.push({ kind: 'Mutate', value: value.lvalue.place });
+            }
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            break;
+        }
+        case 'StoreContext': {
+            if (value.lvalue.kind === InstructionKind.Reassign ||
+                context.hoistedContextDeclarations.has(value.lvalue.place.identifier.declarationId)) {
+                effects.push({ kind: 'Mutate', value: value.lvalue.place });
+            }
+            else {
+                effects.push({
+                    kind: 'Create',
+                    into: value.lvalue.place,
+                    value: ValueKind.Mutable,
+                    reason: ValueReason.Other,
+                });
+            }
+            effects.push({
+                kind: 'Capture',
+                from: value.value,
+                into: value.lvalue.place,
+            });
+            effects.push({ kind: 'Assign', from: value.value, into: lvalue });
+            break;
+        }
+        case 'LoadLocal': {
+            effects.push({ kind: 'Assign', from: value.place, into: lvalue });
+            break;
+        }
+        case 'StoreLocal': {
+            effects.push({
+                kind: 'Assign',
+                from: value.value,
+                into: value.lvalue.place,
+            });
+            effects.push({ kind: 'Assign', from: value.value, into: lvalue });
+            break;
+        }
+        case 'PostfixUpdate':
+        case 'PrefixUpdate': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            effects.push({
+                kind: 'Create',
+                into: value.lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            break;
+        }
+        case 'StoreGlobal': {
+            const variable = `\`${value.name}\``;
+            effects.push({
+                kind: 'MutateGlobal',
+                place: value.value,
+                error: CompilerDiagnostic.create({
+                    severity: ErrorSeverity.InvalidReact,
+                    category: 'Cannot reassign variables declared outside of the component/hook',
+                    description: `Variable ${variable} is declared outside of the component/hook. Reassigning this value during render is a form of side effect, which can cause unpredictable behavior depending on when the component happens to re-render. If this variable is used in rendering, use useState instead. Otherwise, consider updating it in an effect. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#side-effects-must-run-outside-of-render)`,
+                }).withDetail({
+                    kind: 'error',
+                    loc: instr.loc,
+                    message: `${variable} cannot be reassigned`,
+                }),
+            });
+            effects.push({ kind: 'Assign', from: value.value, into: lvalue });
+            break;
+        }
+        case 'TypeCastExpression': {
+            effects.push({ kind: 'Assign', from: value.value, into: lvalue });
+            break;
+        }
+        case 'LoadGlobal': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Global,
+                reason: ValueReason.Global,
+            });
+            break;
+        }
+        case 'StartMemoize':
+        case 'FinishMemoize': {
+            if (env.config.enablePreserveExistingMemoizationGuarantees) {
+                for (const operand of eachInstructionValueOperand(value)) {
+                    effects.push({
+                        kind: 'Freeze',
+                        value: operand,
+                        reason: ValueReason.Other,
+                    });
+                }
+            }
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            break;
+        }
+        case 'TaggedTemplateExpression':
+        case 'BinaryExpression':
+        case 'Debugger':
+        case 'JSXText':
+        case 'MetaProperty':
+        case 'Primitive':
+        case 'RegExpLiteral':
+        case 'TemplateLiteral':
+        case 'UnaryExpression':
+        case 'UnsupportedNode': {
+            effects.push({
+                kind: 'Create',
+                into: lvalue,
+                value: ValueKind.Primitive,
+                reason: ValueReason.Other,
+            });
+            break;
+        }
+    }
+    return {
+        effects,
+    };
+}
+function computeEffectsForLegacySignature(state, signature, lvalue, receiver, args, loc) {
+    var _a, _b;
+    const returnValueReason = (_a = signature.returnValueReason) !== null && _a !== void 0 ? _a : ValueReason.Other;
+    const effects = [];
+    effects.push({
+        kind: 'Create',
+        into: lvalue,
+        value: signature.returnValueKind,
+        reason: returnValueReason,
+    });
+    if (signature.impure && state.env.config.validateNoImpureFunctionsInRender) {
+        effects.push({
+            kind: 'Impure',
+            place: receiver,
+            error: CompilerDiagnostic.create({
+                severity: ErrorSeverity.InvalidReact,
+                category: 'Cannot call impure function during render',
+                description: (signature.canonicalName != null
+                    ? `\`${signature.canonicalName}\` is an impure function. `
+                    : '') +
+                    'Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent)',
+            }).withDetail({
+                kind: 'error',
+                loc,
+                message: 'Cannot call impure function',
+            }),
+        });
+    }
+    const stores = [];
+    const captures = [];
+    function visit(place, effect) {
+        switch (effect) {
+            case Effect.Store: {
+                effects.push({
+                    kind: 'Mutate',
+                    value: place,
+                });
+                stores.push(place);
+                break;
+            }
+            case Effect.Capture: {
+                captures.push(place);
+                break;
+            }
+            case Effect.ConditionallyMutate: {
+                effects.push({
+                    kind: 'MutateTransitiveConditionally',
+                    value: place,
+                });
+                break;
+            }
+            case Effect.ConditionallyMutateIterator: {
+                const mutateIterator = conditionallyMutateIterator(place);
+                if (mutateIterator != null) {
+                    effects.push(mutateIterator);
+                }
+                effects.push({
+                    kind: 'Capture',
+                    from: place,
+                    into: lvalue,
+                });
+                break;
+            }
+            case Effect.Freeze: {
+                effects.push({
+                    kind: 'Freeze',
+                    value: place,
+                    reason: returnValueReason,
+                });
+                break;
+            }
+            case Effect.Mutate: {
+                effects.push({ kind: 'MutateTransitive', value: place });
+                break;
+            }
+            case Effect.Read: {
+                effects.push({
+                    kind: 'ImmutableCapture',
+                    from: place,
+                    into: lvalue,
+                });
+                break;
+            }
+        }
+    }
+    if (signature.mutableOnlyIfOperandsAreMutable &&
+        areArgumentsImmutableAndNonMutating(state, args)) {
+        effects.push({
+            kind: 'Alias',
+            from: receiver,
+            into: lvalue,
+        });
+        for (const arg of args) {
+            if (arg.kind === 'Hole') {
+                continue;
+            }
+            const place = arg.kind === 'Identifier' ? arg : arg.place;
+            effects.push({
+                kind: 'ImmutableCapture',
+                from: place,
+                into: lvalue,
+            });
+        }
+        return effects;
+    }
+    if (signature.calleeEffect !== Effect.Capture) {
+        effects.push({
+            kind: 'Alias',
+            from: receiver,
+            into: lvalue,
+        });
+    }
+    visit(receiver, signature.calleeEffect);
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg.kind === 'Hole') {
+            continue;
+        }
+        const place = arg.kind === 'Identifier' ? arg : arg.place;
+        const signatureEffect = arg.kind === 'Identifier' && i < signature.positionalParams.length
+            ? signature.positionalParams[i]
+            : ((_b = signature.restParam) !== null && _b !== void 0 ? _b : Effect.ConditionallyMutate);
+        const effect = getArgumentEffect(signatureEffect, arg);
+        visit(place, effect);
+    }
+    if (captures.length !== 0) {
+        if (stores.length === 0) {
+            for (const capture of captures) {
+                effects.push({ kind: 'Alias', from: capture, into: lvalue });
+            }
+        }
+        else {
+            for (const capture of captures) {
+                for (const store of stores) {
+                    effects.push({ kind: 'Capture', from: capture, into: store });
+                }
+            }
+        }
+    }
+    return effects;
+}
+function areArgumentsImmutableAndNonMutating(state, args) {
+    for (const arg of args) {
+        if (arg.kind === 'Hole') {
+            continue;
+        }
+        if (arg.kind === 'Identifier' && arg.identifier.type.kind === 'Function') {
+            const fnShape = state.env.getFunctionSignature(arg.identifier.type);
+            if (fnShape != null) {
+                return (!fnShape.positionalParams.some(isKnownMutableEffect) &&
+                    (fnShape.restParam == null ||
+                        !isKnownMutableEffect(fnShape.restParam)));
+            }
+        }
+        const place = arg.kind === 'Identifier' ? arg : arg.place;
+        const kind = state.kind(place).kind;
+        switch (kind) {
+            case ValueKind.Primitive:
+            case ValueKind.Frozen: {
+                break;
+            }
+            default: {
+                return false;
+            }
+        }
+        const values = state.values(place);
+        for (const value of values) {
+            if (value.kind === 'FunctionExpression' &&
+                value.loweredFunc.func.params.some(param => {
+                    const place = param.kind === 'Identifier' ? param : param.place;
+                    const range = place.identifier.mutableRange;
+                    return range.end > range.start + 1;
+                })) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+function computeEffectsForSignature(env, signature, lvalue, receiver, args, context = [], loc) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    if (signature.params.length > args.length ||
+        (args.length > signature.params.length && signature.rest == null)) {
+        return null;
+    }
+    const mutableSpreads = new Set();
+    const substitutions = new Map();
+    substitutions.set(signature.receiver, [receiver]);
+    substitutions.set(signature.returns, [lvalue]);
+    const params = signature.params;
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg.kind === 'Hole') {
+            continue;
+        }
+        else if (params == null || i >= params.length || arg.kind === 'Spread') {
+            if (signature.rest == null) {
+                return null;
+            }
+            const place = arg.kind === 'Identifier' ? arg : arg.place;
+            getOrInsertWith(substitutions, signature.rest, () => []).push(place);
+            if (arg.kind === 'Spread') {
+                const mutateIterator = conditionallyMutateIterator(arg.place);
+                if (mutateIterator != null) {
+                    mutableSpreads.add(arg.place.identifier.id);
+                }
+            }
+        }
+        else {
+            const param = params[i];
+            substitutions.set(param, [arg]);
+        }
+    }
+    for (const operand of context) {
+        substitutions.set(operand.identifier.id, [operand]);
+    }
+    const effects = [];
+    for (const signatureTemporary of signature.temporaries) {
+        const temp = createTemporaryPlace(env, receiver.loc);
+        substitutions.set(signatureTemporary.identifier.id, [temp]);
+    }
+    for (const effect of signature.effects) {
+        switch (effect.kind) {
+            case 'MaybeAlias':
+            case 'Assign':
+            case 'ImmutableCapture':
+            case 'Alias':
+            case 'CreateFrom':
+            case 'Capture': {
+                const from = (_a = substitutions.get(effect.from.identifier.id)) !== null && _a !== void 0 ? _a : [];
+                const to = (_b = substitutions.get(effect.into.identifier.id)) !== null && _b !== void 0 ? _b : [];
+                for (const fromId of from) {
+                    for (const toId of to) {
+                        effects.push({
+                            kind: effect.kind,
+                            from: fromId,
+                            into: toId,
+                        });
+                    }
+                }
+                break;
+            }
+            case 'Impure':
+            case 'MutateFrozen':
+            case 'MutateGlobal': {
+                const values = (_c = substitutions.get(effect.place.identifier.id)) !== null && _c !== void 0 ? _c : [];
+                for (const value of values) {
+                    effects.push({ kind: effect.kind, place: value, error: effect.error });
+                }
+                break;
+            }
+            case 'Render': {
+                const values = (_d = substitutions.get(effect.place.identifier.id)) !== null && _d !== void 0 ? _d : [];
+                for (const value of values) {
+                    effects.push({ kind: effect.kind, place: value });
+                }
+                break;
+            }
+            case 'Mutate':
+            case 'MutateTransitive':
+            case 'MutateTransitiveConditionally':
+            case 'MutateConditionally': {
+                const values = (_e = substitutions.get(effect.value.identifier.id)) !== null && _e !== void 0 ? _e : [];
+                for (const id of values) {
+                    effects.push({ kind: effect.kind, value: id });
+                }
+                break;
+            }
+            case 'Freeze': {
+                const values = (_f = substitutions.get(effect.value.identifier.id)) !== null && _f !== void 0 ? _f : [];
+                for (const value of values) {
+                    if (mutableSpreads.has(value.identifier.id)) {
+                        CompilerError.throwTodo({
+                            reason: 'Support spread syntax for hook arguments',
+                            loc: value.loc,
+                        });
+                    }
+                    effects.push({ kind: 'Freeze', value, reason: effect.reason });
+                }
+                break;
+            }
+            case 'Create': {
+                const into = (_g = substitutions.get(effect.into.identifier.id)) !== null && _g !== void 0 ? _g : [];
+                for (const value of into) {
+                    effects.push({
+                        kind: 'Create',
+                        into: value,
+                        value: effect.value,
+                        reason: effect.reason,
+                    });
+                }
+                break;
+            }
+            case 'Apply': {
+                const applyReceiver = substitutions.get(effect.receiver.identifier.id);
+                if (applyReceiver == null || applyReceiver.length !== 1) {
+                    return null;
+                }
+                const applyFunction = substitutions.get(effect.function.identifier.id);
+                if (applyFunction == null || applyFunction.length !== 1) {
+                    return null;
+                }
+                const applyInto = substitutions.get(effect.into.identifier.id);
+                if (applyInto == null || applyInto.length !== 1) {
+                    return null;
+                }
+                const applyArgs = [];
+                for (const arg of effect.args) {
+                    if (arg.kind === 'Hole') {
+                        applyArgs.push(arg);
+                    }
+                    else if (arg.kind === 'Identifier') {
+                        const applyArg = substitutions.get(arg.identifier.id);
+                        if (applyArg == null || applyArg.length !== 1) {
+                            return null;
+                        }
+                        applyArgs.push(applyArg[0]);
+                    }
+                    else {
+                        const applyArg = substitutions.get(arg.place.identifier.id);
+                        if (applyArg == null || applyArg.length !== 1) {
+                            return null;
+                        }
+                        applyArgs.push({ kind: 'Spread', place: applyArg[0] });
+                    }
+                }
+                effects.push({
+                    kind: 'Apply',
+                    mutatesFunction: effect.mutatesFunction,
+                    receiver: applyReceiver[0],
+                    args: applyArgs,
+                    function: applyFunction[0],
+                    into: applyInto[0],
+                    signature: effect.signature,
+                    loc,
+                });
+                break;
+            }
+            case 'CreateFunction': {
+                CompilerError.throwTodo({
+                    reason: `Support CreateFrom effects in signatures`,
+                    loc: receiver.loc,
+                });
+            }
+            default: {
+                assertExhaustive$1(effect, `Unexpected effect kind '${effect.kind}'`);
+            }
+        }
+    }
+    return effects;
+}
+function buildSignatureFromFunctionExpression(env, fn) {
+    var _a;
+    let rest = null;
+    const params = [];
+    for (const param of fn.loweredFunc.func.params) {
+        if (param.kind === 'Identifier') {
+            params.push(param.identifier.id);
+        }
+        else {
+            rest = param.place.identifier.id;
+        }
+    }
+    return {
+        receiver: makeIdentifierId(0),
+        params,
+        rest: rest !== null && rest !== void 0 ? rest : createTemporaryPlace(env, fn.loc).identifier.id,
+        returns: fn.loweredFunc.func.returns.identifier.id,
+        effects: (_a = fn.loweredFunc.func.aliasingEffects) !== null && _a !== void 0 ? _a : [],
+        temporaries: [],
+    };
+}
+
+function inferMutationAliasingRanges(fn, { isFunctionExpression }) {
+    var _a, _b, _c, _d, _e, _f;
+    const functionEffects = [];
+    const state = new AliasingState();
+    const pendingPhis = new Map();
+    const mutations = [];
+    const renders = [];
+    let index = 0;
+    const errors = new CompilerError();
+    for (const param of [...fn.params, ...fn.context, fn.returns]) {
+        const place = param.kind === 'Identifier' ? param : param.place;
+        state.create(place, { kind: 'Object' });
+    }
+    const seenBlocks = new Set();
+    for (const block of fn.body.blocks.values()) {
+        for (const phi of block.phis) {
+            state.create(phi.place, { kind: 'Phi' });
+            for (const [pred, operand] of phi.operands) {
+                if (!seenBlocks.has(pred)) {
+                    const blockPhis = getOrInsertWith(pendingPhis, pred, () => []);
+                    blockPhis.push({ from: operand, into: phi.place, index: index++ });
+                }
+                else {
+                    state.assign(index++, operand, phi.place);
+                }
+            }
+        }
+        seenBlocks.add(block.id);
+        for (const instr of block.instructions) {
+            if (instr.effects == null)
+                continue;
+            for (const effect of instr.effects) {
+                if (effect.kind === 'Create') {
+                    state.create(effect.into, { kind: 'Object' });
+                }
+                else if (effect.kind === 'CreateFunction') {
+                    state.create(effect.into, {
+                        kind: 'Function',
+                        function: effect.function.loweredFunc.func,
+                    });
+                }
+                else if (effect.kind === 'CreateFrom') {
+                    state.createFrom(index++, effect.from, effect.into);
+                }
+                else if (effect.kind === 'Assign') {
+                    if (!state.nodes.has(effect.into.identifier)) {
+                        state.create(effect.into, { kind: 'Object' });
+                    }
+                    state.assign(index++, effect.from, effect.into);
+                }
+                else if (effect.kind === 'Alias') {
+                    state.assign(index++, effect.from, effect.into);
+                }
+                else if (effect.kind === 'MaybeAlias') {
+                    state.maybeAlias(index++, effect.from, effect.into);
+                }
+                else if (effect.kind === 'Capture') {
+                    state.capture(index++, effect.from, effect.into);
+                }
+                else if (effect.kind === 'MutateTransitive' ||
+                    effect.kind === 'MutateTransitiveConditionally') {
+                    mutations.push({
+                        index: index++,
+                        id: instr.id,
+                        transitive: true,
+                        kind: effect.kind === 'MutateTransitive'
+                            ? MutationKind.Definite
+                            : MutationKind.Conditional,
+                        place: effect.value,
+                    });
+                }
+                else if (effect.kind === 'Mutate' ||
+                    effect.kind === 'MutateConditionally') {
+                    mutations.push({
+                        index: index++,
+                        id: instr.id,
+                        transitive: false,
+                        kind: effect.kind === 'Mutate'
+                            ? MutationKind.Definite
+                            : MutationKind.Conditional,
+                        place: effect.value,
+                    });
+                }
+                else if (effect.kind === 'MutateFrozen' ||
+                    effect.kind === 'MutateGlobal' ||
+                    effect.kind === 'Impure') {
+                    errors.pushDiagnostic(effect.error);
+                    functionEffects.push(effect);
+                }
+                else if (effect.kind === 'Render') {
+                    renders.push({ index: index++, place: effect.place });
+                    functionEffects.push(effect);
+                }
+            }
+        }
+        const blockPhis = pendingPhis.get(block.id);
+        if (blockPhis != null) {
+            for (const { from, into, index } of blockPhis) {
+                state.assign(index, from, into);
+            }
+        }
+        if (block.terminal.kind === 'return') {
+            state.assign(index++, block.terminal.value, fn.returns);
+        }
+        if ((block.terminal.kind === 'maybe-throw' ||
+            block.terminal.kind === 'return') &&
+            block.terminal.effects != null) {
+            for (const effect of block.terminal.effects) {
+                if (effect.kind === 'Alias') {
+                    state.assign(index++, effect.from, effect.into);
+                }
+                else {
+                    CompilerError.invariant(effect.kind === 'Freeze', {
+                        reason: `Unexpected '${effect.kind}' effect for MaybeThrow terminal`,
+                        loc: block.terminal.loc,
+                    });
+                }
+            }
+        }
+    }
+    for (const mutation of mutations) {
+        state.mutate(mutation.index, mutation.place.identifier, makeInstructionId(mutation.id + 1), mutation.transitive, mutation.kind, mutation.place.loc, errors);
+    }
+    for (const render of renders) {
+        state.render(render.index, render.place.identifier, errors);
+    }
+    for (const param of [...fn.context, ...fn.params]) {
+        const place = param.kind === 'Identifier' ? param : param.place;
+        const node = state.nodes.get(place.identifier);
+        if (node == null) {
+            continue;
+        }
+        let mutated = false;
+        if (node.local != null) {
+            if (node.local.kind === MutationKind.Conditional) {
+                mutated = true;
+                functionEffects.push({
+                    kind: 'MutateConditionally',
+                    value: Object.assign(Object.assign({}, place), { loc: node.local.loc }),
+                });
+            }
+            else if (node.local.kind === MutationKind.Definite) {
+                mutated = true;
+                functionEffects.push({
+                    kind: 'Mutate',
+                    value: Object.assign(Object.assign({}, place), { loc: node.local.loc }),
+                });
+            }
+        }
+        if (node.transitive != null) {
+            if (node.transitive.kind === MutationKind.Conditional) {
+                mutated = true;
+                functionEffects.push({
+                    kind: 'MutateTransitiveConditionally',
+                    value: Object.assign(Object.assign({}, place), { loc: node.transitive.loc }),
+                });
+            }
+            else if (node.transitive.kind === MutationKind.Definite) {
+                mutated = true;
+                functionEffects.push({
+                    kind: 'MutateTransitive',
+                    value: Object.assign(Object.assign({}, place), { loc: node.transitive.loc }),
+                });
+            }
+        }
+        if (mutated) {
+            place.effect = Effect.Capture;
+        }
+    }
+    for (const block of fn.body.blocks.values()) {
+        for (const phi of block.phis) {
+            phi.place.effect = Effect.Store;
+            const isPhiMutatedAfterCreation = phi.place.identifier.mutableRange.end >
+                ((_b = (_a = block.instructions.at(0)) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : block.terminal.id);
+            for (const operand of phi.operands.values()) {
+                operand.effect = isPhiMutatedAfterCreation
+                    ? Effect.Capture
+                    : Effect.Read;
+            }
+            if (isPhiMutatedAfterCreation &&
+                phi.place.identifier.mutableRange.start === 0) {
+                const firstInstructionIdOfBlock = (_d = (_c = block.instructions.at(0)) === null || _c === void 0 ? void 0 : _c.id) !== null && _d !== void 0 ? _d : block.terminal.id;
+                phi.place.identifier.mutableRange.start = makeInstructionId(firstInstructionIdOfBlock - 1);
+            }
+        }
+        for (const instr of block.instructions) {
+            for (const lvalue of eachInstructionLValue(instr)) {
+                lvalue.effect = Effect.ConditionallyMutate;
+                if (lvalue.identifier.mutableRange.start === 0) {
+                    lvalue.identifier.mutableRange.start = instr.id;
+                }
+                if (lvalue.identifier.mutableRange.end === 0) {
+                    lvalue.identifier.mutableRange.end = makeInstructionId(Math.max(instr.id + 1, lvalue.identifier.mutableRange.end));
+                }
+            }
+            for (const operand of eachInstructionValueOperand(instr.value)) {
+                operand.effect = Effect.Read;
+            }
+            if (instr.effects == null) {
+                continue;
+            }
+            const operandEffects = new Map();
+            for (const effect of instr.effects) {
+                switch (effect.kind) {
+                    case 'Assign':
+                    case 'Alias':
+                    case 'Capture':
+                    case 'CreateFrom':
+                    case 'MaybeAlias': {
+                        const isMutatedOrReassigned = effect.into.identifier.mutableRange.end > instr.id;
+                        if (isMutatedOrReassigned) {
+                            operandEffects.set(effect.from.identifier.id, Effect.Capture);
+                            operandEffects.set(effect.into.identifier.id, Effect.Store);
+                        }
+                        else {
+                            operandEffects.set(effect.from.identifier.id, Effect.Read);
+                            operandEffects.set(effect.into.identifier.id, Effect.Store);
+                        }
+                        break;
+                    }
+                    case 'CreateFunction':
+                    case 'Create': {
+                        break;
+                    }
+                    case 'Mutate': {
+                        operandEffects.set(effect.value.identifier.id, Effect.Store);
+                        break;
+                    }
+                    case 'Apply': {
+                        CompilerError.invariant(false, {
+                            reason: `[AnalyzeFunctions] Expected Apply effects to be replaced with more precise effects`,
+                            loc: effect.function.loc,
+                        });
+                    }
+                    case 'MutateTransitive':
+                    case 'MutateConditionally':
+                    case 'MutateTransitiveConditionally': {
+                        operandEffects.set(effect.value.identifier.id, Effect.ConditionallyMutate);
+                        break;
+                    }
+                    case 'Freeze': {
+                        operandEffects.set(effect.value.identifier.id, Effect.Freeze);
+                        break;
+                    }
+                    case 'ImmutableCapture': {
+                        break;
+                    }
+                    case 'Impure':
+                    case 'Render':
+                    case 'MutateFrozen':
+                    case 'MutateGlobal': {
+                        break;
+                    }
+                    default: {
+                        assertExhaustive$1(effect, `Unexpected effect kind ${effect.kind}`);
+                    }
+                }
+            }
+            for (const lvalue of eachInstructionLValue(instr)) {
+                const effect = (_e = operandEffects.get(lvalue.identifier.id)) !== null && _e !== void 0 ? _e : Effect.ConditionallyMutate;
+                lvalue.effect = effect;
+            }
+            for (const operand of eachInstructionValueOperand(instr.value)) {
+                if (operand.identifier.mutableRange.end > instr.id &&
+                    operand.identifier.mutableRange.start === 0) {
+                    operand.identifier.mutableRange.start = instr.id;
+                }
+                const effect = (_f = operandEffects.get(operand.identifier.id)) !== null && _f !== void 0 ? _f : Effect.Read;
+                operand.effect = effect;
+            }
+            if (instr.value.kind === 'StoreContext' &&
+                instr.value.value.identifier.mutableRange.end <= instr.id) {
+                instr.value.value.identifier.mutableRange.end = makeInstructionId(instr.id + 1);
+            }
+        }
+        if (block.terminal.kind === 'return') {
+            block.terminal.value.effect = isFunctionExpression
+                ? Effect.Read
+                : Effect.Freeze;
+        }
+        else {
+            for (const operand of eachTerminalOperand(block.terminal)) {
+                operand.effect = Effect.Read;
+            }
+        }
+    }
+    const returns = fn.returns.identifier;
+    functionEffects.push({
+        kind: 'Create',
+        into: fn.returns,
+        value: isPrimitiveType(returns)
+            ? ValueKind.Primitive
+            : isJsxType(returns.type)
+                ? ValueKind.Frozen
+                : ValueKind.Mutable,
+        reason: ValueReason.KnownReturnSignature,
+    });
+    const tracked = [];
+    const ignoredErrors = new CompilerError();
+    for (const param of [...fn.params, ...fn.context, fn.returns]) {
+        const place = param.kind === 'Identifier' ? param : param.place;
+        tracked.push(place);
+    }
+    for (const into of tracked) {
+        const mutationIndex = index++;
+        state.mutate(mutationIndex, into.identifier, null, true, MutationKind.Conditional, into.loc, ignoredErrors);
+        for (const from of tracked) {
+            if (from.identifier.id === into.identifier.id ||
+                from.identifier.id === fn.returns.identifier.id) {
+                continue;
+            }
+            const fromNode = state.nodes.get(from.identifier);
+            CompilerError.invariant(fromNode != null, {
+                reason: `Expected a node to exist for all parameters and context variables`,
+                loc: into.loc,
+            });
+            if (fromNode.lastMutated === mutationIndex) {
+                if (into.identifier.id === fn.returns.identifier.id) {
+                    functionEffects.push({
+                        kind: 'Alias',
+                        from,
+                        into,
+                    });
+                }
+                else {
+                    functionEffects.push({
+                        kind: 'Capture',
+                        from,
+                        into,
+                    });
+                }
+            }
+        }
+    }
+    if (errors.hasErrors() && !isFunctionExpression) {
+        return Err(errors);
+    }
+    return Ok(functionEffects);
+}
+function appendFunctionErrors(errors, fn) {
+    var _a;
+    for (const effect of (_a = fn.aliasingEffects) !== null && _a !== void 0 ? _a : []) {
+        switch (effect.kind) {
+            case 'Impure':
+            case 'MutateFrozen':
+            case 'MutateGlobal': {
+                errors.pushDiagnostic(effect.error);
+                break;
+            }
+        }
+    }
+}
+var MutationKind;
+(function (MutationKind) {
+    MutationKind[MutationKind["None"] = 0] = "None";
+    MutationKind[MutationKind["Conditional"] = 1] = "Conditional";
+    MutationKind[MutationKind["Definite"] = 2] = "Definite";
+})(MutationKind || (MutationKind = {}));
+class AliasingState {
+    constructor() {
+        this.nodes = new Map();
+    }
+    create(place, value) {
+        this.nodes.set(place.identifier, {
+            id: place.identifier,
+            createdFrom: new Map(),
+            captures: new Map(),
+            aliases: new Map(),
+            maybeAliases: new Map(),
+            edges: [],
+            transitive: null,
+            local: null,
+            lastMutated: 0,
+            value,
+        });
+    }
+    createFrom(index, from, into) {
+        this.create(into, { kind: 'Object' });
+        const fromNode = this.nodes.get(from.identifier);
+        const toNode = this.nodes.get(into.identifier);
+        if (fromNode == null || toNode == null) {
+            return;
+        }
+        fromNode.edges.push({ index, node: into.identifier, kind: 'alias' });
+        if (!toNode.createdFrom.has(from.identifier)) {
+            toNode.createdFrom.set(from.identifier, index);
+        }
+    }
+    capture(index, from, into) {
+        const fromNode = this.nodes.get(from.identifier);
+        const toNode = this.nodes.get(into.identifier);
+        if (fromNode == null || toNode == null) {
+            return;
+        }
+        fromNode.edges.push({ index, node: into.identifier, kind: 'capture' });
+        if (!toNode.captures.has(from.identifier)) {
+            toNode.captures.set(from.identifier, index);
+        }
+    }
+    assign(index, from, into) {
+        const fromNode = this.nodes.get(from.identifier);
+        const toNode = this.nodes.get(into.identifier);
+        if (fromNode == null || toNode == null) {
+            return;
+        }
+        fromNode.edges.push({ index, node: into.identifier, kind: 'alias' });
+        if (!toNode.aliases.has(from.identifier)) {
+            toNode.aliases.set(from.identifier, index);
+        }
+    }
+    maybeAlias(index, from, into) {
+        const fromNode = this.nodes.get(from.identifier);
+        const toNode = this.nodes.get(into.identifier);
+        if (fromNode == null || toNode == null) {
+            return;
+        }
+        fromNode.edges.push({ index, node: into.identifier, kind: 'maybeAlias' });
+        if (!toNode.maybeAliases.has(from.identifier)) {
+            toNode.maybeAliases.set(from.identifier, index);
+        }
+    }
+    render(index, start, errors) {
+        const seen = new Set();
+        const queue = [start];
+        while (queue.length !== 0) {
+            const current = queue.pop();
+            if (seen.has(current)) {
+                continue;
+            }
+            seen.add(current);
+            const node = this.nodes.get(current);
+            if (node == null || node.transitive != null || node.local != null) {
+                continue;
+            }
+            if (node.value.kind === 'Function') {
+                appendFunctionErrors(errors, node.value.function);
+            }
+            for (const [alias, when] of node.createdFrom) {
+                if (when >= index) {
+                    continue;
+                }
+                queue.push(alias);
+            }
+            for (const [alias, when] of node.aliases) {
+                if (when >= index) {
+                    continue;
+                }
+                queue.push(alias);
+            }
+            for (const [capture, when] of node.captures) {
+                if (when >= index) {
+                    continue;
+                }
+                queue.push(capture);
+            }
+        }
+    }
+    mutate(index, start, end, transitive, startKind, loc, errors) {
+        const seen = new Map();
+        const queue = [{ place: start, transitive, direction: 'backwards', kind: startKind }];
+        while (queue.length !== 0) {
+            const { place: current, transitive, direction, kind } = queue.pop();
+            const previousKind = seen.get(current);
+            if (previousKind != null && previousKind >= kind) {
+                continue;
+            }
+            seen.set(current, kind);
+            const node = this.nodes.get(current);
+            if (node == null) {
+                continue;
+            }
+            node.lastMutated = Math.max(node.lastMutated, index);
+            if (end != null) {
+                node.id.mutableRange.end = makeInstructionId(Math.max(node.id.mutableRange.end, end));
+            }
+            if (node.value.kind === 'Function' &&
+                node.transitive == null &&
+                node.local == null) {
+                appendFunctionErrors(errors, node.value.function);
+            }
+            if (transitive) {
+                if (node.transitive == null || node.transitive.kind < kind) {
+                    node.transitive = { kind, loc };
+                }
+            }
+            else {
+                if (node.local == null || node.local.kind < kind) {
+                    node.local = { kind, loc };
+                }
+            }
+            for (const edge of node.edges) {
+                if (edge.index >= index) {
+                    break;
+                }
+                queue.push({ place: edge.node, transitive, direction: 'forwards', kind });
+            }
+            for (const [alias, when] of node.createdFrom) {
+                if (when >= index) {
+                    continue;
+                }
+                queue.push({
+                    place: alias,
+                    transitive: true,
+                    direction: 'backwards',
+                    kind,
+                });
+            }
+            if (direction === 'backwards' || node.value.kind !== 'Phi') {
+                for (const [alias, when] of node.aliases) {
+                    if (when >= index) {
+                        continue;
+                    }
+                    queue.push({ place: alias, transitive, direction: 'backwards', kind });
+                }
+                for (const [alias, when] of node.maybeAliases) {
+                    if (when >= index) {
+                        continue;
+                    }
+                    queue.push({
+                        place: alias,
+                        transitive,
+                        direction: 'backwards',
+                        kind: MutationKind.Conditional,
+                    });
+                }
+            }
+            if (transitive) {
+                for (const [capture, when] of node.captures) {
+                    if (when >= index) {
+                        continue;
+                    }
+                    queue.push({
+                        place: capture,
+                        transitive,
+                        direction: 'backwards',
+                        kind,
+                    });
+                }
+            }
+        }
+    }
+}
+
 function analyseFunctions(func) {
     for (const [_, block] of func.body.blocks) {
         for (const instr of block.instructions) {
             switch (instr.value.kind) {
                 case 'ObjectMethod':
                 case 'FunctionExpression': {
-                    lower(instr.value.loweredFunc.func);
-                    infer(instr.value.loweredFunc);
+                    if (!func.env.config.enableNewMutationAliasingModel) {
+                        lower(instr.value.loweredFunc.func);
+                        infer(instr.value.loweredFunc);
+                    }
+                    else {
+                        lowerWithMutationAliasing(instr.value.loweredFunc.func);
+                    }
                     for (const operand of instr.value.loweredFunc.func.context) {
-                        operand.identifier.mutableRange.start = makeInstructionId(0);
-                        operand.identifier.mutableRange.end = makeInstructionId(0);
+                        operand.identifier.mutableRange = {
+                            start: makeInstructionId(0),
+                            end: makeInstructionId(0),
+                        };
                         operand.identifier.scope = null;
                     }
                     break;
@@ -48925,6 +43774,71 @@ function analyseFunctions(func) {
             }
         }
     }
+}
+function lowerWithMutationAliasing(fn) {
+    var _a, _b;
+    analyseFunctions(fn);
+    inferMutationAliasingEffects(fn, { isFunctionExpression: true });
+    deadCodeElimination(fn);
+    const functionEffects = inferMutationAliasingRanges(fn, {
+        isFunctionExpression: true,
+    }).unwrap();
+    rewriteInstructionKindsBasedOnReassignment(fn);
+    inferReactiveScopeVariables(fn);
+    fn.aliasingEffects = functionEffects;
+    const capturedOrMutated = new Set();
+    for (const effect of functionEffects) {
+        switch (effect.kind) {
+            case 'Assign':
+            case 'Alias':
+            case 'Capture':
+            case 'CreateFrom':
+            case 'MaybeAlias': {
+                capturedOrMutated.add(effect.from.identifier.id);
+                break;
+            }
+            case 'Apply': {
+                CompilerError.invariant(false, {
+                    reason: `[AnalyzeFunctions] Expected Apply effects to be replaced with more precise effects`,
+                    loc: effect.function.loc,
+                });
+            }
+            case 'Mutate':
+            case 'MutateConditionally':
+            case 'MutateTransitive':
+            case 'MutateTransitiveConditionally': {
+                capturedOrMutated.add(effect.value.identifier.id);
+                break;
+            }
+            case 'Impure':
+            case 'Render':
+            case 'MutateFrozen':
+            case 'MutateGlobal':
+            case 'CreateFunction':
+            case 'Create':
+            case 'Freeze':
+            case 'ImmutableCapture': {
+                break;
+            }
+            default: {
+                assertExhaustive$1(effect, `Unexpected effect kind ${effect.kind}`);
+            }
+        }
+    }
+    for (const operand of fn.context) {
+        if (capturedOrMutated.has(operand.identifier.id) ||
+            operand.effect === Effect.Capture) {
+            operand.effect = Effect.Capture;
+        }
+        else {
+            operand.effect = Effect.Read;
+        }
+    }
+    (_b = (_a = fn.env.logger) === null || _a === void 0 ? void 0 : _a.debugLogIRs) === null || _b === void 0 ? void 0 : _b.call(_a, {
+        kind: 'hir',
+        name: 'AnalyseFunction (inner)',
+        value: fn,
+    });
 }
 function lower(func) {
     var _a, _b;
@@ -49072,6 +43986,7 @@ function makeManualMemoizationMarkers(fnExpr, env, depsList, memoDecl, manualMem
                 deps: depsList,
                 loc: fnExpr.loc,
             },
+            effects: null,
             loc: fnExpr.loc,
         },
         {
@@ -49083,6 +43998,7 @@ function makeManualMemoizationMarkers(fnExpr, env, depsList, memoDecl, manualMem
                 decl: Object.assign({}, memoDecl),
                 loc: fnExpr.loc,
             },
+            effects: null,
             loc: fnExpr.loc,
         },
     ];
@@ -49110,43 +44026,69 @@ function getManualMemoizationReplacement(fn, loc, kind) {
         };
     }
 }
-function extractManualMemoizationArgs(instr, kind, sidemap) {
+function extractManualMemoizationArgs(instr, kind, sidemap, errors) {
     const [fnPlace, depsListPlace] = instr.value.args;
     if (fnPlace == null) {
-        CompilerError.throwInvalidReact({
-            reason: `Expected a callback function to be passed to ${kind}`,
-            loc: instr.value.loc,
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            severity: ErrorSeverity.InvalidReact,
+            category: `Expected a callback function to be passed to ${kind}`,
+            description: `Expected a callback function to be passed to ${kind}`,
             suggestions: null,
-        });
+        }).withDetail({
+            kind: 'error',
+            loc: instr.value.loc,
+            message: `Expected a callback function to be passed to ${kind}`,
+        }));
+        return { fnPlace: null, depsList: null };
     }
     if (fnPlace.kind === 'Spread' || (depsListPlace === null || depsListPlace === void 0 ? void 0 : depsListPlace.kind) === 'Spread') {
-        CompilerError.throwInvalidReact({
-            reason: `Unexpected spread argument to ${kind}`,
-            loc: instr.value.loc,
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            severity: ErrorSeverity.InvalidReact,
+            category: `Unexpected spread argument to ${kind}`,
+            description: `Unexpected spread argument to ${kind}`,
             suggestions: null,
-        });
+        }).withDetail({
+            kind: 'error',
+            loc: instr.value.loc,
+            message: `Unexpected spread argument to ${kind}`,
+        }));
+        return { fnPlace: null, depsList: null };
     }
     let depsList = null;
     if (depsListPlace != null) {
         const maybeDepsList = sidemap.maybeDepsLists.get(depsListPlace.identifier.id);
         if (maybeDepsList == null) {
-            CompilerError.throwInvalidReact({
-                reason: `Expected the dependency list for ${kind} to be an array literal`,
+            errors.pushDiagnostic(CompilerDiagnostic.create({
+                severity: ErrorSeverity.InvalidReact,
+                category: `Expected the dependency list for ${kind} to be an array literal`,
+                description: `Expected the dependency list for ${kind} to be an array literal`,
                 suggestions: null,
+            }).withDetail({
+                kind: 'error',
                 loc: depsListPlace.loc,
-            });
+                message: `Expected the dependency list for ${kind} to be an array literal`,
+            }));
+            return { fnPlace, depsList: null };
         }
-        depsList = maybeDepsList.map(dep => {
+        depsList = [];
+        for (const dep of maybeDepsList) {
             const maybeDep = sidemap.maybeDeps.get(dep.identifier.id);
             if (maybeDep == null) {
-                CompilerError.throwInvalidReact({
-                    reason: `Expected the dependency list to be an array of simple expressions (e.g. \`x\`, \`x.y.z\`, \`x?.y?.z\`)`,
+                errors.pushDiagnostic(CompilerDiagnostic.create({
+                    severity: ErrorSeverity.InvalidReact,
+                    category: `Expected the dependency list to be an array of simple expressions (e.g. \`x\`, \`x.y.z\`, \`x?.y?.z\`)`,
+                    description: `Expected the dependency list to be an array of simple expressions (e.g. \`x\`, \`x.y.z\`, \`x?.y?.z\`)`,
                     suggestions: null,
+                }).withDetail({
+                    kind: 'error',
                     loc: dep.loc,
-                });
+                    message: `Expected the dependency list to be an array of simple expressions (e.g. \`x\`, \`x.y.z\`, \`x?.y?.z\`)`,
+                }));
             }
-            return maybeDep;
-        });
+            else {
+                depsList.push(maybeDep);
+            }
+        }
     }
     return {
         fnPlace,
@@ -49154,6 +44096,8 @@ function extractManualMemoizationArgs(instr, kind, sidemap) {
     };
 }
 function dropManualMemoization(func) {
+    var _a;
+    const errors = new CompilerError();
     const isValidationEnabled = func.env.config.validatePreserveExistingMemoizationGuarantees ||
         func.env.config.validateNoSetStateInRender ||
         func.env.config.enablePreserveExistingMemoizationGuarantees;
@@ -49178,15 +44122,44 @@ function dropManualMemoization(func) {
                     : instr.value.property.identifier.id;
                 const manualMemo = sidemap.manualMemos.get(id);
                 if (manualMemo != null) {
-                    const { fnPlace, depsList } = extractManualMemoizationArgs(instr, manualMemo.kind, sidemap);
+                    const { fnPlace, depsList } = extractManualMemoizationArgs(instr, manualMemo.kind, sidemap, errors);
+                    if (fnPlace == null) {
+                        continue;
+                    }
+                    if (func.env.config.validateNoVoidUseMemo &&
+                        manualMemo.kind === 'useMemo') {
+                        const funcToCheck = (_a = sidemap.functions.get(fnPlace.identifier.id)) === null || _a === void 0 ? void 0 : _a.value;
+                        if (funcToCheck !== undefined && funcToCheck.loweredFunc.func) {
+                            if (!hasNonVoidReturn(funcToCheck.loweredFunc.func)) {
+                                errors.pushDiagnostic(CompilerDiagnostic.create({
+                                    severity: ErrorSeverity.InvalidReact,
+                                    category: 'useMemo() callbacks must return a value',
+                                    description: `This ${manualMemo.loadInstr.value.kind === 'PropertyLoad'
+                                        ? 'React.useMemo'
+                                        : 'useMemo'} callback doesn't return a value. useMemo is for computing and caching values, not for arbitrary side effects.`,
+                                    suggestions: null,
+                                }).withDetail({
+                                    kind: 'error',
+                                    loc: instr.value.loc,
+                                    message: 'useMemo() callbacks must return a value',
+                                }));
+                            }
+                        }
+                    }
                     instr.value = getManualMemoizationReplacement(fnPlace, instr.value.loc, manualMemo.kind);
                     if (isValidationEnabled) {
                         if (!sidemap.functions.has(fnPlace.identifier.id)) {
-                            CompilerError.throwInvalidReact({
-                                reason: `Expected the first argument to be an inline function expression`,
+                            errors.pushDiagnostic(CompilerDiagnostic.create({
+                                severity: ErrorSeverity.InvalidReact,
+                                category: `Expected the first argument to be an inline function expression`,
+                                description: `Expected the first argument to be an inline function expression`,
                                 suggestions: [],
+                            }).withDetail({
+                                kind: 'error',
                                 loc: fnPlace.loc,
-                            });
+                                message: `Expected the first argument to be an inline function expression`,
+                            }));
+                            continue;
                         }
                         const memoDecl = manualMemo.kind === 'useMemo'
                             ? instr.lvalue
@@ -49233,6 +44206,7 @@ function dropManualMemoization(func) {
             markInstructionIds(func.body);
         }
     }
+    return errors.asResult();
 }
 function findOptionalPlaces(fn) {
     const optionals = new Set();
@@ -49276,6 +44250,17 @@ function findOptionalPlaces(fn) {
     }
     return optionals;
 }
+function hasNonVoidReturn(func) {
+    for (const [, block] of func.body.blocks) {
+        if (block.terminal.kind === 'return') {
+            if (block.terminal.returnVariant === 'Explicit' ||
+                block.terminal.returnVariant === 'Implicit') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 class StableSidemap {
     constructor(env) {
@@ -49298,12 +44283,6 @@ class StableSidemap {
                             isStable: false,
                         });
                     }
-                }
-                else if (this.env.config.enableTreatRefLikeIdentifiersAsRefs &&
-                    isUseRefType(lvalue.identifier)) {
-                    this.map.set(lvalue.identifier.id, {
-                        isStable: true,
-                    });
                 }
                 break;
             }
@@ -49483,6 +44462,27 @@ function inferReactivePlaces(fn) {
             }
         }
     } while (reactiveIdentifiers.snapshot());
+    function propagateReactivityToInnerFunctions(fn, isOutermost) {
+        for (const [, block] of fn.body.blocks) {
+            for (const instr of block.instructions) {
+                if (!isOutermost) {
+                    for (const operand of eachInstructionOperand(instr)) {
+                        reactiveIdentifiers.isReactive(operand);
+                    }
+                }
+                if (instr.value.kind === 'ObjectMethod' ||
+                    instr.value.kind === 'FunctionExpression') {
+                    propagateReactivityToInnerFunctions(instr.value.loweredFunc.func, false);
+                }
+            }
+            if (!isOutermost) {
+                for (const operand of eachTerminalOperand(block.terminal)) {
+                    reactiveIdentifiers.isReactive(operand);
+                }
+            }
+        }
+    }
+    propagateReactivityToInnerFunctions(fn, true);
 }
 function postDominatorFrontier(fn, postDominators, targetId) {
     const visited = new Set();
@@ -49560,75 +44560,128 @@ function inlineImmediatelyInvokedFunctionExpressions(fn) {
     const inlinedFunctions = new Set();
     const queue = Array.from(fn.body.blocks.values());
     queue: for (const block of queue) {
-        for (let ii = 0; ii < block.instructions.length; ii++) {
-            const instr = block.instructions[ii];
-            switch (instr.value.kind) {
-                case 'FunctionExpression': {
-                    if (instr.lvalue.identifier.name === null) {
-                        functions.set(instr.lvalue.identifier.id, instr.value);
+        if (isStatementBlockKind(block.kind)) {
+            for (let ii = 0; ii < block.instructions.length; ii++) {
+                const instr = block.instructions[ii];
+                switch (instr.value.kind) {
+                    case 'FunctionExpression': {
+                        if (instr.lvalue.identifier.name === null) {
+                            functions.set(instr.lvalue.identifier.id, instr.value);
+                        }
+                        break;
                     }
-                    break;
-                }
-                case 'CallExpression': {
-                    if (instr.value.args.length !== 0) {
-                        continue;
+                    case 'CallExpression': {
+                        if (instr.value.args.length !== 0) {
+                            continue;
+                        }
+                        const body = functions.get(instr.value.callee.identifier.id);
+                        if (body === undefined) {
+                            continue;
+                        }
+                        if (body.loweredFunc.func.params.length > 0 ||
+                            body.loweredFunc.func.async ||
+                            body.loweredFunc.func.generator) {
+                            continue;
+                        }
+                        inlinedFunctions.add(instr.value.callee.identifier.id);
+                        const continuationBlockId = fn.env.nextBlockId;
+                        const continuationBlock = {
+                            id: continuationBlockId,
+                            instructions: block.instructions.slice(ii + 1),
+                            kind: block.kind,
+                            phis: new Set(),
+                            preds: new Set(),
+                            terminal: block.terminal,
+                        };
+                        fn.body.blocks.set(continuationBlockId, continuationBlock);
+                        block.instructions.length = ii;
+                        if (hasSingleExitReturnTerminal(body.loweredFunc.func)) {
+                            block.terminal = {
+                                kind: 'goto',
+                                block: body.loweredFunc.func.body.entry,
+                                id: block.terminal.id,
+                                loc: block.terminal.loc,
+                                variant: GotoVariant.Break,
+                            };
+                            for (const block of body.loweredFunc.func.body.blocks.values()) {
+                                if (block.terminal.kind === 'return') {
+                                    block.instructions.push({
+                                        id: makeInstructionId(0),
+                                        loc: block.terminal.loc,
+                                        lvalue: instr.lvalue,
+                                        value: {
+                                            kind: 'LoadLocal',
+                                            loc: block.terminal.loc,
+                                            place: block.terminal.value,
+                                        },
+                                        effects: null,
+                                    });
+                                    block.terminal = {
+                                        kind: 'goto',
+                                        block: continuationBlockId,
+                                        id: block.terminal.id,
+                                        loc: block.terminal.loc,
+                                        variant: GotoVariant.Break,
+                                    };
+                                }
+                            }
+                            for (const [id, block] of body.loweredFunc.func.body.blocks) {
+                                block.preds.clear();
+                                fn.body.blocks.set(id, block);
+                            }
+                        }
+                        else {
+                            const newTerminal = {
+                                block: body.loweredFunc.func.body.entry,
+                                id: makeInstructionId(0),
+                                kind: 'label',
+                                fallthrough: continuationBlockId,
+                                loc: block.terminal.loc,
+                            };
+                            block.terminal = newTerminal;
+                            const result = instr.lvalue;
+                            declareTemporary(fn.env, block, result);
+                            if (result.identifier.name == null) {
+                                promoteTemporary(result.identifier);
+                            }
+                            for (const [id, block] of body.loweredFunc.func.body.blocks) {
+                                block.preds.clear();
+                                rewriteBlock(fn.env, block, continuationBlockId, result);
+                                fn.body.blocks.set(id, block);
+                            }
+                        }
+                        queue.push(continuationBlock);
+                        continue queue;
                     }
-                    const body = functions.get(instr.value.callee.identifier.id);
-                    if (body === undefined) {
-                        continue;
-                    }
-                    if (body.loweredFunc.func.params.length > 0 ||
-                        body.loweredFunc.func.async ||
-                        body.loweredFunc.func.generator) {
-                        continue;
-                    }
-                    inlinedFunctions.add(instr.value.callee.identifier.id);
-                    const continuationBlockId = fn.env.nextBlockId;
-                    const continuationBlock = {
-                        id: continuationBlockId,
-                        instructions: block.instructions.slice(ii + 1),
-                        kind: block.kind,
-                        phis: new Set(),
-                        preds: new Set(),
-                        terminal: block.terminal,
-                    };
-                    fn.body.blocks.set(continuationBlockId, continuationBlock);
-                    block.instructions.length = ii;
-                    const newTerminal = {
-                        block: body.loweredFunc.func.body.entry,
-                        id: makeInstructionId(0),
-                        kind: 'label',
-                        fallthrough: continuationBlockId,
-                        loc: block.terminal.loc,
-                    };
-                    block.terminal = newTerminal;
-                    const result = instr.lvalue;
-                    declareTemporary(fn.env, block, result);
-                    promoteTemporary(result.identifier);
-                    for (const [id, block] of body.loweredFunc.func.body.blocks) {
-                        block.preds.clear();
-                        rewriteBlock(fn.env, block, continuationBlockId, result);
-                        fn.body.blocks.set(id, block);
-                    }
-                    queue.push(continuationBlock);
-                    continue queue;
-                }
-                default: {
-                    for (const place of eachInstructionValueOperand(instr.value)) {
-                        functions.delete(place.identifier.id);
+                    default: {
+                        for (const place of eachInstructionValueOperand(instr.value)) {
+                            functions.delete(place.identifier.id);
+                        }
                     }
                 }
             }
         }
     }
     if (inlinedFunctions.size !== 0) {
-        for (const [, block] of fn.body.blocks) {
+        for (const block of fn.body.blocks.values()) {
             retainWhere(block.instructions, instr => !inlinedFunctions.has(instr.lvalue.identifier.id));
         }
         reversePostorderBlocks(fn.body);
         markInstructionIds(fn.body);
         markPredecessors(fn.body);
+        mergeConsecutiveBlocks(fn);
     }
+}
+function hasSingleExitReturnTerminal(fn) {
+    let hasReturn = false;
+    let exitCount = 0;
+    for (const [, block] of fn.body.blocks) {
+        if (block.terminal.kind === 'return' || block.terminal.kind === 'throw') {
+            hasReturn || (hasReturn = block.terminal.kind === 'return');
+            exitCount++;
+        }
+    }
+    return exitCount === 1 && hasReturn;
 }
 function rewriteBlock(env, block, returnTarget, returnValue) {
     const { terminal } = block;
@@ -49646,6 +44699,7 @@ function rewriteBlock(env, block, returnTarget, returnValue) {
             type: null,
             loc: terminal.loc,
         },
+        effects: null,
     });
     block.terminal = {
         kind: 'goto',
@@ -49669,6 +44723,7 @@ function declareTemporary(env, block, result) {
             type: null,
             loc: result.loc,
         },
+        effects: null,
     });
 }
 
@@ -49729,7 +44784,7 @@ class PropertyPathRegistry {
     constructor() {
         this.roots = new Map();
     }
-    getOrCreateIdentifier(identifier) {
+    getOrCreateIdentifier(identifier, reactive) {
         let rootNode = this.roots.get(identifier.id);
         if (rootNode === undefined) {
             rootNode = {
@@ -49738,12 +44793,19 @@ class PropertyPathRegistry {
                 optionalProperties: new Map(),
                 fullPath: {
                     identifier,
+                    reactive,
                     path: [],
                 },
                 hasOptional: false,
                 parent: null,
             };
             this.roots.set(identifier.id, rootNode);
+        }
+        else {
+            CompilerError.invariant(reactive === rootNode.fullPath.reactive, {
+                reason: '[HoistablePropertyLoads] Found inconsistencies in `reactive` flag when deduping identifier reads within the same scope',
+                loc: identifier.loc,
+            });
         }
         return rootNode;
     }
@@ -49757,6 +44819,7 @@ class PropertyPathRegistry {
                 parent: parent,
                 fullPath: {
                     identifier: parent.fullPath.identifier,
+                    reactive: parent.fullPath.reactive,
                     path: parent.fullPath.path.concat(entry),
                 },
                 hasOptional: parent.hasOptional || entry.optional,
@@ -49766,7 +44829,7 @@ class PropertyPathRegistry {
         return child;
     }
     getOrCreateProperty(n) {
-        let currNode = this.getOrCreateIdentifier(n.identifier);
+        let currNode = this.getOrCreateIdentifier(n.identifier, n.reactive);
         if (n.path.length === 0) {
             return currNode;
         }
@@ -49782,6 +44845,7 @@ function getMaybeNonNullInInstruction(instr, context) {
     if (instr.kind === 'PropertyLoad') {
         path = (_a = context.temporaries.get(instr.object.identifier.id)) !== null && _a !== void 0 ? _a : {
             identifier: instr.object.identifier,
+            reactive: instr.object.reactive,
             path: [],
         };
     }
@@ -49813,7 +44877,7 @@ function collectNonNullsInBlocks(fn, context) {
         fn.params.length > 0 &&
         fn.params[0].kind === 'Identifier') {
         const identifier = fn.params[0].identifier;
-        knownNonNullIdentifiers.add(context.registry.getOrCreateIdentifier(identifier));
+        knownNonNullIdentifiers.add(context.registry.getOrCreateIdentifier(identifier, true));
     }
     const nodes = new Map();
     for (const [_, block] of fn.body.blocks) {
@@ -49933,8 +44997,8 @@ function reduceMaybeOptionalChains(nodes, registry) {
     do {
         changed = false;
         for (const original of optionalChainNodes) {
-            let { identifier, path: origPath } = original.fullPath;
-            let currNode = registry.getOrCreateIdentifier(identifier);
+            let { identifier, path: origPath, reactive } = original.fullPath;
+            let currNode = registry.getOrCreateIdentifier(identifier, reactive);
             for (let i = 0; i < origPath.length; i++) {
                 const entry = origPath[i];
                 const nextEntry = entry.optional && nodes.has(currNode)
@@ -50145,6 +45209,7 @@ function traverseOptionalBlock(optional, context, outerAlternate) {
         });
         baseObject = {
             identifier: maybeTest.instructions[0].value.place.identifier,
+            reactive: maybeTest.instructions[0].value.place.reactive,
             path,
         };
         test = maybeTest.terminal;
@@ -50191,6 +45256,7 @@ function traverseOptionalBlock(optional, context, outerAlternate) {
     });
     const load = {
         identifier: baseObject.identifier,
+        reactive: baseObject.reactive,
         path: [
             ...baseObject.path,
             {
@@ -50212,8 +45278,8 @@ class ReactiveScopeDependencyTreeHIR {
         var _b;
         _ReactiveScopeDependencyTreeHIR_hoistableObjects.set(this, new Map());
         _ReactiveScopeDependencyTreeHIR_deps.set(this, new Map());
-        for (const { path, identifier } of hoistableObjects) {
-            let currNode = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_hoistableObjects, "f"), path.length > 0 && path[0].optional ? 'Optional' : 'NonNull');
+        for (const { path, identifier, reactive } of hoistableObjects) {
+            let currNode = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, reactive, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_hoistableObjects, "f"), path.length > 0 && path[0].optional ? 'Optional' : 'NonNull');
             for (let i = 0; i < path.length; i++) {
                 const prevAccessType = (_b = currNode.properties.get(path[i].property)) === null || _b === void 0 ? void 0 : _b.accessType;
                 const accessType = i + 1 < path.length && path[i + 1].optional ? 'Optional' : 'NonNull';
@@ -50234,8 +45300,8 @@ class ReactiveScopeDependencyTreeHIR {
         }
     }
     addDependency(dep) {
-        const { identifier, path } = dep;
-        let depCursor = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f"), PropertyAccessType.UnconditionalAccess);
+        const { identifier, reactive, path } = dep;
+        let depCursor = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, reactive, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f"), PropertyAccessType.UnconditionalAccess);
         let hoistableCursor = __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_hoistableObjects, "f").get(identifier);
         for (const entry of path) {
             let nextHoistableCursor;
@@ -50270,7 +45336,7 @@ class ReactiveScopeDependencyTreeHIR {
     deriveMinimalDependencies() {
         const results = new Set();
         for (const [rootId, rootNode] of __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f").entries()) {
-            collectMinimalDependenciesInSubtree(rootNode, rootId, [], results);
+            collectMinimalDependenciesInSubtree(rootNode, rootNode.reactive, rootId, [], results);
         }
         return results;
     }
@@ -50292,14 +45358,22 @@ class ReactiveScopeDependencyTreeHIR {
         return buf.length > 2 ? buf.join('\n') : buf.join('');
     }
 }
-_a = ReactiveScopeDependencyTreeHIR, _ReactiveScopeDependencyTreeHIR_hoistableObjects = new WeakMap(), _ReactiveScopeDependencyTreeHIR_deps = new WeakMap(), _ReactiveScopeDependencyTreeHIR_getOrCreateRoot = function _ReactiveScopeDependencyTreeHIR_getOrCreateRoot(identifier, roots, defaultAccessType) {
+_a = ReactiveScopeDependencyTreeHIR, _ReactiveScopeDependencyTreeHIR_hoistableObjects = new WeakMap(), _ReactiveScopeDependencyTreeHIR_deps = new WeakMap(), _ReactiveScopeDependencyTreeHIR_getOrCreateRoot = function _ReactiveScopeDependencyTreeHIR_getOrCreateRoot(identifier, reactive, roots, defaultAccessType) {
     let rootNode = roots.get(identifier);
     if (rootNode === undefined) {
         rootNode = {
             properties: new Map(),
+            reactive,
             accessType: defaultAccessType,
         };
         roots.set(identifier, rootNode);
+    }
+    else {
+        CompilerError.invariant(reactive === rootNode.reactive, {
+            reason: '[DeriveMinimalDependenciesHIR] Conflicting reactive root flag',
+            description: `Identifier ${printIdentifier(identifier)}`,
+            loc: GeneratedSource,
+        });
     }
     return rootNode;
 }, _ReactiveScopeDependencyTreeHIR_debugImpl = function _ReactiveScopeDependencyTreeHIR_debugImpl(buf, node, depth = 0) {
@@ -50343,13 +45417,13 @@ function merge$1(access1, access2) {
         }
     }
 }
-function collectMinimalDependenciesInSubtree(node, rootIdentifier, path, results) {
+function collectMinimalDependenciesInSubtree(node, reactive, rootIdentifier, path, results) {
     if (isDependency(node.accessType)) {
-        results.add({ identifier: rootIdentifier, path });
+        results.add({ identifier: rootIdentifier, reactive, path });
     }
     else {
         for (const [childName, childNode] of node.properties) {
-            collectMinimalDependenciesInSubtree(childNode, rootIdentifier, [
+            collectMinimalDependenciesInSubtree(childNode, reactive, rootIdentifier, [
                 ...path,
                 {
                     property: childName,
@@ -50388,7 +45462,7 @@ function makeOrMergeProperty(node, property, accessType) {
 var _DependencyCollectionContext_instances, _DependencyCollectionContext_declarations, _DependencyCollectionContext_reassignments, _DependencyCollectionContext_scopes, _DependencyCollectionContext_dependencies, _DependencyCollectionContext_temporaries, _DependencyCollectionContext_temporariesUsedOutsideScope, _DependencyCollectionContext_processedInstrsInOptional, _DependencyCollectionContext_innerFnContext, _DependencyCollectionContext_checkValidDependency, _DependencyCollectionContext_isScopeActive;
 function propagateScopeDependenciesHIR(fn) {
     const usedOutsideDeclaringScope = findTemporariesUsedOutsideDeclaringScope(fn);
-    const temporaries = collectTemporariesSidemap(fn, usedOutsideDeclaringScope);
+    const temporaries = collectTemporariesSidemap$1(fn, usedOutsideDeclaringScope);
     const { temporariesReadInOptional, processedInstrsInOptional, hoistableObjects, } = collectOptionalChainSidemap(fn);
     const hoistablePropertyLoads = keyByScopeId(fn, collectHoistablePropertyLoads(fn, temporaries, hoistableObjects));
     const scopeDeps = collectDependencies(fn, usedOutsideDeclaringScope, new Map([...temporaries, ...temporariesReadInOptional]), processedInstrsInOptional);
@@ -50459,7 +45533,7 @@ function findTemporariesUsedOutsideDeclaringScope(fn) {
     }
     return usedOutsideDeclaringScope;
 }
-function collectTemporariesSidemap(fn, usedOutsideDeclaringScope) {
+function collectTemporariesSidemap$1(fn, usedOutsideDeclaringScope) {
     const temporaries = new Map();
     collectTemporariesSidemapImpl(fn, usedOutsideDeclaringScope, temporaries, null);
     return temporaries;
@@ -50491,6 +45565,7 @@ function collectTemporariesSidemapImpl(fn, usedOutsideDeclaringScope, temporarie
                     fn.context.some(context => context.identifier.id === value.place.identifier.id)) {
                     temporaries.set(lvalue.identifier.id, {
                         identifier: value.place.identifier,
+                        reactive: value.place.reactive,
                         path: [],
                     });
                 }
@@ -50508,12 +45583,14 @@ function getProperty(object, propertyName, optional, temporaries) {
     if (resolvedDependency == null) {
         property = {
             identifier: object.identifier,
+            reactive: object.reactive,
             path: [{ property: propertyName, optional }],
         };
     }
     else {
         property = {
             identifier: resolvedDependency.identifier,
+            reactive: resolvedDependency.reactive,
             path: [...resolvedDependency.path, { property: propertyName, optional }],
         };
     }
@@ -50578,6 +45655,7 @@ class DependencyCollectionContext {
         var _a;
         this.visitDependency((_a = __classPrivateFieldGet(this, _DependencyCollectionContext_temporaries, "f").get(place.identifier.id)) !== null && _a !== void 0 ? _a : {
             identifier: place.identifier,
+            reactive: place.reactive,
             path: [],
         });
     }
@@ -50605,6 +45683,7 @@ class DependencyCollectionContext {
             ((_a = maybeDependency.path.at(0)) === null || _a === void 0 ? void 0 : _a.property) === 'current') {
             maybeDependency = {
                 identifier: maybeDependency.identifier,
+                reactive: maybeDependency.reactive,
                 path: [],
             };
         }
@@ -50616,7 +45695,11 @@ class DependencyCollectionContext {
         const currentScope = this.currentScope.value;
         if (currentScope != null &&
             !Iterable_some(currentScope.reassignments, identifier => identifier.declarationId === place.identifier.declarationId) &&
-            __classPrivateFieldGet(this, _DependencyCollectionContext_instances, "m", _DependencyCollectionContext_checkValidDependency).call(this, { identifier: place.identifier, path: [] })) {
+            __classPrivateFieldGet(this, _DependencyCollectionContext_instances, "m", _DependencyCollectionContext_checkValidDependency).call(this, {
+                identifier: place.identifier,
+                reactive: place.reactive,
+                path: [],
+            })) {
             currentScope.reassignments.add(place.identifier);
         }
     }
@@ -50784,20 +45867,218 @@ function collectDependencies(fn, usedOutsideDeclaringScope, temporaries, process
     return context.deps;
 }
 
+function buildDependencyInstructions(dep, env) {
+    const builder = new HIRBuilder(env, {
+        entryBlockKind: 'value',
+    });
+    let dependencyValue;
+    if (dep.path.every(path => !path.optional)) {
+        dependencyValue = writeNonOptionalDependency(dep, env, builder);
+    }
+    else {
+        dependencyValue = writeOptionalDependency(dep, builder, null);
+    }
+    const exitBlockId = builder.terminate({
+        kind: 'unsupported',
+        loc: GeneratedSource,
+        id: makeInstructionId(0),
+    }, null);
+    return {
+        place: {
+            kind: 'Identifier',
+            identifier: dependencyValue,
+            effect: Effect.Freeze,
+            reactive: dep.reactive,
+            loc: GeneratedSource,
+        },
+        value: builder.build(),
+        exitBlockId,
+    };
+}
+function writeNonOptionalDependency(dep, env, builder) {
+    const loc = dep.identifier.loc;
+    let curr = makeTemporaryIdentifier(env.nextIdentifierId, loc);
+    builder.push({
+        lvalue: {
+            identifier: curr,
+            kind: 'Identifier',
+            effect: Effect.Mutate,
+            reactive: dep.reactive,
+            loc,
+        },
+        value: {
+            kind: 'LoadLocal',
+            place: {
+                identifier: dep.identifier,
+                kind: 'Identifier',
+                effect: Effect.Freeze,
+                reactive: dep.reactive,
+                loc,
+            },
+            loc,
+        },
+        id: makeInstructionId(1),
+        loc: loc,
+        effects: null,
+    });
+    for (const path of dep.path) {
+        const next = makeTemporaryIdentifier(env.nextIdentifierId, loc);
+        builder.push({
+            lvalue: {
+                identifier: next,
+                kind: 'Identifier',
+                effect: Effect.Mutate,
+                reactive: dep.reactive,
+                loc,
+            },
+            value: {
+                kind: 'PropertyLoad',
+                object: {
+                    identifier: curr,
+                    kind: 'Identifier',
+                    effect: Effect.Freeze,
+                    reactive: dep.reactive,
+                    loc,
+                },
+                property: path.property,
+                loc,
+            },
+            id: makeInstructionId(1),
+            loc: loc,
+            effects: null,
+        });
+        curr = next;
+    }
+    return curr;
+}
+function writeOptionalDependency(dep, builder, parentAlternate) {
+    const env = builder.environment;
+    const dependencyValue = {
+        kind: 'Identifier',
+        identifier: makeTemporaryIdentifier(env.nextIdentifierId, GeneratedSource),
+        effect: Effect.Mutate,
+        reactive: dep.reactive,
+        loc: GeneratedSource,
+    };
+    const continuationBlock = builder.reserve(builder.currentBlockKind());
+    let alternate;
+    if (parentAlternate != null) {
+        alternate = parentAlternate;
+    }
+    else {
+        alternate = builder.enter('value', () => {
+            const temp = lowerValueToTemporary(builder, {
+                kind: 'Primitive',
+                value: undefined,
+                loc: GeneratedSource,
+            });
+            lowerValueToTemporary(builder, {
+                kind: 'StoreLocal',
+                lvalue: { kind: InstructionKind.Const, place: Object.assign({}, dependencyValue) },
+                value: Object.assign({}, temp),
+                type: null,
+                loc: GeneratedSource,
+            });
+            return {
+                kind: 'goto',
+                variant: GotoVariant.Break,
+                block: continuationBlock.id,
+                id: makeInstructionId(0),
+                loc: GeneratedSource,
+            };
+        });
+    }
+    const consequent = builder.reserve('value');
+    let testIdentifier = null;
+    const testBlock = builder.enter('value', () => {
+        const testDependency = Object.assign(Object.assign({}, dep), { path: dep.path.slice(0, dep.path.length - 1) });
+        const firstOptional = dep.path.findIndex(path => path.optional);
+        CompilerError.invariant(firstOptional !== -1, {
+            reason: '[ScopeDependencyUtils] Internal invariant broken: expected optional path',
+            loc: dep.identifier.loc,
+            description: null,
+            suggestions: null,
+        });
+        if (firstOptional === dep.path.length - 1) {
+            testIdentifier = writeNonOptionalDependency(testDependency, env, builder);
+        }
+        else {
+            testIdentifier = writeOptionalDependency(testDependency, builder, alternate);
+        }
+        return {
+            kind: 'branch',
+            test: {
+                identifier: testIdentifier,
+                effect: Effect.Freeze,
+                kind: 'Identifier',
+                loc: GeneratedSource,
+                reactive: dep.reactive,
+            },
+            consequent: consequent.id,
+            alternate,
+            id: makeInstructionId(0),
+            loc: GeneratedSource,
+            fallthrough: continuationBlock.id,
+        };
+    });
+    builder.enterReserved(consequent, () => {
+        CompilerError.invariant(testIdentifier !== null, {
+            reason: 'Satisfy type checker',
+            description: null,
+            loc: null,
+            suggestions: null,
+        });
+        lowerValueToTemporary(builder, {
+            kind: 'StoreLocal',
+            lvalue: { kind: InstructionKind.Const, place: Object.assign({}, dependencyValue) },
+            value: lowerValueToTemporary(builder, {
+                kind: 'PropertyLoad',
+                object: {
+                    identifier: testIdentifier,
+                    kind: 'Identifier',
+                    effect: Effect.Freeze,
+                    reactive: dep.reactive,
+                    loc: GeneratedSource,
+                },
+                property: dep.path.at(-1).property,
+                loc: GeneratedSource,
+            }),
+            type: null,
+            loc: GeneratedSource,
+        });
+        return {
+            kind: 'goto',
+            variant: GotoVariant.Break,
+            block: continuationBlock.id,
+            id: makeInstructionId(0),
+            loc: GeneratedSource,
+        };
+    });
+    builder.terminateWithContinuation({
+        kind: 'optional',
+        optional: dep.path.at(-1).optional,
+        test: testBlock,
+        fallthrough: continuationBlock.id,
+        id: makeInstructionId(0),
+        loc: GeneratedSource,
+    }, continuationBlock);
+    return dependencyValue.identifier;
+}
+
 function inferEffectDependencies(fn) {
     var _a, _b;
-    let hasRewrite = false;
     const fnExpressions = new Map();
     const autodepFnConfigs = new Map();
     for (const effectTarget of fn.env.config.inferEffectDependencies) {
         const moduleTargets = getOrInsertWith(autodepFnConfigs, effectTarget.function.source, () => new Map());
-        moduleTargets.set(effectTarget.function.importSpecifierName, effectTarget.numRequiredArgs);
+        moduleTargets.set(effectTarget.function.importSpecifierName, effectTarget.autodepsIndex);
     }
     const autodepFnLoads = new Map();
     const autodepModuleLoads = new Map();
     const scopeInfos = new Map();
     const loadGlobals = new Set();
     const reactiveIds = inferReactiveIdentifiers(fn);
+    const rewriteBlocks = [];
     for (const [, block] of fn.body.blocks) {
         if (block.terminal.kind === 'scope') {
             const scopeBlock = fn.body.blocks.get(block.terminal.block);
@@ -50807,7 +46088,7 @@ function inferEffectDependencies(fn) {
                 scopeInfos.set(block.terminal.scope.id, block.terminal.scope.dependencies);
             }
         }
-        const rewriteInstrs = new Map();
+        const rewriteInstrs = [];
         for (const instr of block.instructions) {
             const { value, lvalue } = instr;
             if (value.kind === 'FunctionExpression') {
@@ -50849,10 +46130,16 @@ function inferEffectDependencies(fn) {
             else if (value.kind === 'CallExpression' ||
                 value.kind === 'MethodCall') {
                 const callee = value.kind === 'CallExpression' ? value.callee : value.property;
-                if (value.args.length === autodepFnLoads.get(callee.identifier.id) &&
+                const autodepsArgIndex = value.args.findIndex(arg => arg.kind === 'Identifier' &&
+                    arg.identifier.type.kind === 'Object' &&
+                    arg.identifier.type.shapeId === BuiltInAutodepsId);
+                const autodepsArgExpectedIndex = autodepFnLoads.get(callee.identifier.id);
+                if (value.args.length > 0 &&
+                    autodepsArgExpectedIndex != null &&
+                    autodepsArgIndex === autodepsArgExpectedIndex &&
+                    autodepFnLoads.has(callee.identifier.id) &&
                     value.args[0].kind === 'Identifier') {
                     const effectDeps = [];
-                    const newInstructions = [];
                     const deps = {
                         kind: 'ArrayExpression',
                         elements: effectDeps,
@@ -50873,15 +46160,22 @@ function inferEffectDependencies(fn) {
                             minimalDeps = inferMinimalDependencies(fnExpr);
                         }
                         const usedDeps = [];
-                        for (const dep of minimalDeps) {
-                            if (((isUseRefType(dep.identifier) ||
-                                isSetStateType(dep.identifier)) &&
-                                !reactiveIds.has(dep.identifier.id)) ||
-                                isFireFunctionType(dep.identifier)) {
+                        for (const maybeDep of minimalDeps) {
+                            if (((isUseRefType(maybeDep.identifier) ||
+                                isSetStateType(maybeDep.identifier)) &&
+                                !reactiveIds.has(maybeDep.identifier.id)) ||
+                                isFireFunctionType(maybeDep.identifier) ||
+                                isEffectEventFunctionType(maybeDep.identifier)) {
                                 continue;
                             }
-                            const { place, instructions } = writeDependencyToInstructions(dep, reactiveIds.has(dep.identifier.id), fn.env, fnExpr.loc);
-                            newInstructions.push(...instructions);
+                            const dep = truncateDepAtCurrent(maybeDep);
+                            const { place, value, exitBlockId } = buildDependencyInstructions(dep, fn.env);
+                            rewriteInstrs.push({
+                                kind: 'block',
+                                location: instr.id,
+                                value,
+                                exitBlockId: exitBlockId,
+                            });
                             effectDeps.push(place);
                             usedDeps.push(dep);
                         }
@@ -50899,25 +46193,33 @@ function inferEffectDependencies(fn) {
                                 decorations,
                             });
                         }
-                        newInstructions.push({
-                            id: makeInstructionId(0),
-                            loc: GeneratedSource,
-                            lvalue: Object.assign(Object.assign({}, depsPlace), { effect: Effect.Mutate }),
-                            value: deps,
+                        rewriteInstrs.push({
+                            kind: 'instr',
+                            location: instr.id,
+                            value: {
+                                id: makeInstructionId(0),
+                                loc: GeneratedSource,
+                                lvalue: Object.assign(Object.assign({}, depsPlace), { effect: Effect.Mutate }),
+                                value: deps,
+                                effects: null,
+                            },
                         });
-                        value.args.push(Object.assign(Object.assign({}, depsPlace), { effect: Effect.Freeze }));
-                        rewriteInstrs.set(instr.id, newInstructions);
+                        value.args[autodepsArgIndex] = Object.assign(Object.assign({}, depsPlace), { effect: Effect.Freeze });
                         fn.env.inferredEffectLocations.add(callee.loc);
                     }
                     else if (loadGlobals.has(value.args[0].identifier.id)) {
-                        newInstructions.push({
-                            id: makeInstructionId(0),
-                            loc: GeneratedSource,
-                            lvalue: Object.assign(Object.assign({}, depsPlace), { effect: Effect.Mutate }),
-                            value: deps,
+                        rewriteInstrs.push({
+                            kind: 'instr',
+                            location: instr.id,
+                            value: {
+                                id: makeInstructionId(0),
+                                loc: GeneratedSource,
+                                lvalue: Object.assign(Object.assign({}, depsPlace), { effect: Effect.Mutate }),
+                                value: deps,
+                                effects: null,
+                            },
                         });
-                        value.args.push(Object.assign(Object.assign({}, depsPlace), { effect: Effect.Freeze }));
-                        rewriteInstrs.set(instr.id, newInstructions);
+                        value.args[autodepsArgIndex] = Object.assign(Object.assign({}, depsPlace), { effect: Effect.Freeze });
                         fn.env.inferredEffectLocations.add(callee.loc);
                     }
                 }
@@ -50941,71 +46243,78 @@ function inferEffectDependencies(fn) {
                 }
             }
         }
-        if (rewriteInstrs.size > 0) {
-            hasRewrite = true;
-            const newInstrs = [];
-            for (const instr of block.instructions) {
-                const newInstr = rewriteInstrs.get(instr.id);
-                if (newInstr != null) {
-                    newInstrs.push(...newInstr, instr);
-                }
-                else {
-                    newInstrs.push(instr);
-                }
-            }
-            block.instructions = newInstrs;
-        }
+        rewriteSplices(block, rewriteInstrs, rewriteBlocks);
     }
-    if (hasRewrite) {
+    if (rewriteBlocks.length > 0) {
+        for (const block of rewriteBlocks) {
+            fn.body.blocks.set(block.id, block);
+        }
+        reversePostorderBlocks(fn.body);
+        markPredecessors(fn.body);
         markInstructionIds(fn.body);
         fixScopeAndIdentifierRanges(fn.body);
+        deadCodeElimination(fn);
         fn.env.hasInferredEffect = true;
     }
 }
-function writeDependencyToInstructions(dep, reactive, env, loc) {
-    const instructions = [];
-    let currValue = createTemporaryPlace(env, GeneratedSource);
-    currValue.reactive = reactive;
-    instructions.push({
-        id: makeInstructionId(0),
-        loc: GeneratedSource,
-        lvalue: Object.assign(Object.assign({}, currValue), { effect: Effect.Mutate }),
-        value: {
-            kind: 'LoadLocal',
-            place: {
-                kind: 'Identifier',
-                identifier: dep.identifier,
-                effect: Effect.Capture,
-                reactive,
-                loc: loc,
-            },
-            loc: loc,
-        },
-    });
-    for (const path of dep.path) {
-        if (path.optional) {
-            break;
-        }
-        if (path.property === 'current') {
-            break;
-        }
-        const nextValue = createTemporaryPlace(env, GeneratedSource);
-        nextValue.reactive = reactive;
-        instructions.push({
-            id: makeInstructionId(0),
-            loc: GeneratedSource,
-            lvalue: Object.assign(Object.assign({}, nextValue), { effect: Effect.Mutate }),
-            value: {
-                kind: 'PropertyLoad',
-                object: Object.assign(Object.assign({}, currValue), { effect: Effect.Capture }),
-                property: path.property,
-                loc: loc,
-            },
-        });
-        currValue = nextValue;
+function truncateDepAtCurrent(dep) {
+    const idx = dep.path.findIndex(path => path.property === 'current');
+    if (idx === -1) {
+        return dep;
     }
-    currValue.effect = Effect.Freeze;
-    return { place: currValue, instructions };
+    else {
+        return Object.assign(Object.assign({}, dep), { path: dep.path.slice(0, idx) });
+    }
+}
+function rewriteSplices(originalBlock, splices, rewriteBlocks) {
+    if (splices.length === 0) {
+        return;
+    }
+    const originalInstrs = originalBlock.instructions;
+    let currBlock = Object.assign(Object.assign({}, originalBlock), { instructions: [] });
+    rewriteBlocks.push(currBlock);
+    let cursor = 0;
+    for (const rewrite of splices) {
+        while (originalInstrs[cursor].id < rewrite.location) {
+            CompilerError.invariant(originalInstrs[cursor].id < originalInstrs[cursor + 1].id, {
+                reason: '[InferEffectDependencies] Internal invariant broken: expected block instructions to be sorted',
+                loc: originalInstrs[cursor].loc,
+            });
+            currBlock.instructions.push(originalInstrs[cursor]);
+            cursor++;
+        }
+        CompilerError.invariant(originalInstrs[cursor].id === rewrite.location, {
+            reason: '[InferEffectDependencies] Internal invariant broken: splice location not found',
+            loc: originalInstrs[cursor].loc,
+        });
+        if (rewrite.kind === 'instr') {
+            currBlock.instructions.push(rewrite.value);
+        }
+        else if (rewrite.kind === 'block') {
+            const { entry, blocks } = rewrite.value;
+            const entryBlock = blocks.get(entry);
+            currBlock.instructions.push(...entryBlock.instructions);
+            if (blocks.size > 1) {
+                CompilerError.invariant(terminalFallthrough(entryBlock.terminal) === rewrite.exitBlockId, {
+                    reason: '[InferEffectDependencies] Internal invariant broken: expected entry block to have a fallthrough',
+                    loc: entryBlock.terminal.loc,
+                });
+                const originalTerminal = currBlock.terminal;
+                currBlock.terminal = entryBlock.terminal;
+                for (const [id, block] of blocks) {
+                    if (id === entry) {
+                        continue;
+                    }
+                    if (id === rewrite.exitBlockId) {
+                        block.terminal = originalTerminal;
+                        currBlock = block;
+                    }
+                    rewriteBlocks.push(block);
+                }
+            }
+        }
+    }
+    currBlock.instructions.push(...originalInstrs.slice(cursor));
 }
 function inferReactiveIdentifiers(fn) {
     const reactiveIds = new Set();
@@ -51049,7 +46358,7 @@ function collectDepUsages(deps, fnExpr) {
 }
 function inferMinimalDependencies(fnInstr) {
     const fn = fnInstr.value.loweredFunc.func;
-    const temporaries = collectTemporariesSidemap(fn, new Set());
+    const temporaries = collectTemporariesSidemap$1(fn, new Set());
     const { hoistableObjects, processedInstrsInOptional, temporariesReadInOptional, } = collectOptionalChainSidemap(fn);
     const hoistablePropertyLoads = collectHoistablePropertyLoadsInInnerFn(fnInstr, temporaries, hoistableObjects);
     const hoistableToFnEntry = hoistablePropertyLoads.get(fn.body.entry);
@@ -51930,7 +47239,8 @@ function apply(func, unifier) {
             }
         }
     }
-    func.returnType = unifier.get(func.returnType);
+    const returns = func.returns.identifier;
+    returns.type = unifier.get(returns.type);
 }
 function equation(left, right) {
     return {
@@ -51972,13 +47282,13 @@ function* generate(func) {
         }
     }
     if (returnTypes.length > 1) {
-        yield equation(func.returnType, {
+        yield equation(func.returns.identifier.type, {
             kind: 'Phi',
             operands: returnTypes,
         });
     }
     else if (returnTypes.length === 1) {
-        yield equation(func.returnType, returnTypes[0]);
+        yield equation(func.returns.identifier.type, returnTypes[0]);
     }
 }
 function setName(names, id, name) {
@@ -52011,8 +47321,13 @@ function* generateInstructionTypes(env, names, instr) {
             break;
         }
         case 'DeclareContext':
-        case 'StoreContext':
         case 'LoadContext': {
+            break;
+        }
+        case 'StoreContext': {
+            if (value.lvalue.kind === InstructionKind.Const) {
+                yield equation(value.lvalue.place.identifier.type, value.value.identifier.type);
+            }
             break;
         }
         case 'StoreLocal': {
@@ -52144,6 +47459,12 @@ function* generateInstructionTypes(env, names, instr) {
                             },
                         });
                     }
+                    else if (item.kind === 'Spread') {
+                        yield equation(item.place.identifier.type, {
+                            kind: 'Object',
+                            shapeId: BuiltInArrayId,
+                        });
+                    }
                     else {
                         break;
                     }
@@ -52189,7 +47510,7 @@ function* generateInstructionTypes(env, names, instr) {
             yield equation(left, {
                 kind: 'Function',
                 shapeId: BuiltInFunctionId,
-                return: value.loweredFunc.func.returnType,
+                return: value.loweredFunc.func.returns.identifier.type,
                 isConstructor: false,
             });
             break;
@@ -52205,6 +47526,18 @@ function* generateInstructionTypes(env, names, instr) {
         }
         case 'JsxExpression':
         case 'JsxFragment': {
+            if (env.config.enableTreatRefLikeIdentifiersAsRefs) {
+                if (value.kind === 'JsxExpression') {
+                    for (const prop of value.props) {
+                        if (prop.kind === 'JsxAttribute' && prop.name === 'ref') {
+                            yield equation(prop.place.identifier.type, {
+                                kind: 'Object',
+                                shapeId: BuiltInUseRefId,
+                            });
+                        }
+                    }
+                }
+            }
             yield equation(left, { kind: 'Object', shapeId: BuiltInJsxId });
             break;
         }
@@ -52219,7 +47552,18 @@ function* generateInstructionTypes(env, names, instr) {
             yield equation(left, returnType);
             break;
         }
-        case 'PropertyStore':
+        case 'PropertyStore': {
+            yield equation(makeType(), {
+                kind: 'Property',
+                objectType: value.object.identifier.type,
+                objectName: getName(names, value.object.identifier.id),
+                propertyName: {
+                    kind: 'literal',
+                    value: value.property,
+                },
+            });
+            break;
+        }
         case 'DeclareLocal':
         case 'RegExpLiteral':
         case 'MetaProperty':
@@ -52847,7 +48191,7 @@ function visitFunctionExpression(errors, fn) {
                             severity: ErrorSeverity.InvalidReact,
                             reason: 'Hooks must be called at the top level in the body of a function component or custom hook, and may not be called within function expressions. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)',
                             loc: callee.loc,
-                            description: `Cannot call ${hookKind} within a function component`,
+                            description: `Cannot call ${hookKind === 'Custom' ? 'hook' : hookKind} within a function expression`,
                             suggestions: null,
                         }));
                     }
@@ -52980,7 +48324,7 @@ function validateNoCapitalizedCalls(fn) {
     return errors.asResult();
 }
 
-var _Env_changed;
+var _Env_changed, _Env_data, _Env_temporaries;
 function makeRefId(id) {
     CompilerError.invariant(id >= 0 && Number.isInteger(id), {
         reason: 'Expected identifier id to be a non-negative integer',
@@ -52994,10 +48338,18 @@ let _refId = 0;
 function nextRefId() {
     return makeRefId(_refId++);
 }
-class Env extends Map {
+class Env {
     constructor() {
-        super(...arguments);
         _Env_changed.set(this, false);
+        _Env_data.set(this, new Map());
+        _Env_temporaries.set(this, new Map());
+    }
+    lookup(place) {
+        var _a;
+        return (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(place.identifier.id)) !== null && _a !== void 0 ? _a : place;
+    }
+    define(place, value) {
+        __classPrivateFieldGet(this, _Env_temporaries, "f").set(place.identifier.id, value);
     }
     resetChanged() {
         __classPrivateFieldSet(this, _Env_changed, false, "f");
@@ -53005,20 +48357,64 @@ class Env extends Map {
     hasChanged() {
         return __classPrivateFieldGet(this, _Env_changed, "f");
     }
+    get(key) {
+        var _a, _b;
+        const operandId = (_b = (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(key)) === null || _a === void 0 ? void 0 : _a.identifier.id) !== null && _b !== void 0 ? _b : key;
+        return __classPrivateFieldGet(this, _Env_data, "f").get(operandId);
+    }
     set(key, value) {
-        const cur = this.get(key);
+        var _a, _b;
+        const operandId = (_b = (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(key)) === null || _a === void 0 ? void 0 : _a.identifier.id) !== null && _b !== void 0 ? _b : key;
+        const cur = __classPrivateFieldGet(this, _Env_data, "f").get(operandId);
         const widenedValue = joinRefAccessTypes(value, cur !== null && cur !== void 0 ? cur : { kind: 'None' });
         if (!(cur == null && widenedValue.kind === 'None') &&
             (cur == null || !tyEqual(cur, widenedValue))) {
             __classPrivateFieldSet(this, _Env_changed, true, "f");
         }
-        return super.set(key, widenedValue);
+        __classPrivateFieldGet(this, _Env_data, "f").set(operandId, widenedValue);
+        return this;
     }
 }
-_Env_changed = new WeakMap();
+_Env_changed = new WeakMap(), _Env_data = new WeakMap(), _Env_temporaries = new WeakMap();
 function validateNoRefAccessInRender(fn) {
     const env = new Env();
+    collectTemporariesSidemap(fn, env);
     return validateNoRefAccessInRenderImpl(fn, env).map(_ => undefined);
+}
+function collectTemporariesSidemap(fn, env) {
+    for (const block of fn.body.blocks.values()) {
+        for (const instr of block.instructions) {
+            const { lvalue, value } = instr;
+            switch (value.kind) {
+                case 'LoadLocal': {
+                    const temp = env.lookup(value.place);
+                    if (temp != null) {
+                        env.define(lvalue, temp);
+                    }
+                    break;
+                }
+                case 'StoreLocal': {
+                    const temp = env.lookup(value.value);
+                    if (temp != null) {
+                        env.define(lvalue, temp);
+                        env.define(value.lvalue.place, temp);
+                    }
+                    break;
+                }
+                case 'PropertyLoad': {
+                    if (isUseRefType(value.object.identifier) &&
+                        value.property === 'current') {
+                        continue;
+                    }
+                    const temp = env.lookup(value.object);
+                    if (temp != null) {
+                        env.define(lvalue, temp);
+                    }
+                    break;
+                }
+            }
+        }
+    }
 }
 function refTypeOfType(place) {
     if (isRefValueType(place.identifier)) {
@@ -53163,12 +48559,26 @@ function validateNoRefAccessInRenderImpl(fn, env) {
         const type = refTypeOfType(place);
         env.set(place.identifier.id, type);
     }
+    const interpolatedAsJsx = new Set();
+    for (const block of fn.body.blocks.values()) {
+        for (const instr of block.instructions) {
+            const { value } = instr;
+            if (value.kind === 'JsxExpression' || value.kind === 'JsxFragment') {
+                if (value.children != null) {
+                    for (const child of value.children) {
+                        interpolatedAsJsx.add(child.identifier.id);
+                    }
+                }
+            }
+        }
+    }
     for (let i = 0; (i == 0 || env.hasChanged()) && i < 10; i++) {
         env.resetChanged();
         returnValues = [];
-        const safeBlocks = new Map();
+        const safeBlocks = [];
         const errors = new CompilerError();
         for (const [, block] of fn.body.blocks) {
+            retainWhere(safeBlocks, entry => entry.block !== block.id);
             for (const phi of block.phis) {
                 env.set(phi.place.identifier.id, joinRefAccessTypes(...Array(...phi.operands.values()).map(operand => { var _a; return (_a = env.get(operand.identifier.id)) !== null && _a !== void 0 ? _a : { kind: 'None' }; })));
             }
@@ -53257,27 +48667,37 @@ function validateNoRefAccessInRenderImpl(fn, env) {
                         const hookKind = getHookKindForType(fn.env, callee.identifier.type);
                         let returnType = { kind: 'None' };
                         const fnType = env.get(callee.identifier.id);
+                        let didError = false;
                         if ((fnType === null || fnType === void 0 ? void 0 : fnType.kind) === 'Structure' && fnType.fn !== null) {
                             returnType = fnType.fn.returnType;
                             if (fnType.fn.readRefEffect) {
-                                errors.push({
+                                didError = true;
+                                errors.pushDiagnostic(CompilerDiagnostic.create({
                                     severity: ErrorSeverity.InvalidReact,
-                                    reason: 'This function accesses a ref value (the `current` property), which may not be accessed during render. (https://react.dev/reference/react/useRef)',
+                                    category: 'Cannot access refs during render',
+                                    description: ERROR_DESCRIPTION,
+                                }).withDetail({
+                                    kind: 'error',
                                     loc: callee.loc,
-                                    description: callee.identifier.name !== null &&
-                                        callee.identifier.name.kind === 'named'
-                                        ? `Function \`${callee.identifier.name.value}\` accesses a ref`
-                                        : null,
-                                    suggestions: null,
-                                });
+                                    message: `This function accesses a ref value`,
+                                }));
                             }
                         }
-                        for (const operand of eachInstructionValueOperand(instr.value)) {
-                            if (hookKind != null) {
-                                validateNoDirectRefValueAccess(errors, operand, env);
-                            }
-                            else {
-                                validateNoRefAccess(errors, env, operand, operand.loc);
+                        if (!didError) {
+                            const isRefLValue = isUseRefType(instr.lvalue.identifier);
+                            for (const operand of eachInstructionValueOperand(instr.value)) {
+                                if (isRefLValue ||
+                                    (hookKind != null &&
+                                        hookKind !== 'useState' &&
+                                        hookKind !== 'useReducer')) {
+                                    validateNoDirectRefValueAccess(errors, operand, env);
+                                }
+                                else if (interpolatedAsJsx.has(instr.lvalue.identifier.id)) {
+                                    validateNoRefValueAccess(errors, env, operand);
+                                }
+                                else {
+                                    validateNoRefPassedToFunction(errors, env, operand, operand.loc);
+                                }
                             }
                         }
                         env.set(instr.lvalue.identifier.id, returnType);
@@ -53309,22 +48729,34 @@ function validateNoRefAccessInRenderImpl(fn, env) {
                     case 'PropertyStore':
                     case 'ComputedDelete':
                     case 'ComputedStore': {
-                        const safe = safeBlocks.get(block.id);
                         const target = env.get(instr.value.object.identifier.id);
+                        let safe = null;
                         if (instr.value.kind === 'PropertyStore' &&
-                            safe != null &&
-                            (target === null || target === void 0 ? void 0 : target.kind) === 'Ref' &&
-                            target.refId === safe) {
-                            safeBlocks.delete(block.id);
+                            target != null &&
+                            target.kind === 'Ref') {
+                            safe = safeBlocks.find(entry => entry.ref === target.refId);
+                        }
+                        if (safe != null) {
+                            retainWhere(safeBlocks, entry => entry !== safe);
                         }
                         else {
-                            validateNoRefAccess(errors, env, instr.value.object, instr.loc);
+                            validateNoRefUpdate(errors, env, instr.value.object, instr.loc);
                         }
-                        for (const operand of eachInstructionValueOperand(instr.value)) {
-                            if (operand === instr.value.object) {
-                                continue;
+                        if (instr.value.kind === 'ComputedDelete' ||
+                            instr.value.kind === 'ComputedStore') {
+                            validateNoRefValueAccess(errors, env, instr.value.property);
+                        }
+                        if (instr.value.kind === 'ComputedStore' ||
+                            instr.value.kind === 'PropertyStore') {
+                            validateNoDirectRefValueAccess(errors, instr.value.value, env);
+                            const type = env.get(instr.value.value.identifier.id);
+                            if (type != null && type.kind === 'Structure') {
+                                let objectType = type;
+                                if (target != null) {
+                                    objectType = joinRefAccessTypes(objectType, target);
+                                }
+                                env.set(instr.value.object.identifier.id, objectType);
                             }
-                            validateNoRefValueAccess(errors, env, operand);
                         }
                         break;
                     }
@@ -53385,8 +48817,9 @@ function validateNoRefAccessInRenderImpl(fn, env) {
             }
             if (block.terminal.kind === 'if') {
                 const test = env.get(block.terminal.test.identifier.id);
-                if ((test === null || test === void 0 ? void 0 : test.kind) === 'Guard') {
-                    safeBlocks.set(block.terminal.consequent, test.refId);
+                if ((test === null || test === void 0 ? void 0 : test.kind) === 'Guard' &&
+                    safeBlocks.find(entry => entry.ref === test.refId) == null) {
+                    safeBlocks.push({ block: block.terminal.fallthrough, ref: test.refId });
                 }
             }
             for (const operand of eachTerminalOperand(block.terminal)) {
@@ -53422,16 +48855,15 @@ function destructure(type) {
 function guardCheck(errors, operand, env) {
     var _a;
     if (((_a = env.get(operand.identifier.id)) === null || _a === void 0 ? void 0 : _a.kind) === 'Guard') {
-        errors.push({
+        errors.pushDiagnostic(CompilerDiagnostic.create({
             severity: ErrorSeverity.InvalidReact,
-            reason: 'Ref values (the `current` property) may not be accessed during render. (https://react.dev/reference/react/useRef)',
+            category: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetail({
+            kind: 'error',
             loc: operand.loc,
-            description: operand.identifier.name !== null &&
-                operand.identifier.name.kind === 'named'
-                ? `Cannot access ref value \`${operand.identifier.name.value}\``
-                : null,
-            suggestions: null,
-        });
+            message: `Cannot access ref value during render`,
+        }));
     }
 }
 function validateNoRefValueAccess(errors, env, operand) {
@@ -53439,52 +48871,67 @@ function validateNoRefValueAccess(errors, env, operand) {
     const type = destructure(env.get(operand.identifier.id));
     if ((type === null || type === void 0 ? void 0 : type.kind) === 'RefValue' ||
         ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && ((_a = type.fn) === null || _a === void 0 ? void 0 : _a.readRefEffect))) {
-        errors.push({
+        errors.pushDiagnostic(CompilerDiagnostic.create({
             severity: ErrorSeverity.InvalidReact,
-            reason: 'Ref values (the `current` property) may not be accessed during render. (https://react.dev/reference/react/useRef)',
+            category: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetail({
+            kind: 'error',
             loc: (type.kind === 'RefValue' && type.loc) || operand.loc,
-            description: operand.identifier.name !== null &&
-                operand.identifier.name.kind === 'named'
-                ? `Cannot access ref value \`${operand.identifier.name.value}\``
-                : null,
-            suggestions: null,
-        });
+            message: `Cannot access ref value during render`,
+        }));
     }
 }
-function validateNoRefAccess(errors, env, operand, loc) {
+function validateNoRefPassedToFunction(errors, env, operand, loc) {
     var _a;
     const type = destructure(env.get(operand.identifier.id));
     if ((type === null || type === void 0 ? void 0 : type.kind) === 'Ref' ||
         (type === null || type === void 0 ? void 0 : type.kind) === 'RefValue' ||
         ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && ((_a = type.fn) === null || _a === void 0 ? void 0 : _a.readRefEffect))) {
-        errors.push({
+        errors.pushDiagnostic(CompilerDiagnostic.create({
             severity: ErrorSeverity.InvalidReact,
-            reason: 'Ref values (the `current` property) may not be accessed during render. (https://react.dev/reference/react/useRef)',
+            category: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetail({
+            kind: 'error',
             loc: (type.kind === 'RefValue' && type.loc) || loc,
-            description: operand.identifier.name !== null &&
-                operand.identifier.name.kind === 'named'
-                ? `Cannot access ref value \`${operand.identifier.name.value}\``
-                : null,
-            suggestions: null,
-        });
+            message: `Passing a ref to a function may read its value during render`,
+        }));
+    }
+}
+function validateNoRefUpdate(errors, env, operand, loc) {
+    const type = destructure(env.get(operand.identifier.id));
+    if ((type === null || type === void 0 ? void 0 : type.kind) === 'Ref' || (type === null || type === void 0 ? void 0 : type.kind) === 'RefValue') {
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            severity: ErrorSeverity.InvalidReact,
+            category: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetail({
+            kind: 'error',
+            loc: (type.kind === 'RefValue' && type.loc) || loc,
+            message: `Cannot update ref during render`,
+        }));
     }
 }
 function validateNoDirectRefValueAccess(errors, operand, env) {
     var _a;
     const type = destructure(env.get(operand.identifier.id));
     if ((type === null || type === void 0 ? void 0 : type.kind) === 'RefValue') {
-        errors.push({
+        errors.pushDiagnostic(CompilerDiagnostic.create({
             severity: ErrorSeverity.InvalidReact,
-            reason: 'Ref values (the `current` property) may not be accessed during render. (https://react.dev/reference/react/useRef)',
+            category: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetail({
+            kind: 'error',
             loc: (_a = type.loc) !== null && _a !== void 0 ? _a : operand.loc,
-            description: operand.identifier.name !== null &&
-                operand.identifier.name.kind === 'named'
-                ? `Cannot access ref value \`${operand.identifier.name.value}\``
-                : null,
-            suggestions: null,
-        });
+            message: `Cannot access ref value during render`,
+        }));
     }
 }
+const ERROR_DESCRIPTION = 'React refs are values that are not needed for rendering. Refs should only be accessed ' +
+    'outside of render, such as in event handlers or effects. ' +
+    'Accessing a ref value (the `current` property) during render can cause your component ' +
+    'not to update as expected (https://react.dev/reference/react/useRef)';
 
 function validateNoSetStateInRender(fn) {
     const unconditionalSetStateFunctions = new Set();
@@ -53540,22 +48987,28 @@ function validateNoSetStateInRenderImpl(fn, unconditionalSetStateFunctions) {
                     if (isSetStateType(callee.identifier) ||
                         unconditionalSetStateFunctions.has(callee.identifier.id)) {
                         if (activeManualMemoId !== null) {
-                            errors.push({
-                                reason: 'Calling setState from useMemo may trigger an infinite loop. (https://react.dev/reference/react/useState)',
-                                description: null,
+                            errors.pushDiagnostic(CompilerDiagnostic.create({
+                                category: 'Calling setState from useMemo may trigger an infinite loop',
+                                description: 'Each time the memo callback is evaluated it will change state. This can cause a memoization dependency to change, running the memo function again and causing an infinite loop. Instead of setting state in useMemo(), prefer deriving the value during render. (https://react.dev/reference/react/useState)',
                                 severity: ErrorSeverity.InvalidReact,
-                                loc: callee.loc,
                                 suggestions: null,
-                            });
+                            }).withDetail({
+                                kind: 'error',
+                                loc: callee.loc,
+                                message: 'Found setState() within useMemo()',
+                            }));
                         }
                         else if (unconditionalBlocks.has(block.id)) {
-                            errors.push({
-                                reason: 'This is an unconditional set state during render, which will trigger an infinite loop. (https://react.dev/reference/react/useState)',
-                                description: null,
+                            errors.pushDiagnostic(CompilerDiagnostic.create({
+                                category: 'Calling setState during render may trigger an infinite loop',
+                                description: 'Calling setState during render will trigger another render, and can lead to infinite loops. (https://react.dev/reference/react/useState)',
                                 severity: ErrorSeverity.InvalidReact,
-                                loc: callee.loc,
                                 suggestions: null,
-                            });
+                            }).withDetail({
+                                kind: 'error',
+                                loc: callee.loc,
+                                message: 'Found setState() within useMemo()',
+                            }));
                         }
                     }
                     break;
@@ -53696,19 +49149,28 @@ function validateInferredDep(dep, temporaries, declsWithinMemoBlock, validDepsIn
             errorDiagnostic = merge(errorDiagnostic !== null && errorDiagnostic !== void 0 ? errorDiagnostic : compareResult, compareResult);
         }
     }
-    errorState.push({
+    errorState.pushDiagnostic(CompilerDiagnostic.create({
         severity: ErrorSeverity.CannotPreserveMemoization,
-        reason: 'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected',
-        description: (dep.identifier.name != null && dep.identifier.name.kind === 'named')
-            ? `The inferred dependency was \`${prettyPrintScopeDependency(dep)}\`, but the source dependencies were [${validDepsInMemoBlock
-                .map(dep => printManualMemoDependency(dep, true))
-                .join(', ')}]. ${errorDiagnostic
-                ? getCompareDependencyResultDescription(errorDiagnostic)
-                : 'Inferred dependency not present in source'}`
-            : null,
-        loc: memoLocation,
+        category: 'Compilation skipped because existing memoization could not be preserved',
+        description: [
+            'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. ',
+            'The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. ',
+            (dep.identifier.name != null && dep.identifier.name.kind === 'named')
+                ? `The inferred dependency was \`${prettyPrintScopeDependency(dep)}\`, but the source dependencies were [${validDepsInMemoBlock
+                    .map(dep => printManualMemoDependency(dep, true))
+                    .join(', ')}]. ${errorDiagnostic
+                    ? getCompareDependencyResultDescription(errorDiagnostic)
+                    : 'Inferred dependency not present in source'}.`
+                : '',
+        ]
+            .join('')
+            .trim(),
         suggestions: null,
-    });
+    }).withDetail({
+        kind: 'error',
+        loc: memoLocation,
+        message: 'Could not preserve existing manual memoization',
+    }));
 }
 class Visitor extends ReactiveFunctionVisitor {
     constructor() {
@@ -53817,6 +49279,14 @@ class Visitor extends ReactiveFunctionVisitor {
             const ids = getOrInsertDefault(state.manualMemoState.reassignments, value.lvalue.place.identifier.declarationId, new Set());
             ids.add(value.value.identifier);
         }
+        if (value.kind === 'LoadLocal' &&
+            value.place.identifier.scope != null &&
+            instruction.lvalue != null &&
+            instruction.lvalue.identifier.scope == null &&
+            state.manualMemoState != null) {
+            const ids = getOrInsertDefault(state.manualMemoState.reassignments, instruction.lvalue.identifier.declarationId, new Set());
+            ids.add(value.place.identifier);
+        }
         if (value.kind === 'StartMemoize') {
             let depsFromSource = null;
             if (value.deps != null) {
@@ -53839,13 +49309,18 @@ class Visitor extends ReactiveFunctionVisitor {
                 if (identifier.scope != null &&
                     !this.scopes.has(identifier.scope.id) &&
                     !this.prunedScopes.has(identifier.scope.id)) {
-                    state.errors.push({
-                        reason: 'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly',
-                        description: null,
+                    state.errors.pushDiagnostic(CompilerDiagnostic.create({
                         severity: ErrorSeverity.CannotPreserveMemoization,
+                        category: 'Compilation skipped because existing memoization could not be preserved',
+                        description: [
+                            'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. ',
+                            'This dependency may be mutated later, which could cause the value to change unexpectedly.',
+                        ].join(''),
+                    }).withDetail({
+                        kind: 'error',
                         loc,
-                        suggestions: null,
-                    });
+                        message: 'This dependency may be modified later',
+                    }));
                 }
             }
         }
@@ -53870,13 +49345,20 @@ class Visitor extends ReactiveFunctionVisitor {
                     }
                     for (const identifier of decls) {
                         if (isUnmemoized(identifier, this.scopes)) {
-                            state.errors.push({
-                                reason: 'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.',
-                                description: null,
+                            state.errors.pushDiagnostic(CompilerDiagnostic.create({
                                 severity: ErrorSeverity.CannotPreserveMemoization,
+                                category: 'Compilation skipped because existing memoization could not be preserved',
+                                description: [
+                                    'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output. ',
+                                    '',
+                                ]
+                                    .join('')
+                                    .trim(),
+                            }).withDetail({
+                                kind: 'error',
                                 loc,
-                                suggestions: null,
-                            });
+                                message: 'Could not preserve existing memoization',
+                            }));
                         }
                     }
                 }
@@ -53935,22 +49417,32 @@ function validateUseMemo(fn) {
                         continue;
                     }
                     if (body.loweredFunc.func.params.length > 0) {
-                        errors.push({
+                        const firstParam = body.loweredFunc.func.params[0];
+                        const loc = firstParam.kind === 'Identifier'
+                            ? firstParam.loc
+                            : firstParam.place.loc;
+                        errors.pushDiagnostic(CompilerDiagnostic.create({
                             severity: ErrorSeverity.InvalidReact,
-                            reason: 'useMemo callbacks may not accept any arguments',
-                            description: null,
-                            loc: body.loc,
+                            category: 'useMemo() callbacks may not accept parameters',
+                            description: 'useMemo() callbacks are called by React to cache calculations across re-renders. They should not take parameters. Instead, directly reference the props, state, or local variables needed for the computation.',
                             suggestions: null,
-                        });
+                        }).withDetail({
+                            kind: 'error',
+                            loc,
+                            message: 'Callbacks with parameters are not supported',
+                        }));
                     }
                     if (body.loweredFunc.func.async || body.loweredFunc.func.generator) {
-                        errors.push({
+                        errors.pushDiagnostic(CompilerDiagnostic.create({
                             severity: ErrorSeverity.InvalidReact,
-                            reason: 'useMemo callbacks may not be async or generator functions',
-                            description: null,
-                            loc: body.loc,
+                            category: 'useMemo() callbacks may not be async or generator functions',
+                            description: 'useMemo() callbacks are called once and must synchronously return a value.',
                             suggestions: null,
-                        });
+                        }).withDetail({
+                            kind: 'error',
+                            loc: body.loc,
+                            message: 'Async and generator functions are not supported',
+                        }));
                     }
                     break;
                 }
@@ -53964,14 +49456,21 @@ function validateLocalsNotReassignedAfterRender(fn) {
     const contextVariables = new Set();
     const reassignment = getContextReassignment(fn, contextVariables, false, false);
     if (reassignment !== null) {
-        CompilerError.throwInvalidReact({
-            reason: 'Reassigning a variable after render has completed can cause inconsistent behavior on subsequent renders. Consider using state instead',
-            description: reassignment.identifier.name !== null &&
-                reassignment.identifier.name.kind === 'named'
-                ? `Variable \`${reassignment.identifier.name.value}\` cannot be reassigned after render`
-                : '',
+        const errors = new CompilerError();
+        const variable = reassignment.identifier.name != null &&
+            reassignment.identifier.name.kind === 'named'
+            ? `\`${reassignment.identifier.name.value}\``
+            : 'variable';
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            severity: ErrorSeverity.InvalidReact,
+            category: 'Cannot reassign variable after render completes',
+            description: `Reassigning ${variable} after render has completed can cause inconsistent behavior on subsequent renders. Consider using state instead.`,
+        }).withDetail({
+            kind: 'error',
             loc: reassignment.loc,
-        });
+            message: `Cannot reassign ${variable} after render completes`,
+        }));
+        throw errors;
     }
 }
 function getContextReassignment(fn, contextVariables, isFunctionExpression, isAsync) {
@@ -53994,14 +49493,21 @@ function getContextReassignment(fn, contextVariables, isFunctionExpression, isAs
                     }
                     if (reassignment !== null) {
                         if (isAsync || value.loweredFunc.func.async) {
-                            CompilerError.throwInvalidReact({
-                                reason: 'Reassigning a variable in an async function can cause inconsistent behavior on subsequent renders. Consider using state instead',
-                                description: reassignment.identifier.name !== null &&
-                                    reassignment.identifier.name.kind === 'named'
-                                    ? `Variable \`${reassignment.identifier.name.value}\` cannot be reassigned after render`
-                                    : '',
+                            const errors = new CompilerError();
+                            const variable = reassignment.identifier.name !== null &&
+                                reassignment.identifier.name.kind === 'named'
+                                ? `\`${reassignment.identifier.name.value}\``
+                                : 'variable';
+                            errors.pushDiagnostic(CompilerDiagnostic.create({
+                                severity: ErrorSeverity.InvalidReact,
+                                category: 'Cannot reassign variable in async function',
+                                description: 'Reassigning a variable in an async function can cause inconsistent behavior on subsequent renders. Consider using state instead',
+                            }).withDetail({
+                                kind: 'error',
                                 loc: reassignment.loc,
-                            });
+                                message: `Cannot reassign ${variable}`,
+                            }));
+                            throw errors;
                         }
                         reassigningFunctions.set(lvalue.identifier.id, reassignment);
                     }
@@ -54124,46 +49630,6 @@ function outlineFunctions(fn, fbtOperands) {
     }
 }
 
-function propagatePhiTypes(fn) {
-    const propagated = new Set();
-    for (const [, block] of fn.body.blocks) {
-        for (const phi of block.phis) {
-            if (phi.place.identifier.type.kind !== 'Type' ||
-                phi.place.identifier.name !== null) {
-                continue;
-            }
-            let type = null;
-            for (const [, operand] of phi.operands) {
-                if (type === null) {
-                    type = operand.identifier.type;
-                }
-                else if (!typeEquals(type, operand.identifier.type)) {
-                    type = null;
-                    break;
-                }
-            }
-            if (type !== null) {
-                phi.place.identifier.type = type;
-                propagated.add(phi.place.identifier.id);
-            }
-        }
-        for (const instr of block.instructions) {
-            const { value } = instr;
-            switch (value.kind) {
-                case 'StoreLocal': {
-                    const lvalue = value.lvalue.place;
-                    if (propagated.has(value.value.identifier.id) &&
-                        lvalue.identifier.type.kind === 'Type' &&
-                        lvalue.identifier.name === null) {
-                        lvalue.identifier.type = value.value.identifier.type;
-                        propagated.add(lvalue.identifier.id);
-                    }
-                }
-            }
-        }
-    }
-}
-
 function lowerContextAccess(fn, loweredContextCalleeConfig) {
     const contextAccess = new Map();
     const contextKeys = new Map();
@@ -54240,6 +49706,7 @@ function emitLoadLoweredContextCallee(env, importedLowerContextCallee) {
         id: makeInstructionId(0),
         loc: GeneratedSource,
         lvalue: createTemporaryPlace(env, GeneratedSource),
+        effects: null,
         value: loadGlobal,
     };
 }
@@ -54276,6 +49743,7 @@ function emitPropertyLoad(env, obj, property) {
         lvalue: object,
         value: loadObj,
         id: makeInstructionId(0),
+        effects: null,
         loc: GeneratedSource,
     };
     const loadProp = {
@@ -54289,6 +49757,7 @@ function emitPropertyLoad(env, obj, property) {
         lvalue: element,
         value: loadProp,
         id: makeInstructionId(0),
+        effects: null,
         loc: GeneratedSource,
     };
     return {
@@ -54315,8 +49784,10 @@ function emitSelectorFn(env, keys) {
         terminal: {
             id: makeInstructionId(0),
             kind: 'return',
+            returnVariant: 'Explicit',
             loc: GeneratedSource,
             value: arrayInstr.lvalue,
+            effects: null,
         },
         preds: new Set(),
         phis: new Set(),
@@ -54328,7 +49799,7 @@ function emitSelectorFn(env, keys) {
         env,
         params: [obj],
         returnTypeAnnotation: null,
-        returnType: makeType(),
+        returns: createTemporaryPlace(env, GeneratedSource),
         context: [],
         effects: null,
         body: {
@@ -54355,6 +49826,7 @@ function emitSelectorFn(env, keys) {
             loc: GeneratedSource,
         },
         lvalue: createTemporaryPlace(env, GeneratedSource),
+        effects: null,
         loc: GeneratedSource,
     };
     return fnInstr;
@@ -54370,12 +49842,13 @@ function emitArrayInstr(elements, env) {
         id: makeInstructionId(0),
         value: array,
         lvalue: arrayLvalue,
+        effects: null,
         loc: GeneratedSource,
     };
     return arrayInstr;
 }
 
-function validateNoSetStateInPassiveEffects(fn) {
+function validateNoSetStateInEffects(fn) {
     const setStateFunctions = new Map();
     const errors = new CompilerError();
     for (const [, block] of fn.body.blocks) {
@@ -54409,18 +49882,28 @@ function validateNoSetStateInPassiveEffects(fn) {
                     const callee = instr.value.kind === 'MethodCall'
                         ? instr.value.receiver
                         : instr.value.callee;
-                    if (isUseEffectHookType(callee.identifier)) {
+                    if (isUseEffectHookType(callee.identifier) ||
+                        isUseLayoutEffectHookType(callee.identifier) ||
+                        isUseInsertionEffectHookType(callee.identifier)) {
                         const arg = instr.value.args[0];
                         if (arg !== undefined && arg.kind === 'Identifier') {
                             const setState = setStateFunctions.get(arg.identifier.id);
                             if (setState !== undefined) {
-                                errors.push({
-                                    reason: 'Calling setState directly within a useEffect causes cascading renders and is not recommended. Consider alternatives to useEffect. (https://react.dev/learn/you-might-not-need-an-effect)',
-                                    description: null,
+                                errors.pushDiagnostic(CompilerDiagnostic.create({
+                                    category: 'Calling setState synchronously within an effect can trigger cascading renders',
+                                    description: 'Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. ' +
+                                        'In general, the body of an effect should do one or both of the following:\n' +
+                                        '* Update external systems with the latest state from React.\n' +
+                                        '* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\n' +
+                                        'Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. ' +
+                                        '(https://react.dev/learn/you-might-not-need-an-effect)',
                                     severity: ErrorSeverity.InvalidReact,
-                                    loc: setState.loc,
                                     suggestions: null,
-                                });
+                                }).withDetail({
+                                    kind: 'error',
+                                    loc: setState.loc,
+                                    message: 'Avoid calling setState() directly within an effect',
+                                }));
                             }
                         }
                     }
@@ -54472,11 +49955,15 @@ function validateNoJSXInTryStatement(fn) {
                 switch (value.kind) {
                     case 'JsxExpression':
                     case 'JsxFragment': {
-                        errors.push({
+                        errors.pushDiagnostic(CompilerDiagnostic.create({
                             severity: ErrorSeverity.InvalidReact,
-                            reason: `Unexpected JSX element within a try statement. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary)`,
+                            category: 'Avoid constructing JSX within try/catch',
+                            description: `React does not immediately render components when JSX is rendered, so any errors from this component will not be caught by the try/catch. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary)`,
+                        }).withDetail({
+                            kind: 'error',
                             loc: value.loc,
-                        });
+                            message: 'Avoid constructing JSX within try/catch',
+                        }));
                         break;
                     }
                 }
@@ -54688,6 +50175,7 @@ function emitOutlinedJsx(env, instructions, outlinedProps, outlinedTag) {
             },
             loc: GeneratedSource,
         },
+        effects: null,
     };
     promoteTemporaryJsxTag(loadJsx.lvalue.identifier);
     const jsxExpr = {
@@ -54703,6 +50191,7 @@ function emitOutlinedJsx(env, instructions, outlinedProps, outlinedTag) {
             openingLoc: GeneratedSource,
             closingLoc: GeneratedSource,
         },
+        effects: null,
     };
     return [loadJsx, jsxExpr];
 }
@@ -54727,8 +50216,10 @@ function emitOutlinedFn(env, jsx, oldProps, globals) {
         terminal: {
             id: makeInstructionId(0),
             kind: 'return',
+            returnVariant: 'Explicit',
             loc: GeneratedSource,
             value: instructions.at(-1).lvalue,
+            effects: null,
         },
         preds: new Set(),
         phis: new Set(),
@@ -54740,7 +50231,7 @@ function emitOutlinedFn(env, jsx, oldProps, globals) {
         env,
         params: [propsObj],
         returnTypeAnnotation: null,
-        returnType: makeType(),
+        returns: createTemporaryPlace(env, GeneratedSource),
         context: [],
         effects: null,
         body: {
@@ -54843,6 +50334,7 @@ function emitDestructureProps(env, propsObj, oldToNewProps) {
             loc: GeneratedSource,
             value: propsObj,
         },
+        effects: null,
     };
     return destructurePropsInstr;
 }
@@ -55124,6 +50616,7 @@ function makeLoadUseFireInstruction(env, importedLoadUseFire) {
         value: instrValue,
         lvalue: Object.assign({}, useFirePlace),
         loc: GeneratedSource,
+        effects: null,
     };
 }
 function makeLoadFireCalleeInstruction(env, fireCalleeIdentifier) {
@@ -55144,6 +50637,7 @@ function makeLoadFireCalleeInstruction(env, fireCalleeIdentifier) {
         },
         lvalue: Object.assign({}, loadedFireCallee),
         loc: GeneratedSource,
+        effects: null,
     };
 }
 function makeCallUseFireInstruction(env, useFirePlace, argPlace) {
@@ -55160,6 +50654,7 @@ function makeCallUseFireInstruction(env, useFirePlace, argPlace) {
         value: useFireCall,
         lvalue: Object.assign({}, useFireCallResultPlace),
         loc: GeneratedSource,
+        effects: null,
     };
 }
 function makeStoreUseFireInstruction(env, useFireCallResultPlace, fireFunctionBindingPlace) {
@@ -55179,6 +50674,7 @@ function makeStoreUseFireInstruction(env, useFireCallResultPlace, fireFunctionBi
         },
         lvalue: fireFunctionBindingLValuePlace,
         loc: GeneratedSource,
+        effects: null,
     };
 }
 class Context {
@@ -55314,15 +50810,19 @@ function validateNoImpureFunctionsInRender(fn) {
                 const callee = value.kind === 'MethodCall' ? value.property : value.callee;
                 const signature = getFunctionCallSignature(fn.env, callee.identifier.type);
                 if (signature != null && signature.impure === true) {
-                    errors.push({
-                        reason: 'Calling an impure function can produce unstable results. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent)',
-                        description: signature.canonicalName != null
-                            ? `\`${signature.canonicalName}\` is an impure function whose results may change on every call`
-                            : null,
+                    errors.pushDiagnostic(CompilerDiagnostic.create({
+                        category: 'Cannot call impure function during render',
+                        description: (signature.canonicalName != null
+                            ? `\`${signature.canonicalName}\` is an impure function. `
+                            : '') +
+                            'Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent)',
                         severity: ErrorSeverity.InvalidReact,
-                        loc: callee.loc,
                         suggestions: null,
-                    });
+                    }).withDetail({
+                        kind: 'error',
+                        loc: callee.loc,
+                        message: 'Cannot call impure function',
+                    }));
                 }
             }
         }
@@ -55372,20 +50872,21 @@ function validateStaticComponents(fn) {
                     if (value.tag.kind === 'Identifier') {
                         const location = knownDynamicComponents.get(value.tag.identifier.id);
                         if (location != null) {
-                            error.push({
-                                reason: `Components created during render will reset their state each time they are created. Declare components outside of render. `,
+                            error.pushDiagnostic(CompilerDiagnostic.create({
                                 severity: ErrorSeverity.InvalidReact,
+                                category: 'Cannot create components during render',
+                                description: `Components created during render will reset their state each time they are created. Declare components outside of render. `,
+                            })
+                                .withDetail({
+                                kind: 'error',
                                 loc: value.tag.loc,
-                                description: null,
-                                suggestions: null,
-                            });
-                            error.push({
-                                reason: `The component may be created during render`,
-                                severity: ErrorSeverity.InvalidReact,
+                                message: 'This component is created during render',
+                            })
+                                .withDetail({
+                                kind: 'error',
                                 loc: location,
-                                description: null,
-                                suggestions: null,
-                            });
+                                message: 'The component is created during render here',
+                            }));
                         }
                     }
                 }
@@ -55403,17 +50904,27 @@ function validateNoFreezingKnownMutableFunctions(fn) {
         if (operand.effect === Effect.Freeze) {
             const effect = contextMutationEffects.get(operand.identifier.id);
             if (effect != null) {
-                errors.push({
-                    reason: `This argument is a function which modifies local variables when called, which can bypass memoization and cause the UI not to update`,
-                    description: `Functions that are returned from hooks, passed as arguments to hooks, or passed as props to components may not mutate local variables`,
+                const place = [...effect.places][0];
+                const variable = place != null &&
+                    place.identifier.name != null &&
+                    place.identifier.name.kind === 'named'
+                    ? `\`${place.identifier.name.value}\``
+                    : 'a local variable';
+                errors.pushDiagnostic(CompilerDiagnostic.create({
+                    severity: ErrorSeverity.InvalidReact,
+                    category: 'Cannot modify local variables after render completes',
+                    description: `This argument is a function which may reassign or mutate ${variable} after render, which can cause inconsistent behavior on subsequent renders. Consider using state instead.`,
+                })
+                    .withDetail({
+                    kind: 'error',
                     loc: operand.loc,
-                    severity: ErrorSeverity.InvalidReact,
-                });
-                errors.push({
-                    reason: `The function modifies a local variable here`,
+                    message: `This function may (indirectly) reassign or modify ${variable} after render`,
+                })
+                    .withDetail({
+                    kind: 'error',
                     loc: effect.loc,
-                    severity: ErrorSeverity.InvalidReact,
-                });
+                    message: `This modifies ${variable}`,
+                }));
             }
         }
     }
@@ -55449,6 +50960,41 @@ function validateNoFreezingKnownMutableFunctions(fn) {
                     if (knownMutation && knownMutation.kind === 'ContextMutation') {
                         contextMutationEffects.set(lvalue.identifier.id, knownMutation);
                     }
+                    else if (fn.env.config.enableNewMutationAliasingModel &&
+                        value.loweredFunc.func.aliasingEffects != null) {
+                        const context = new Set(value.loweredFunc.func.context.map(p => p.identifier.id));
+                        effects: for (const effect of value.loweredFunc.func
+                            .aliasingEffects) {
+                            switch (effect.kind) {
+                                case 'Mutate':
+                                case 'MutateTransitive': {
+                                    const knownMutation = contextMutationEffects.get(effect.value.identifier.id);
+                                    if (knownMutation != null) {
+                                        contextMutationEffects.set(lvalue.identifier.id, knownMutation);
+                                    }
+                                    else if (context.has(effect.value.identifier.id) &&
+                                        !isRefOrRefLikeMutableType(effect.value.identifier.type)) {
+                                        contextMutationEffects.set(lvalue.identifier.id, {
+                                            kind: 'ContextMutation',
+                                            effect: Effect.Mutate,
+                                            loc: effect.value.loc,
+                                            places: new Set([effect.value]),
+                                        });
+                                        break effects;
+                                    }
+                                    break;
+                                }
+                                case 'MutateConditionally':
+                                case 'MutateTransitiveConditionally': {
+                                    const knownMutation = contextMutationEffects.get(effect.value.identifier.id);
+                                    if (knownMutation != null) {
+                                        contextMutationEffects.set(lvalue.identifier.id, knownMutation);
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     break;
                 }
                 default: {
@@ -55465,10 +51011,171 @@ function validateNoFreezingKnownMutableFunctions(fn) {
     return errors.asResult();
 }
 
+function validateNoDerivedComputationsInEffects(fn) {
+    const candidateDependencies = new Map();
+    const functions = new Map();
+    const locals = new Map();
+    const errors = new CompilerError();
+    for (const block of fn.body.blocks.values()) {
+        for (const instr of block.instructions) {
+            const { lvalue, value } = instr;
+            if (value.kind === 'LoadLocal') {
+                locals.set(lvalue.identifier.id, value.place.identifier.id);
+            }
+            else if (value.kind === 'ArrayExpression') {
+                candidateDependencies.set(lvalue.identifier.id, value);
+            }
+            else if (value.kind === 'FunctionExpression') {
+                functions.set(lvalue.identifier.id, value);
+            }
+            else if (value.kind === 'CallExpression' ||
+                value.kind === 'MethodCall') {
+                const callee = value.kind === 'CallExpression' ? value.callee : value.property;
+                if (isUseEffectHookType(callee.identifier) &&
+                    value.args.length === 2 &&
+                    value.args[0].kind === 'Identifier' &&
+                    value.args[1].kind === 'Identifier') {
+                    const effectFunction = functions.get(value.args[0].identifier.id);
+                    const deps = candidateDependencies.get(value.args[1].identifier.id);
+                    if (effectFunction != null &&
+                        deps != null &&
+                        deps.elements.length !== 0 &&
+                        deps.elements.every(element => element.kind === 'Identifier')) {
+                        const dependencies = deps.elements.map(dep => {
+                            var _a;
+                            CompilerError.invariant(dep.kind === 'Identifier', {
+                                reason: `Dependency is checked as a place above`,
+                                loc: value.loc,
+                            });
+                            return (_a = locals.get(dep.identifier.id)) !== null && _a !== void 0 ? _a : dep.identifier.id;
+                        });
+                        validateEffect(effectFunction.loweredFunc.func, dependencies, errors);
+                    }
+                }
+            }
+        }
+    }
+    if (errors.hasErrors()) {
+        throw errors;
+    }
+}
+function validateEffect(effectFunction, effectDeps, errors) {
+    for (const operand of effectFunction.context) {
+        if (isSetStateType(operand.identifier)) {
+            continue;
+        }
+        else if (effectDeps.find(dep => dep === operand.identifier.id) != null) {
+            continue;
+        }
+        else {
+            return;
+        }
+    }
+    for (const dep of effectDeps) {
+        if (effectFunction.context.find(operand => operand.identifier.id === dep) ==
+            null) {
+            return;
+        }
+    }
+    const seenBlocks = new Set();
+    const values = new Map();
+    for (const dep of effectDeps) {
+        values.set(dep, [dep]);
+    }
+    const setStateLocations = [];
+    for (const block of effectFunction.body.blocks.values()) {
+        for (const pred of block.preds) {
+            if (!seenBlocks.has(pred)) {
+                return;
+            }
+        }
+        for (const phi of block.phis) {
+            const aggregateDeps = new Set();
+            for (const operand of phi.operands.values()) {
+                const deps = values.get(operand.identifier.id);
+                if (deps != null) {
+                    for (const dep of deps) {
+                        aggregateDeps.add(dep);
+                    }
+                }
+            }
+            if (aggregateDeps.size !== 0) {
+                values.set(phi.place.identifier.id, Array.from(aggregateDeps));
+            }
+        }
+        for (const instr of block.instructions) {
+            switch (instr.value.kind) {
+                case 'Primitive':
+                case 'JSXText':
+                case 'LoadGlobal': {
+                    break;
+                }
+                case 'LoadLocal': {
+                    const deps = values.get(instr.value.place.identifier.id);
+                    if (deps != null) {
+                        values.set(instr.lvalue.identifier.id, deps);
+                    }
+                    break;
+                }
+                case 'ComputedLoad':
+                case 'PropertyLoad':
+                case 'BinaryExpression':
+                case 'TemplateLiteral':
+                case 'CallExpression':
+                case 'MethodCall': {
+                    const aggregateDeps = new Set();
+                    for (const operand of eachInstructionValueOperand(instr.value)) {
+                        const deps = values.get(operand.identifier.id);
+                        if (deps != null) {
+                            for (const dep of deps) {
+                                aggregateDeps.add(dep);
+                            }
+                        }
+                    }
+                    if (aggregateDeps.size !== 0) {
+                        values.set(instr.lvalue.identifier.id, Array.from(aggregateDeps));
+                    }
+                    if (instr.value.kind === 'CallExpression' &&
+                        isSetStateType(instr.value.callee.identifier) &&
+                        instr.value.args.length === 1 &&
+                        instr.value.args[0].kind === 'Identifier') {
+                        const deps = values.get(instr.value.args[0].identifier.id);
+                        if (deps != null && new Set(deps).size === effectDeps.length) {
+                            setStateLocations.push(instr.value.callee.loc);
+                        }
+                        else {
+                            return;
+                        }
+                    }
+                    break;
+                }
+                default: {
+                    return;
+                }
+            }
+        }
+        for (const operand of eachTerminalOperand(block.terminal)) {
+            if (values.has(operand.identifier.id)) {
+                return;
+            }
+        }
+        seenBlocks.add(block.id);
+    }
+    for (const loc of setStateLocations) {
+        errors.push({
+            reason: 'Values derived from props and state should be calculated during render, not in an effect. (https://react.dev/learn/you-might-not-need-an-effect#updating-state-based-on-props-or-state)',
+            description: null,
+            severity: ErrorSeverity.InvalidReact,
+            loc,
+            suggestions: null,
+        });
+    }
+}
+
 function run(func, config, fnType, mode, programContext, logger, filename, code) {
     var _a, _b;
     const contextIdentifiers = findContextIdentifiers(func);
-    const env = new Environment(func.scope, fnType, mode, config, contextIdentifiers, logger, filename, code, programContext);
+    const env = new Environment(func.scope, fnType, mode, config, contextIdentifiers, func, logger, filename, code, programContext);
     (_b = (_a = env.logger) === null || _a === void 0 ? void 0 : _a.debugLogIRs) === null || _b === void 0 ? void 0 : _b.call(_a, {
         kind: 'debug',
         name: 'EnvironmentConfig',
@@ -55491,7 +51198,7 @@ function runWithEnvironment(func, env) {
         !env.config.enablePreserveExistingManualUseMemo &&
         !env.config.disableMemoizationForDebugging &&
         !env.config.enableChangeDetectionForDebugging) {
-        dropManualMemoization(hir);
+        dropManualMemoization(hir).unwrap();
         log({ kind: 'hir', name: 'DropManualMemoization', value: hir });
     }
     inlineImmediatelyInvokedFunctionExpressions(hir);
@@ -55532,14 +51239,27 @@ function runWithEnvironment(func, env) {
     log({ kind: 'hir', name: 'OptimizePropsMethodCalls', value: hir });
     analyseFunctions(hir);
     log({ kind: 'hir', name: 'AnalyseFunctions', value: hir });
-    const fnEffectErrors = inferReferenceEffects(hir);
-    if (env.isInferredMemoEnabled) {
-        if (fnEffectErrors.length > 0) {
-            CompilerError.throw(fnEffectErrors[0]);
+    if (!env.config.enableNewMutationAliasingModel) {
+        const fnEffectErrors = inferReferenceEffects(hir);
+        if (env.isInferredMemoEnabled) {
+            if (fnEffectErrors.length > 0) {
+                CompilerError.throw(fnEffectErrors[0]);
+            }
+        }
+        log({ kind: 'hir', name: 'InferReferenceEffects', value: hir });
+    }
+    else {
+        const mutabilityAliasingErrors = inferMutationAliasingEffects(hir);
+        log({ kind: 'hir', name: 'InferMutationAliasingEffects', value: hir });
+        if (env.isInferredMemoEnabled) {
+            if (mutabilityAliasingErrors.isErr()) {
+                throw mutabilityAliasingErrors.unwrapErr();
+            }
         }
     }
-    log({ kind: 'hir', name: 'InferReferenceEffects', value: hir });
-    validateLocalsNotReassignedAfterRender(hir);
+    if (!env.config.enableNewMutationAliasingModel) {
+        validateLocalsNotReassignedAfterRender(hir);
+    }
     deadCodeElimination(hir);
     log({ kind: 'hir', name: 'DeadCodeElimination', value: hir });
     if (env.config.enableInstructionReordering) {
@@ -55548,8 +51268,22 @@ function runWithEnvironment(func, env) {
     }
     pruneMaybeThrows(hir);
     log({ kind: 'hir', name: 'PruneMaybeThrows', value: hir });
-    inferMutableRanges(hir);
-    log({ kind: 'hir', name: 'InferMutableRanges', value: hir });
+    if (!env.config.enableNewMutationAliasingModel) {
+        inferMutableRanges(hir);
+        log({ kind: 'hir', name: 'InferMutableRanges', value: hir });
+    }
+    else {
+        const mutabilityAliasingErrors = inferMutationAliasingRanges(hir, {
+            isFunctionExpression: false,
+        });
+        log({ kind: 'hir', name: 'InferMutationAliasingRanges', value: hir });
+        if (env.isInferredMemoEnabled) {
+            if (mutabilityAliasingErrors.isErr()) {
+                throw mutabilityAliasingErrors.unwrapErr();
+            }
+            validateLocalsNotReassignedAfterRender(hir);
+        }
+    }
     if (env.isInferredMemoEnabled) {
         if (env.config.assertValidMutableRanges) {
             assertValidMutableRanges(hir);
@@ -55560,8 +51294,11 @@ function runWithEnvironment(func, env) {
         if (env.config.validateNoSetStateInRender) {
             validateNoSetStateInRender(hir).unwrap();
         }
-        if (env.config.validateNoSetStateInPassiveEffects) {
-            env.logErrors(validateNoSetStateInPassiveEffects(hir));
+        if (env.config.validateNoDerivedComputationsInEffects) {
+            validateNoDerivedComputationsInEffects(hir);
+        }
+        if (env.config.validateNoSetStateInEffects) {
+            env.logErrors(validateNoSetStateInEffects(hir));
         }
         if (env.config.validateNoJSXInTryStatements) {
             env.logErrors(validateNoJSXInTryStatement(hir));
@@ -55569,7 +51306,8 @@ function runWithEnvironment(func, env) {
         if (env.config.validateNoImpureFunctionsInRender) {
             validateNoImpureFunctionsInRender(hir).unwrap();
         }
-        if (env.config.validateNoFreezingKnownMutableFunctions) {
+        if (env.config.validateNoFreezingKnownMutableFunctions ||
+            env.config.enableNewMutationAliasingModel) {
             validateNoFreezingKnownMutableFunctions(hir).unwrap();
         }
     }
@@ -55579,12 +51317,6 @@ function runWithEnvironment(func, env) {
     log({
         kind: 'hir',
         name: 'RewriteInstructionKindsBasedOnReassignment',
-        value: hir,
-    });
-    propagatePhiTypes(hir);
-    log({
-        kind: 'hir',
-        name: 'PropagatePhiTypes',
         value: hir,
     });
     if (env.isInferredMemoEnabled) {
@@ -55898,11 +51630,10 @@ function suppressionsToCompilerError(suppressionRanges) {
             default:
                 assertExhaustive$1(suppressionRange.source, 'Unhandled suppression source');
         }
-        error.pushErrorDetail(new CompilerErrorDetail({
-            reason: `${reason}. React Compiler only works when your components follow all the rules of React, disabling them may result in unexpected or incorrect behavior`,
-            description: suppressionRange.disableComment.value.trim(),
+        error.pushDiagnostic(CompilerDiagnostic.create({
+            category: reason,
+            description: `React Compiler only works when your components follow all the rules of React, disabling them may result in unexpected or incorrect behavior. Found suppression \`${suppressionRange.disableComment.value.trim()}\``,
             severity: ErrorSeverity.InvalidReact,
-            loc: (_a = suppressionRange.disableComment.loc) !== null && _a !== void 0 ? _a : null,
             suggestions: [
                 {
                     description: suggestion,
@@ -55913,6 +51644,10 @@ function suppressionsToCompilerError(suppressionRanges) {
                     op: CompilerSuggestionOperation.Remove,
                 },
             ],
+        }).withDetail({
+            kind: 'error',
+            loc: (_a = suppressionRange.disableComment.loc) !== null && _a !== void 0 ? _a : null,
+            message: 'Found React rule suppression',
         }));
     }
     return error;
@@ -55920,13 +51655,80 @@ function suppressionsToCompilerError(suppressionRanges) {
 
 const OPT_IN_DIRECTIVES = new Set(['use forget', 'use memo']);
 const OPT_OUT_DIRECTIVES = new Set(['use no forget', 'use no memo']);
-function findDirectiveEnablingMemoization(directives) {
-    var _a;
-    return ((_a = directives.find(directive => OPT_IN_DIRECTIVES.has(directive.value.value))) !== null && _a !== void 0 ? _a : null);
+const DYNAMIC_GATING_DIRECTIVE = new RegExp('^use memo if\\(([^\\)]*)\\)$');
+function tryFindDirectiveEnablingMemoization(directives, opts) {
+    var _a, _b;
+    const optIn = directives.find(directive => OPT_IN_DIRECTIVES.has(directive.value.value));
+    if (optIn != null) {
+        return Ok(optIn);
+    }
+    const dynamicGating = findDirectivesDynamicGating(directives, opts);
+    if (dynamicGating.isOk()) {
+        return Ok((_b = (_a = dynamicGating.unwrap()) === null || _a === void 0 ? void 0 : _a.directive) !== null && _b !== void 0 ? _b : null);
+    }
+    else {
+        return Err(dynamicGating.unwrapErr());
+    }
 }
-function findDirectiveDisablingMemoization(directives) {
-    var _a;
-    return ((_a = directives.find(directive => OPT_OUT_DIRECTIVES.has(directive.value.value))) !== null && _a !== void 0 ? _a : null);
+function findDirectiveDisablingMemoization(directives, { customOptOutDirectives }) {
+    var _a, _b;
+    if (customOptOutDirectives != null) {
+        return ((_a = directives.find(directive => customOptOutDirectives.indexOf(directive.value.value) !== -1)) !== null && _a !== void 0 ? _a : null);
+    }
+    return ((_b = directives.find(directive => OPT_OUT_DIRECTIVES.has(directive.value.value))) !== null && _b !== void 0 ? _b : null);
+}
+function findDirectivesDynamicGating(directives, opts) {
+    var _a, _b;
+    if (opts.dynamicGating === null) {
+        return Ok(null);
+    }
+    const errors = new CompilerError();
+    const result = [];
+    for (const directive of directives) {
+        const maybeMatch = DYNAMIC_GATING_DIRECTIVE.exec(directive.value.value);
+        if (maybeMatch != null && maybeMatch[1] != null) {
+            if (libExports$1.isValidIdentifier(maybeMatch[1])) {
+                result.push({ directive, match: maybeMatch[1] });
+            }
+            else {
+                errors.push({
+                    reason: `Dynamic gating directive is not a valid JavaScript identifier`,
+                    description: `Found '${directive.value.value}'`,
+                    severity: ErrorSeverity.InvalidReact,
+                    loc: (_a = directive.loc) !== null && _a !== void 0 ? _a : null,
+                    suggestions: null,
+                });
+            }
+        }
+    }
+    if (errors.hasErrors()) {
+        return Err(errors);
+    }
+    else if (result.length > 1) {
+        const error = new CompilerError();
+        error.push({
+            reason: `Multiple dynamic gating directives found`,
+            description: `Expected a single directive but found [${result
+                .map(r => r.directive.value.value)
+                .join(', ')}]`,
+            severity: ErrorSeverity.InvalidReact,
+            loc: (_b = result[0].directive.loc) !== null && _b !== void 0 ? _b : null,
+            suggestions: null,
+        });
+        return Err(error);
+    }
+    else if (result.length === 1) {
+        return Ok({
+            gating: {
+                source: opts.dynamicGating.source,
+                importSpecifierName: result[0].match,
+            },
+            directive: result[0].directive,
+        });
+    }
+    else {
+        return Ok(null);
+    }
 }
 function isCriticalError(err) {
     return !(err instanceof CompilerError) || err.isCritical();
@@ -55945,7 +51747,7 @@ function logError(err, context, fnLoc) {
                 context.opts.logger.logEvent(context.filename, {
                     kind: 'CompileError',
                     fnLoc,
-                    detail: detail.options,
+                    detail,
                 });
             }
         }
@@ -56085,7 +51887,8 @@ function compileProgram(program, pass) {
         filename: pass.filename,
         code: pass.code,
         suppressions,
-        hasModuleScopeOptOut: findDirectiveDisablingMemoization(program.node.directives) != null,
+        hasModuleScopeOptOut: findDirectiveDisablingMemoization(program.node.directives, pass.opts) !=
+            null,
     });
     const queue = findFunctionsToCompile(program, pass, programContext);
     const compiledFns = [];
@@ -56160,25 +51963,33 @@ function findFunctionsToCompile(program, pass, programContext) {
     return queue;
 }
 function processFn(fn, fnType, programContext) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     let directives;
     if (fn.node.body.type !== 'BlockStatement') {
-        directives = { optIn: null, optOut: null };
+        directives = {
+            optIn: null,
+            optOut: null,
+        };
     }
     else {
+        const optIn = tryFindDirectiveEnablingMemoization(fn.node.body.directives, programContext.opts);
+        if (optIn.isErr()) {
+            handleError(optIn.unwrapErr(), programContext, (_a = fn.node.loc) !== null && _a !== void 0 ? _a : null);
+            return null;
+        }
         directives = {
-            optIn: findDirectiveEnablingMemoization(fn.node.body.directives),
-            optOut: findDirectiveDisablingMemoization(fn.node.body.directives),
+            optIn: optIn.unwrapOr(null),
+            optOut: findDirectiveDisablingMemoization(fn.node.body.directives, programContext.opts),
         };
     }
     let compiledFn;
     const compileResult = tryCompileFunction(fn, fnType, programContext);
     if (compileResult.kind === 'error') {
         if (directives.optOut != null) {
-            logError(compileResult.error, programContext, (_a = fn.node.loc) !== null && _a !== void 0 ? _a : null);
+            logError(compileResult.error, programContext, (_b = fn.node.loc) !== null && _b !== void 0 ? _b : null);
         }
         else {
-            handleError(compileResult.error, programContext, (_b = fn.node.loc) !== null && _b !== void 0 ? _b : null);
+            handleError(compileResult.error, programContext, (_c = fn.node.loc) !== null && _c !== void 0 ? _c : null);
         }
         const retryResult = retryCompileFunction(fn, fnType, programContext);
         if (retryResult == null) {
@@ -56193,16 +52004,16 @@ function processFn(fn, fnType, programContext) {
         directives.optOut != null) {
         programContext.logEvent({
             kind: 'CompileSkip',
-            fnLoc: (_c = fn.node.body.loc) !== null && _c !== void 0 ? _c : null,
+            fnLoc: (_d = fn.node.body.loc) !== null && _d !== void 0 ? _d : null,
             reason: `Skipped due to '${directives.optOut.value}' directive.`,
-            loc: (_d = directives.optOut.loc) !== null && _d !== void 0 ? _d : null,
+            loc: (_e = directives.optOut.loc) !== null && _e !== void 0 ? _e : null,
         });
         return null;
     }
     programContext.logEvent({
         kind: 'CompileSuccess',
-        fnLoc: (_e = fn.node.loc) !== null && _e !== void 0 ? _e : null,
-        fnName: (_g = (_f = compiledFn.id) === null || _f === void 0 ? void 0 : _f.name) !== null && _g !== void 0 ? _g : null,
+        fnLoc: (_f = fn.node.loc) !== null && _f !== void 0 ? _f : null,
+        fnName: (_h = (_g = compiledFn.id) === null || _g === void 0 ? void 0 : _g.name) !== null && _h !== void 0 ? _h : null,
         memoSlots: compiledFn.memoSlotsUsed,
         memoBlocks: compiledFn.memoBlocks,
         memoValues: compiledFn.memoValues,
@@ -56266,19 +52077,23 @@ function retryCompileFunction(fn, fnType, programContext) {
     }
 }
 function applyCompiledFunctions(program, compiledFns, pass, programContext) {
-    const referencedBeforeDeclared = pass.opts.gating != null
-        ? getFunctionReferencedBeforeDeclarationAtTopLevel(program, compiledFns)
-        : null;
+    var _a, _b;
+    let referencedBeforeDeclared = null;
     for (const result of compiledFns) {
         const { kind, originalFn, compiledFn } = result;
         const transformedFn = createNewFunctionNode(originalFn, compiledFn);
         programContext.alreadyCompiled.add(transformedFn);
-        if (referencedBeforeDeclared != null && kind === 'original') {
-            CompilerError.invariant(pass.opts.gating != null, {
-                reason: "Expected 'gating' import to be present",
-                loc: null,
-            });
-            insertGatedFunctionDeclaration(originalFn, transformedFn, programContext, pass.opts.gating, referencedBeforeDeclared.has(result));
+        let dynamicGating = null;
+        if (originalFn.node.body.type === 'BlockStatement') {
+            const result = findDirectivesDynamicGating(originalFn.node.body.directives, pass.opts);
+            if (result.isOk()) {
+                dynamicGating = (_b = (_a = result.unwrap()) === null || _a === void 0 ? void 0 : _a.gating) !== null && _b !== void 0 ? _b : null;
+            }
+        }
+        const functionGating = dynamicGating !== null && dynamicGating !== void 0 ? dynamicGating : pass.opts.gating;
+        if (kind === 'original' && functionGating != null) {
+            referencedBeforeDeclared !== null && referencedBeforeDeclared !== void 0 ? referencedBeforeDeclared : (referencedBeforeDeclared = getFunctionReferencedBeforeDeclarationAtTopLevel(program, compiledFns));
+            insertGatedFunctionDeclaration(originalFn, transformedFn, programContext, functionGating, referencedBeforeDeclared.has(result));
         }
         else {
             originalFn.replaceWith(transformedFn);
@@ -56314,8 +52129,10 @@ function getReactFunctionType(fn, pass) {
     var _a, _b;
     const hookPattern = pass.opts.environment.hookPattern;
     if (fn.node.body.type === 'BlockStatement') {
-        if (findDirectiveEnablingMemoization(fn.node.body.directives) != null)
+        const optInDirectives = tryFindDirectiveEnablingMemoization(fn.node.body.directives, pass.opts);
+        if (optInDirectives.unwrapOr(null) != null) {
             return (_a = getComponentOrHookLike(fn, hookPattern)) !== null && _a !== void 0 ? _a : 'Other';
+        }
     }
     let componentSyntaxType = null;
     if (fn.isFunctionDeclaration()) {
@@ -56830,6 +52647,12 @@ zod.z.enum([
     'critical_errors',
     'none',
 ]);
+const DynamicGatingOptionsSchema = zod.z.object({
+    source: zod.z.string(),
+});
+const CustomOptOutDirectiveSchema = zod.z
+    .nullable(zod.z.array(zod.z.string()))
+    .default(null);
 const CompilerReactTargetSchema = zod.z.union([
     zod.z.literal('17'),
     zod.z.literal('18'),
@@ -56852,6 +52675,7 @@ const defaultOptions = {
     logger: null,
     gating: null,
     noEmit: false,
+    dynamicGating: null,
     eslintSuppressionRules: null,
     flowSuppressions: true,
     ignoreUseNoForget: false,
@@ -56859,6 +52683,7 @@ const defaultOptions = {
         return filename.indexOf('node_modules') === -1;
     },
     enableReanimatedCheck: true,
+    customOptOutDirectives: null,
     target: '19',
 };
 function parsePluginOptions(obj) {
@@ -56895,6 +52720,41 @@ function parsePluginOptions(obj) {
                     }
                     else {
                         parsedOptions[key] = tryParseExternalFunction(value);
+                    }
+                    break;
+                }
+                case 'dynamicGating': {
+                    if (value == null) {
+                        parsedOptions[key] = null;
+                    }
+                    else {
+                        const result = DynamicGatingOptionsSchema.safeParse(value);
+                        if (result.success) {
+                            parsedOptions[key] = result.data;
+                        }
+                        else {
+                            CompilerError.throwInvalidConfig({
+                                reason: 'Could not parse dynamic gating. Update React Compiler config to fix the error',
+                                description: `${zodValidationError.fromZodError(result.error)}`,
+                                loc: null,
+                                suggestions: null,
+                            });
+                        }
+                    }
+                    break;
+                }
+                case 'customOptOutDirectives': {
+                    const result = CustomOptOutDirectiveSchema.safeParse(value);
+                    if (result.success) {
+                        parsedOptions[key] = result.data;
+                    }
+                    else {
+                        CompilerError.throwInvalidConfig({
+                            reason: 'Could not parse custom opt out directives. Update React Compiler config to fix the error',
+                            description: `${zodValidationError.fromZodError(result.error)}`,
+                            loc: null,
+                            suggestions: null,
+                        });
                     }
                     break;
                 }
@@ -56958,15 +52818,38 @@ function injectReanimatedFlag(options) {
 }
 
 function throwInvalidReact(options, { logger, filename }) {
-    const detail = Object.assign(Object.assign({}, options), { severity: ErrorSeverity.InvalidReact });
+    const detail = Object.assign({ severity: ErrorSeverity.InvalidReact }, options);
     logger === null || logger === void 0 ? void 0 : logger.logEvent(filename, {
         kind: 'CompileError',
         fnLoc: null,
-        detail,
+        detail: new CompilerDiagnostic(detail),
     });
-    CompilerError.throw(detail);
+    CompilerError.throwDiagnostic(detail);
 }
-function assertValidEffectImportReference(numArgs, paths, context) {
+function isAutodepsSigil(arg) {
+    if (arg.isIdentifier() && arg.node.name === 'AUTODEPS') {
+        const binding = arg.scope.getBinding(arg.node.name);
+        if (binding && binding.path.isImportSpecifier()) {
+            const importSpecifier = binding.path.node;
+            if (importSpecifier.imported.type === 'Identifier') {
+                return importSpecifier.imported.name === 'AUTODEPS';
+            }
+        }
+        return false;
+    }
+    if (arg.isMemberExpression() && !arg.node.computed) {
+        const object = arg.get('object');
+        const property = arg.get('property');
+        if (object.isIdentifier() &&
+            object.node.name === 'React' &&
+            property.isIdentifier() &&
+            property.node.name === 'AUTODEPS') {
+            return true;
+        }
+    }
+    return false;
+}
+function assertValidEffectImportReference(autodepsIndex, paths, context) {
     var _a;
     for (const path of paths) {
         const parent = path.parentPath;
@@ -56975,16 +52858,20 @@ function assertValidEffectImportReference(numArgs, paths, context) {
             const maybeCalleeLoc = path.node.loc;
             const hasInferredEffect = maybeCalleeLoc != null &&
                 context.inferredEffectLocations.has(maybeCalleeLoc);
-            if (args.length === numArgs && !hasInferredEffect) {
+            const hasAutodepsArg = args.some(isAutodepsSigil);
+            if (hasAutodepsArg && !hasInferredEffect) {
                 const maybeErrorDiagnostic = matchCompilerDiagnostic(path, context.transformErrors);
                 throwInvalidReact({
-                    reason: '[InferEffectDependencies] React Compiler is unable to infer dependencies of this effect. ' +
-                        'This will break your build! ' +
-                        'To resolve, either pass your own dependency array or fix reported compiler bailout diagnostics.',
-                    description: maybeErrorDiagnostic
-                        ? `(Bailout reason: ${maybeErrorDiagnostic})`
-                        : null,
-                    loc: (_a = parent.node.loc) !== null && _a !== void 0 ? _a : null,
+                    category: 'Cannot infer dependencies of this effect. This will break your build!',
+                    description: 'To resolve, either pass a dependency array or fix reported compiler bailout diagnostics.' +
+                        (maybeErrorDiagnostic ? ` ${maybeErrorDiagnostic}` : ''),
+                    details: [
+                        {
+                            kind: 'error',
+                            message: 'Cannot infer dependencies',
+                            loc: (_a = parent.node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
+                        },
+                    ],
                 }, context);
             }
         }
@@ -56995,12 +52882,18 @@ function assertValidFireImportReference(paths, context) {
     if (paths.length > 0) {
         const maybeErrorDiagnostic = matchCompilerDiagnostic(paths[0], context.transformErrors);
         throwInvalidReact({
-            reason: '[Fire] Untransformed reference to compiler-required feature. ' +
-                'Either remove this `fire` call or ensure it is successfully transformed by the compiler',
-            description: maybeErrorDiagnostic
-                ? `(Bailout reason: ${maybeErrorDiagnostic})`
-                : null,
-            loc: (_a = paths[0].node.loc) !== null && _a !== void 0 ? _a : null,
+            category: '[Fire] Untransformed reference to compiler-required feature.',
+            description: 'Either remove this `fire` call or ensure it is successfully transformed by the compiler' +
+                maybeErrorDiagnostic
+                ? ` ${maybeErrorDiagnostic}`
+                : '',
+            details: [
+                {
+                    kind: 'error',
+                    message: 'Untransformed `fire` call',
+                    loc: (_a = paths[0].node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
+                },
+            ],
         }, context);
     }
 }
@@ -57013,9 +52906,9 @@ function validateNoUntransformedReferences(path, filename, logger, env, compileR
         }
     }
     if (env.inferEffectDependencies) {
-        for (const { function: { source, importSpecifierName }, numRequiredArgs, } of env.inferEffectDependencies) {
+        for (const { function: { source, importSpecifierName }, autodepsIndex, } of env.inferEffectDependencies) {
             const module = getOrInsertWith(moduleLoadChecks, source, () => new Map());
-            module.set(importSpecifierName, assertValidEffectImportReference.bind(null, numRequiredArgs));
+            module.set(importSpecifierName, assertValidEffectImportReference.bind(null, autodepsIndex));
         }
     }
     if (moduleLoadChecks.size > 0) {
@@ -57124,33 +53017,42 @@ function BabelPluginReactCompiler(_babel) {
             Program: {
                 enter(prog, pass) {
                     var _a, _b, _c, _d;
-                    const filename = (_a = pass.filename) !== null && _a !== void 0 ? _a : 'unknown';
-                    if (ENABLE_REACT_COMPILER_TIMINGS === true) {
-                        performance.mark(`${filename}:start`, {
-                            detail: 'BabelPlugin:Program:start',
+                    try {
+                        const filename = (_a = pass.filename) !== null && _a !== void 0 ? _a : 'unknown';
+                        if (ENABLE_REACT_COMPILER_TIMINGS === true) {
+                            performance.mark(`${filename}:start`, {
+                                detail: 'BabelPlugin:Program:start',
+                            });
+                        }
+                        let opts = parsePluginOptions(pass.opts);
+                        const isDev = (typeof true !== 'undefined' && true === true) ||
+                            process.env['NODE_ENV'] === 'development';
+                        if (opts.enableReanimatedCheck === true &&
+                            pipelineUsesReanimatedPlugin(pass.file.opts.plugins)) {
+                            opts = injectReanimatedFlag(opts);
+                        }
+                        if (opts.environment.enableResetCacheOnSourceFileChanges !== false &&
+                            isDev) {
+                            opts = Object.assign(Object.assign({}, opts), { environment: Object.assign(Object.assign({}, opts.environment), { enableResetCacheOnSourceFileChanges: true }) });
+                        }
+                        const result = compileProgram(prog, {
+                            opts,
+                            filename: (_b = pass.filename) !== null && _b !== void 0 ? _b : null,
+                            comments: (_c = pass.file.ast.comments) !== null && _c !== void 0 ? _c : [],
+                            code: pass.file.code,
                         });
+                        validateNoUntransformedReferences(prog, (_d = pass.filename) !== null && _d !== void 0 ? _d : null, opts.logger, opts.environment, result);
+                        if (ENABLE_REACT_COMPILER_TIMINGS === true) {
+                            performance.mark(`${filename}:end`, {
+                                detail: 'BabelPlugin:Program:end',
+                            });
+                        }
                     }
-                    let opts = parsePluginOptions(pass.opts);
-                    const isDev = (true === true) ;
-                    if (opts.enableReanimatedCheck === true &&
-                        pipelineUsesReanimatedPlugin(pass.file.opts.plugins)) {
-                        opts = injectReanimatedFlag(opts);
-                    }
-                    if (opts.environment.enableResetCacheOnSourceFileChanges !== false &&
-                        isDev) {
-                        opts = Object.assign(Object.assign({}, opts), { environment: Object.assign(Object.assign({}, opts.environment), { enableResetCacheOnSourceFileChanges: true }) });
-                    }
-                    const result = compileProgram(prog, {
-                        opts,
-                        filename: (_b = pass.filename) !== null && _b !== void 0 ? _b : null,
-                        comments: (_c = pass.file.ast.comments) !== null && _c !== void 0 ? _c : [],
-                        code: pass.file.code,
-                    });
-                    validateNoUntransformedReferences(prog, (_d = pass.filename) !== null && _d !== void 0 ? _d : null, opts.logger, opts.environment, result);
-                    if (ENABLE_REACT_COMPILER_TIMINGS === true) {
-                        performance.mark(`${filename}:end`, {
-                            detail: 'BabelPlugin:Program:end',
-                        });
+                    catch (e) {
+                        if (e instanceof CompilerError) {
+                            throw e.withPrintedMessage(pass.file.code, { eslint: false });
+                        }
+                        throw e;
                     }
                 },
                 exit(_, pass) {
@@ -57185,9 +53087,7 @@ const DEFAULT_REPORTABLE_LEVELS = new Set([
 ]);
 let reportableLevels = DEFAULT_REPORTABLE_LEVELS;
 function isReportableDiagnostic(detail) {
-    return (reportableLevels.has(detail.severity) &&
-        detail.loc != null &&
-        typeof detail.loc !== 'symbol');
+    return reportableLevels.has(detail.severity);
 }
 function makeSuggestions(detail) {
     const suggest = [];
@@ -57238,7 +53138,14 @@ const COMPILER_OPTIONS = {
     panicThreshold: 'none',
     flowSuppressions: false,
     environment: validateEnvironmentConfig({
-        validateRefAccessDuringRender: false,
+        validateRefAccessDuringRender: true,
+        validateNoSetStateInRender: true,
+        validateNoSetStateInEffects: true,
+        validateNoJSXInTryStatements: true,
+        validateNoImpureFunctionsInRender: true,
+        validateStaticComponents: true,
+        validateNoFreezingKnownMutableFunctions: true,
+        validateNoVoidUseMemo: true,
     }),
 };
 const rule$1 = {
@@ -57280,10 +53187,11 @@ const rule$1 = {
                 if (event.kind === 'CompileError') {
                     shouldReportUnusedOptOutDirective = false;
                     const detail = event.detail;
-                    const suggest = makeSuggestions(detail);
+                    const suggest = makeSuggestions(detail.options);
                     if (__unstable_donotuse_reportAllBailouts && event.fnLoc != null) {
-                        const locStr = detail.loc != null && typeof detail.loc !== 'symbol'
-                            ? ` (@:${detail.loc.start.line}:${detail.loc.start.column})`
+                        const loc = detail.primaryLocation();
+                        const locStr = loc != null && typeof loc !== 'symbol'
+                            ? ` (@:${loc.start.line}:${loc.start.column})`
                             : '';
                         let endLoc;
                         if (event.fnLoc.end.line === event.fnLoc.start.line) {
@@ -57300,24 +53208,26 @@ const rule$1 = {
                             end: endLoc,
                         };
                         context.report({
-                            message: `[ReactCompilerBailout] ${detail.reason}${locStr}`,
+                            message: `${detail.printErrorMessage(sourceCode.text, { eslint: true })} ${locStr}`,
                             loc: firstLineLoc,
                             suggest,
                         });
                     }
-                    if (!isReportableDiagnostic(detail)) {
+                    const loc = detail.primaryLocation();
+                    if (!isReportableDiagnostic(detail) ||
+                        loc == null ||
+                        typeof loc === 'symbol') {
                         return;
                     }
-                    if (hasFlowSuppression(detail.loc, 'react-rule-hook') ||
-                        hasFlowSuppression(detail.loc, 'react-rule-unsafe-ref')) {
+                    if (hasFlowSuppression(loc, 'react-rule-hook') ||
+                        hasFlowSuppression(loc, 'react-rule-unsafe-ref')) {
                         return;
                     }
-                    const loc = detail.loc == null || typeof detail.loc === 'symbol'
-                        ? event.fnLoc
-                        : detail.loc;
                     if (loc != null) {
                         context.report({
-                            message: detail.reason,
+                            message: detail.printErrorMessage(sourceCode.text, {
+                                eslint: true,
+                            }),
                             loc,
                             suggest,
                         });
@@ -60297,6 +56207,15 @@ function isInsideDoWhileLoop(node) {
     }
     return false;
 }
+function isInsideTryCatch(node) {
+    while (node) {
+        if (node.type === 'TryStatement' || node.type === 'CatchClause') {
+            return true;
+        }
+        node = node.parent;
+    }
+    return false;
+}
 function isUseEffectEventIdentifier(node) {
     {
         return node.type === 'Identifier' && node.name === 'useEffectEvent';
@@ -60500,6 +56419,12 @@ const rule = {
                         if (hasFlowSuppression(hook, 'react-rule-hook')) {
                             continue;
                         }
+                        if (isUseIdentifier(hook) && isInsideTryCatch(hook)) {
+                            context.report({
+                                node: hook,
+                                message: `React Hook "${getSourceCode().getText(hook)}" cannot be called in a try/catch block.`,
+                            });
+                        }
                         if ((cycled || isInsideDoWhileLoop(hook)) &&
                             !isUseIdentifier(hook)) {
                             context.report({
@@ -60596,13 +56521,15 @@ const rule = {
                 }
             },
             Identifier(node) {
-                if (lastEffect == null &&
-                    useEffectEventFunctions.has(node) &&
-                    node.parent.type !== 'CallExpression') {
+                if (lastEffect == null && useEffectEventFunctions.has(node)) {
+                    const message = `\`${getSourceCode().getText(node)}\` is a function created with React Hook "useEffectEvent", and can only be called from ` +
+                        'the same component.' +
+                        (node.parent.type === 'CallExpression'
+                            ? ''
+                            : ' They cannot be assigned to variables or passed down.');
                     context.report({
                         node,
-                        message: `\`${getSourceCode().getText(node)}\` is a function created with React Hook "useEffectEvent", and can only be called from ` +
-                            'the same component. They cannot be assigned to variables or passed down.',
+                        message,
                     });
                 }
             },
