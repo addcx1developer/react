@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<c0b4411bbd84b359c92b6d7866bb6af7>>
+ * @generated SignedSource<<1be1975e6b8443d8c2db7c58dc397f29>>
  */
 
 "use strict";
@@ -119,7 +119,7 @@ __DEV__ &&
           case REACT_PORTAL_TYPE:
             return "Portal";
           case REACT_CONTEXT_TYPE:
-            return (type.displayName || "Context") + ".Provider";
+            return type.displayName || "Context";
           case REACT_CONSUMER_TYPE:
             return (type._context.displayName || "Context") + ".Consumer";
           case REACT_FORWARD_REF_TYPE:
@@ -680,9 +680,8 @@ __DEV__ &&
       REACT_PORTAL_TYPE = Symbol.for("react.portal"),
       REACT_FRAGMENT_TYPE = Symbol.for("react.fragment"),
       REACT_STRICT_MODE_TYPE = Symbol.for("react.strict_mode"),
-      REACT_PROFILER_TYPE = Symbol.for("react.profiler");
-    Symbol.for("react.provider");
-    var REACT_CONSUMER_TYPE = Symbol.for("react.consumer"),
+      REACT_PROFILER_TYPE = Symbol.for("react.profiler"),
+      REACT_CONSUMER_TYPE = Symbol.for("react.consumer"),
       REACT_CONTEXT_TYPE = Symbol.for("react.context"),
       REACT_FORWARD_REF_TYPE = Symbol.for("react.forward_ref"),
       REACT_SUSPENSE_TYPE = Symbol.for("react.suspense"),
@@ -769,13 +768,13 @@ __DEV__ &&
             return null;
           };
     fnName = {
-      "react-stack-bottom-frame": function (callStackForError) {
+      react_stack_bottom_frame: function (callStackForError) {
         return callStackForError();
       }
     };
     var specialPropKeyWarningShown, didWarnAboutOldJSXRuntime;
     var didWarnAboutElementRef = {};
-    var unknownOwnerDebugStack = fnName["react-stack-bottom-frame"].bind(
+    var unknownOwnerDebugStack = fnName.react_stack_bottom_frame.bind(
       fnName,
       UnknownOwner
     )();
@@ -1000,6 +999,9 @@ __DEV__ &&
       return function () {
         return fn.apply(null, arguments);
       };
+    };
+    exports.cacheSignal = function () {
+      return null;
     };
     exports.cloneElement = function (element, config, children) {
       if (null === element || void 0 === element)
@@ -1411,7 +1413,7 @@ __DEV__ &&
     exports.useTransition = function () {
       return resolveDispatcher().useTransition();
     };
-    exports.version = "19.2.0-native-fb-c250b7d9-20250516";
+    exports.version = "19.2.0-native-fb-99fd4f2a-20250805";
     "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ &&
       "function" ===
         typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop &&

@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<014905db32ca494113e9284543752bed>>
+ * @generated SignedSource<<25f4fdeb731ac0c1a4dd9124c4e71b53>>
  */
 
 "use strict";
@@ -398,6 +398,9 @@ exports.cache = function (fn) {
     return fn.apply(null, arguments);
   };
 };
+exports.cacheSignal = function () {
+  return null;
+};
 exports.captureOwnerStack = void 0;
 exports.cloneElement = function (element, config, children) {
   if (null === element || void 0 === element)
@@ -590,7 +593,7 @@ exports.useSyncExternalStore = function (
 exports.useTransition = function () {
   return ReactSharedInternals.H.useTransition();
 };
-exports.version = "19.2.0-native-fb-c250b7d9-20250516";
+exports.version = "19.2.0-native-fb-99fd4f2a-20250805";
 "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ &&
   "function" ===
     typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop &&
