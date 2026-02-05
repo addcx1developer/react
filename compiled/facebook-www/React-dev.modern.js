@@ -203,17 +203,8 @@ __DEV__ &&
       componentName = this.props.ref;
       return void 0 !== componentName ? componentName : null;
     }
-    function ReactElement(
-      type,
-      key,
-      self,
-      source,
-      owner,
-      props,
-      debugStack,
-      debugTask
-    ) {
-      self = props.ref;
+    function ReactElement(type, key, props, owner, debugStack, debugTask) {
+      var refProp = props.ref;
       type = {
         $$typeof: REACT_ELEMENT_TYPE,
         type: type,
@@ -221,7 +212,7 @@ __DEV__ &&
         props: props,
         _owner: owner
       };
-      null !== (void 0 !== self ? self : null)
+      null !== (void 0 !== refProp ? refProp : null)
         ? Object.defineProperty(type, "ref", {
             enumerable: !1,
             get: elementRefGetterWithDeprecationWarning
@@ -260,8 +251,6 @@ __DEV__ &&
       config,
       maybeKey,
       isStaticChildren,
-      source,
-      self,
       debugStack,
       debugTask
     ) {
@@ -322,10 +311,8 @@ __DEV__ &&
       return ReactElement(
         type,
         children,
-        self,
-        source,
-        getOwner(),
         maybeKey,
+        getOwner(),
         debugStack,
         debugTask
       );
@@ -334,10 +321,8 @@ __DEV__ &&
       newKey = ReactElement(
         oldElement.type,
         newKey,
-        void 0,
-        void 0,
-        oldElement._owner,
         oldElement.props,
+        oldElement._owner,
         oldElement._debugStack,
         oldElement._debugTask
       );
@@ -346,7 +331,16 @@ __DEV__ &&
       return newKey;
     }
     function validateChildKeys(node) {
-      isValidElement(node) && node._store && (node._store.validated = 1);
+      isValidElement(node)
+        ? node._store && (node._store.validated = 1)
+        : "object" === typeof node &&
+          null !== node &&
+          node.$$typeof === REACT_LAZY_TYPE &&
+          ("fulfilled" === node._payload.status
+            ? isValidElement(node._payload.value) &&
+              node._payload.value._store &&
+              (node._payload.value._store.validated = 1)
+            : node._store && (node._store.validated = 1));
     }
     function isValidElement(object) {
       return (
@@ -542,35 +536,74 @@ __DEV__ &&
     }
     function lazyInitializer(payload) {
       if (-1 === payload._status) {
-        var ctor = payload._result;
-        ctor = ctor();
-        ctor.then(
+        var resolveDebugValue = null,
+          rejectDebugValue = null,
+          ioInfo = payload._ioInfo;
+        null != ioInfo &&
+          ((ioInfo.start = ioInfo.end = performance.now()),
+          (ioInfo.value = new Promise(function (resolve, reject) {
+            resolveDebugValue = resolve;
+            rejectDebugValue = reject;
+          })));
+        ioInfo = payload._result;
+        var thenable = ioInfo();
+        thenable.then(
           function (moduleObject) {
-            if (0 === payload._status || -1 === payload._status)
-              (payload._status = 1), (payload._result = moduleObject);
+            if (0 === payload._status || -1 === payload._status) {
+              payload._status = 1;
+              payload._result = moduleObject;
+              var _ioInfo = payload._ioInfo;
+              if (null != _ioInfo) {
+                _ioInfo.end = performance.now();
+                var debugValue =
+                  null == moduleObject ? void 0 : moduleObject.default;
+                resolveDebugValue(debugValue);
+                _ioInfo.value.status = "fulfilled";
+                _ioInfo.value.value = debugValue;
+              }
+              void 0 === thenable.status &&
+                ((thenable.status = "fulfilled"),
+                (thenable.value = moduleObject));
+            }
           },
           function (error) {
-            if (0 === payload._status || -1 === payload._status)
-              (payload._status = 2), (payload._result = error);
+            if (0 === payload._status || -1 === payload._status) {
+              payload._status = 2;
+              payload._result = error;
+              var _ioInfo2 = payload._ioInfo;
+              null != _ioInfo2 &&
+                ((_ioInfo2.end = performance.now()),
+                _ioInfo2.value.then(noop, noop),
+                rejectDebugValue(error),
+                (_ioInfo2.value.status = "rejected"),
+                (_ioInfo2.value.reason = error));
+              void 0 === thenable.status &&
+                ((thenable.status = "rejected"), (thenable.reason = error));
+            }
           }
         );
+        ioInfo = payload._ioInfo;
+        if (null != ioInfo) {
+          var displayName = thenable.displayName;
+          "string" === typeof displayName && (ioInfo.name = displayName);
+        }
         -1 === payload._status &&
-          ((payload._status = 0), (payload._result = ctor));
+          ((payload._status = 0), (payload._result = thenable));
       }
       if (1 === payload._status)
         return (
-          (ctor = payload._result),
-          void 0 === ctor &&
+          (ioInfo = payload._result),
+          void 0 === ioInfo &&
             console.error(
               "lazy: Expected the result of a dynamic import() call. Instead received: %s\n\nYour code should look like: \n  const MyComponent = lazy(() => import('./MyComponent'))\n\nDid you accidentally put curly braces around the import?",
-              ctor
+              ioInfo
             ),
-          "default" in ctor ||
+          "default" in ioInfo ||
             console.error(
               "lazy: Expected the result of a dynamic import() call. Instead received: %s\n\nYour code should look like: \n  const MyComponent = lazy(() => import('./MyComponent'))",
-              ctor
+              ioInfo
             ),
-          ctor.default
+          ioInfo.default
         );
       throw payload._result;
     }
@@ -584,6 +617,9 @@ __DEV__ &&
     }
     function useMemoCache(size) {
       return resolveDispatcher().useMemoCache(size);
+    }
+    function useEffectEvent(callback) {
+      return resolveDispatcher().useEffectEvent(callback);
     }
     function releaseAsyncTransition() {
       ReactSharedInternals.asyncTransitions--;
@@ -737,14 +773,7 @@ __DEV__ &&
       "function" ===
         typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart &&
       __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
-    var dynamicFeatureFlags = require("ReactFeatureFlags"),
-      enableTransitionTracing = dynamicFeatureFlags.enableTransitionTracing,
-      renameElementSymbol = dynamicFeatureFlags.renameElementSymbol,
-      enableViewTransition = dynamicFeatureFlags.enableViewTransition;
-    dynamicFeatureFlags = Symbol.for("react.element");
-    var REACT_ELEMENT_TYPE = renameElementSymbol
-        ? Symbol.for("react.transitional.element")
-        : dynamicFeatureFlags,
+    var REACT_ELEMENT_TYPE = Symbol.for("react.transitional.element"),
       REACT_PORTAL_TYPE = Symbol.for("react.portal"),
       REACT_FRAGMENT_TYPE = Symbol.for("react.fragment"),
       REACT_STRICT_MODE_TYPE = Symbol.for("react.strict_mode"),
@@ -755,11 +784,11 @@ __DEV__ &&
       REACT_SUSPENSE_TYPE = Symbol.for("react.suspense"),
       REACT_SUSPENSE_LIST_TYPE = Symbol.for("react.suspense_list"),
       REACT_MEMO_TYPE = Symbol.for("react.memo"),
-      REACT_LAZY_TYPE = Symbol.for("react.lazy");
-    renameElementSymbol = Symbol.for("react.scope");
-    var REACT_ACTIVITY_TYPE = Symbol.for("react.activity");
-    dynamicFeatureFlags = Symbol.for("react.legacy_hidden");
-    var REACT_TRACING_MARKER_TYPE = Symbol.for("react.tracing_marker"),
+      REACT_LAZY_TYPE = Symbol.for("react.lazy"),
+      REACT_SCOPE_TYPE = Symbol.for("react.scope"),
+      REACT_ACTIVITY_TYPE = Symbol.for("react.activity"),
+      REACT_LEGACY_HIDDEN_TYPE = Symbol.for("react.legacy_hidden"),
+      REACT_TRACING_MARKER_TYPE = Symbol.for("react.tracing_marker"),
       REACT_VIEW_TRANSITION_TYPE = Symbol.for("react.view_transition"),
       MAYBE_ITERATOR_SYMBOL = Symbol.iterator,
       didWarnStateUpdateForUnmountedComponent = {},
@@ -809,11 +838,14 @@ __DEV__ &&
       deprecatedAPIs.hasOwnProperty(fnName) &&
         defineDeprecationWarning(fnName, deprecatedAPIs[fnName]);
     ComponentDummy.prototype = Component.prototype;
-    var fnName = (PureComponent.prototype = new ComponentDummy());
-    fnName.constructor = PureComponent;
-    assign(fnName, Component.prototype);
-    fnName.isPureReactComponent = !0;
-    var isArrayImpl = Array.isArray,
+    deprecatedAPIs = PureComponent.prototype = new ComponentDummy();
+    deprecatedAPIs.constructor = PureComponent;
+    assign(deprecatedAPIs, Component.prototype);
+    deprecatedAPIs.isPureReactComponent = !0;
+    var isArrayImpl = Array.isArray;
+    deprecatedAPIs = require("ReactFeatureFlags");
+    var enableTransitionTracing = deprecatedAPIs.enableTransitionTracing,
+      enableViewTransition = deprecatedAPIs.enableViewTransition,
       REACT_CLIENT_REFERENCE = Symbol.for("react.client.reference"),
       ReactSharedInternals = {
         H: null,
@@ -835,15 +867,15 @@ __DEV__ &&
         : function () {
             return null;
           };
-    fnName = {
+    deprecatedAPIs = {
       react_stack_bottom_frame: function (callStackForError) {
         return callStackForError();
       }
     };
     var specialPropKeyWarningShown, didWarnAboutOldJSXRuntime;
     var didWarnAboutElementRef = {};
-    var unknownOwnerDebugStack = fnName.react_stack_bottom_frame.bind(
-      fnName,
+    var unknownOwnerDebugStack = deprecatedAPIs.react_stack_bottom_frame.bind(
+      deprecatedAPIs,
       UnknownOwner
     )();
     var unknownOwnerDebugTask = createTask(getTaskName(UnknownOwner));
@@ -892,8 +924,8 @@ __DEV__ &&
               });
             }
           : enqueueTask;
-    fnName = Object.freeze({ __proto__: null, c: useMemoCache });
-    deprecatedAPIs = {
+    deprecatedAPIs = Object.freeze({ __proto__: null, c: useMemoCache });
+    var fnName = {
       map: mapChildren,
       forEach: function (children, forEachFunc, forEachContext) {
         mapChildren(
@@ -931,16 +963,18 @@ __DEV__ &&
       var getCurrentStack = ReactSharedInternals.getCurrentStack;
       return null === getCurrentStack ? null : getCurrentStack();
     };
-    exports.Children = deprecatedAPIs;
+    exports.Activity = REACT_ACTIVITY_TYPE;
+    exports.Children = fnName;
     exports.Component = Component;
     exports.Fragment = REACT_FRAGMENT_TYPE;
     exports.Profiler = REACT_PROFILER_TYPE;
     exports.PureComponent = PureComponent;
     exports.StrictMode = REACT_STRICT_MODE_TYPE;
     exports.Suspense = REACT_SUSPENSE_TYPE;
+    exports.ViewTransition = REACT_VIEW_TRANSITION_TYPE;
     exports.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE =
       ReactSharedInternals;
-    exports.__COMPILER_RUNTIME = fnName;
+    exports.__COMPILER_RUNTIME = deprecatedAPIs;
     exports.act = function (callback) {
       var prevActQueue = ReactSharedInternals.actQueue,
         prevActScopeDepth = actScopeDepth;
@@ -1052,6 +1086,7 @@ __DEV__ &&
         }
       };
     };
+    exports.addTransitionType = addTransitionType;
     exports.c = useMemoCache;
     exports.cache = function (fn) {
       return function () {
@@ -1109,10 +1144,8 @@ __DEV__ &&
       props = ReactElement(
         element.type,
         key,
-        void 0,
-        void 0,
-        owner,
         props,
+        owner,
         element._debugStack,
         element._debugTask
       );
@@ -1141,6 +1174,7 @@ __DEV__ &&
     exports.createElement = function (type, config, children) {
       for (var i = 2; i < arguments.length; i++)
         validateChildKeys(arguments[i]);
+      var propName;
       i = {};
       var key = null;
       if (null != config)
@@ -1181,15 +1215,18 @@ __DEV__ &&
             ? type.displayName || type.name || "Unknown"
             : type
         );
-      var propName = 1e4 > ReactSharedInternals.recentlyCreatedOwnerStacks++;
+      (propName = 1e4 > ReactSharedInternals.recentlyCreatedOwnerStacks++)
+        ? ((childArray = Error.stackTraceLimit),
+          (Error.stackTraceLimit = 10),
+          (childrenLength = Error("react-stack-top-frame")),
+          (Error.stackTraceLimit = childArray))
+        : (childrenLength = unknownOwnerDebugStack);
       return ReactElement(
         type,
         key,
-        void 0,
-        void 0,
-        getOwner(),
         i,
-        propName ? Error("react-stack-top-frame") : unknownOwnerDebugStack,
+        getOwner(),
+        childrenLength,
         propName ? createTask(getTaskName(type)) : unknownOwnerDebugTask
       );
     };
@@ -1198,9 +1235,7 @@ __DEV__ &&
       Object.seal(refObject);
       return refObject;
     };
-    exports.experimental_useEffectEvent = function (callback) {
-      return resolveDispatcher().useEffectEvent(callback);
-    };
+    exports.experimental_useEffectEvent = useEffectEvent;
     exports.forwardRef = function (render) {
       null != render && render.$$typeof === REACT_MEMO_TYPE
         ? console.error(
@@ -1243,67 +1278,79 @@ __DEV__ &&
       return elementType;
     };
     exports.isValidElement = isValidElement;
-    exports.jsx = function (type, config, maybeKey, source, self) {
+    exports.jsx = function (type, config, maybeKey) {
       var trackActualOwner =
         1e4 > ReactSharedInternals.recentlyCreatedOwnerStacks++;
+      if (trackActualOwner) {
+        var previousStackTraceLimit = Error.stackTraceLimit;
+        Error.stackTraceLimit = 10;
+        var debugStackDEV = Error("react-stack-top-frame");
+        Error.stackTraceLimit = previousStackTraceLimit;
+      } else debugStackDEV = unknownOwnerDebugStack;
       return jsxDEVImpl(
         type,
         config,
         maybeKey,
         !1,
-        source,
-        self,
-        trackActualOwner
-          ? Error("react-stack-top-frame")
-          : unknownOwnerDebugStack,
+        debugStackDEV,
         trackActualOwner ? createTask(getTaskName(type)) : unknownOwnerDebugTask
       );
     };
-    exports.jsxDEV = function (
-      type,
-      config,
-      maybeKey,
-      isStaticChildren,
-      source,
-      self
-    ) {
+    exports.jsxDEV = function (type, config, maybeKey, isStaticChildren) {
       var trackActualOwner =
         1e4 > ReactSharedInternals.recentlyCreatedOwnerStacks++;
+      if (trackActualOwner) {
+        var previousStackTraceLimit = Error.stackTraceLimit;
+        Error.stackTraceLimit = 10;
+        var debugStackDEV = Error("react-stack-top-frame");
+        Error.stackTraceLimit = previousStackTraceLimit;
+      } else debugStackDEV = unknownOwnerDebugStack;
       return jsxDEVImpl(
         type,
         config,
         maybeKey,
         isStaticChildren,
-        source,
-        self,
-        trackActualOwner
-          ? Error("react-stack-top-frame")
-          : unknownOwnerDebugStack,
+        debugStackDEV,
         trackActualOwner ? createTask(getTaskName(type)) : unknownOwnerDebugTask
       );
     };
-    exports.jsxs = function (type, config, maybeKey, source, self) {
+    exports.jsxs = function (type, config, maybeKey) {
       var trackActualOwner =
         1e4 > ReactSharedInternals.recentlyCreatedOwnerStacks++;
+      if (trackActualOwner) {
+        var previousStackTraceLimit = Error.stackTraceLimit;
+        Error.stackTraceLimit = 10;
+        var debugStackDEV = Error("react-stack-top-frame");
+        Error.stackTraceLimit = previousStackTraceLimit;
+      } else debugStackDEV = unknownOwnerDebugStack;
       return jsxDEVImpl(
         type,
         config,
         maybeKey,
         !0,
-        source,
-        self,
-        trackActualOwner
-          ? Error("react-stack-top-frame")
-          : unknownOwnerDebugStack,
+        debugStackDEV,
         trackActualOwner ? createTask(getTaskName(type)) : unknownOwnerDebugTask
       );
     };
     exports.lazy = function (ctor) {
-      return {
-        $$typeof: REACT_LAZY_TYPE,
-        _payload: { _status: -1, _result: ctor },
-        _init: lazyInitializer
-      };
+      ctor = { _status: -1, _result: ctor };
+      var lazyType = {
+          $$typeof: REACT_LAZY_TYPE,
+          _payload: ctor,
+          _init: lazyInitializer
+        },
+        ioInfo = {
+          name: "lazy",
+          start: -1,
+          end: -1,
+          value: null,
+          owner: null,
+          debugStack: Error("react-stack-top-frame"),
+          debugTask: console.createTask ? console.createTask("lazy()") : null
+        };
+      ctor._ioInfo = ioInfo;
+      lazyType._debugInfo = [{ awaited: ioInfo }];
+      return lazyType;
     };
     exports.memo = function (type, compare) {
       null == type &&
@@ -1335,8 +1382,8 @@ __DEV__ &&
     };
     exports.startTransition = startTransition;
     exports.unstable_Activity = REACT_ACTIVITY_TYPE;
-    exports.unstable_LegacyHidden = dynamicFeatureFlags;
-    exports.unstable_Scope = renameElementSymbol;
+    exports.unstable_LegacyHidden = REACT_LEGACY_HIDDEN_TYPE;
+    exports.unstable_Scope = REACT_SCOPE_TYPE;
     exports.unstable_SuspenseList = REACT_SUSPENSE_LIST_TYPE;
     exports.unstable_TracingMarker = REACT_TRACING_MARKER_TYPE;
     exports.unstable_ViewTransition = REACT_VIEW_TRANSITION_TYPE;
@@ -1385,6 +1432,7 @@ __DEV__ &&
         );
       return resolveDispatcher().useEffect(create, deps);
     };
+    exports.useEffectEvent = useEffectEvent;
     exports.useId = function () {
       return resolveDispatcher().useId();
     };
@@ -1434,7 +1482,7 @@ __DEV__ &&
     exports.useTransition = function () {
       return resolveDispatcher().useTransition();
     };
-    exports.version = "19.2.0-www-modern-99fd4f2a-20250805";
+    exports.version = "19.3.0-www-modern-8b276df4-20260205";
     "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ &&
       "function" ===
         typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop &&

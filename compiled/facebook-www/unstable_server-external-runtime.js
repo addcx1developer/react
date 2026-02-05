@@ -76,6 +76,10 @@
           (classAttributeName.viewTransitionClass = className),
         (element = element.getAttribute("vt-name")) ||
           (element = "_T_" + autoNameIdx++ + "_"),
+        (element =
+          CSS.escape(element) !== element
+            ? "r-" + btoa(element).replace(/=/g, "")
+            : element),
         (classAttributeName.viewTransitionName = element),
         (shouldStartViewTransition = !0));
     }
@@ -309,7 +313,8 @@
         for (; contentNode.firstChild; )
           parentInstance.insertBefore(contentNode.firstChild, suspenseIdNode);
         suspenseNode.data = "$";
-        suspenseNode._reactRetry && suspenseNode._reactRetry();
+        suspenseNode._reactRetry &&
+          requestAnimationFrame(suspenseNode._reactRetry);
       }
     }
     batch.length = 0;
@@ -320,13 +325,14 @@
         ? ((suspenseBoundaryID.previousSibling.data = "$~"),
           $RB.push(suspenseBoundaryID, contentID),
           2 === $RB.length &&
-            ((suspenseBoundaryID = "number" !== typeof $RT ? 0 : $RT),
-            (contentID = performance.now()),
-            (suspenseBoundaryID =
-              2300 > contentID && 2e3 < contentID
-                ? 2300 - contentID
-                : suspenseBoundaryID + 300 - contentID),
-            setTimeout($RV.bind(null, $RB), suspenseBoundaryID)))
+            ("number" !== typeof $RT
+              ? requestAnimationFrame($RV.bind(null, $RB))
+              : ((suspenseBoundaryID = performance.now()),
+                (suspenseBoundaryID =
+                  2300 > suspenseBoundaryID && 2e3 < suspenseBoundaryID
+                    ? 2300 - suspenseBoundaryID
+                    : $RT + 300 - suspenseBoundaryID),
+                setTimeout($RV.bind(null, $RB), suspenseBoundaryID))))
         : contentID.parentNode.removeChild(contentID);
   };
   var $RR = function (suspenseBoundaryID, contentID, stylesheetDescriptors) {
@@ -441,22 +447,12 @@
         "javascript:throw new Error('React form unexpectedly submitted.')" ===
           action &&
           (event.preventDefault(),
-          formDataSubmitter
-            ? ((event = document.createElement("input")),
-              (event.name = formDataSubmitter.name),
-              (event.value = formDataSubmitter.value),
-              formDataSubmitter.parentNode.insertBefore(
-                event,
-                formDataSubmitter
-              ),
-              (formDataSubmitter = new FormData(form)),
-              event.parentNode.removeChild(event))
-            : (formDataSubmitter = new FormData(form)),
-          (event = form.ownerDocument || form),
-          (event.$$reactFormReplay = event.$$reactFormReplay || []).push(
+          (event = new FormData(form, formDataSubmitter)),
+          (action = form.ownerDocument || form),
+          (action.$$reactFormReplay = action.$$reactFormReplay || []).push(
             form,
             submitter,
-            formDataSubmitter
+            event
           ));
       }
     });
