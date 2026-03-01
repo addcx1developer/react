@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<5dc365b4a3147a3046ab220cf95eb4ef>>
+ * @generated SignedSource<<973e72e555fd209203abb85774f6c855>>
  */
 
 "use strict";
@@ -175,6 +175,19 @@ __DEV__ &&
     }
     function batchedUpdatesImpl(fn, bookkeeping) {
       return fn(bookkeeping);
+    }
+    function currentTimeStamp() {
+      currentTimeStamp =
+        "object" === typeof performance &&
+        null !== performance &&
+        "function" === typeof performance.now
+          ? function () {
+              return performance.now();
+            }
+          : function () {
+              return Date.now();
+            };
+      return currentTimeStamp();
     }
     function disabledLog() {}
     function disableLogs() {
@@ -727,11 +740,14 @@ __DEV__ &&
     }
     function executeDispatch(event, listener, inst) {
       event.currentTarget = getNodeFromInstance$1(inst);
+      inst = global.event;
+      global.event = event;
       try {
         listener(event);
       } catch (error) {
         hasError || ((hasError = !0), (caughtError = error));
       }
+      global.event = inst;
       event.currentTarget = null;
     }
     function executeDirectDispatch(event) {
@@ -3400,7 +3416,20 @@ __DEV__ &&
             workInProgress
           );
           nextFiber = null;
-        } else nextFiber = fiber.child;
+        } else
+          13 === fiber.tag &&
+          null !== fiber.memoizedState &&
+          null === fiber.memoizedState.dehydrated
+            ? ((fiber.lanes |= renderLanes),
+              (nextFiber = fiber.alternate),
+              null !== nextFiber && (nextFiber.lanes |= renderLanes),
+              scheduleContextWorkOnParentPath(
+                fiber.return,
+                renderLanes,
+                workInProgress
+              ),
+              (nextFiber = forcePropagateEntireTree ? fiber.child : null))
+            : (nextFiber = fiber.child);
         if (null !== nextFiber) nextFiber.return = fiber;
         else
           for (nextFiber = fiber; null !== nextFiber; ) {
@@ -3466,6 +3495,7 @@ __DEV__ &&
           forcePropagateEntireTree
         );
       workInProgress.flags |= 262144;
+      return null !== current;
     }
     function checkIfContextChanged(currentDependencies) {
       for (
@@ -9554,7 +9584,14 @@ __DEV__ &&
                 (workInProgress.flags |= 128),
                 null
               );
-            if (0 !== (renderLanes & workInProgress.child.childLanes))
+            stateNode = propagateParentContextChanges(
+              current,
+              workInProgress,
+              renderLanes,
+              !1
+            );
+            var primaryChildLanes = workInProgress.child.childLanes;
+            if (stateNode || 0 !== (renderLanes & primaryChildLanes))
               return updateSuspenseComponent(
                 current,
                 workInProgress,
@@ -9577,7 +9614,7 @@ __DEV__ &&
               workInProgress,
               renderLanes
             );
-          var didSuspendBefore = 0 !== (current.flags & 128);
+          primaryChildLanes = 0 !== (current.flags & 128);
           stateNode = 0 !== (renderLanes & workInProgress.childLanes);
           stateNode ||
             (propagateParentContextChanges(
@@ -9587,7 +9624,7 @@ __DEV__ &&
               !1
             ),
             (stateNode = 0 !== (renderLanes & workInProgress.childLanes)));
-          if (didSuspendBefore) {
+          if (primaryChildLanes) {
             if (stateNode)
               return updateSuspenseListComponent(
                 current,
@@ -9596,11 +9633,11 @@ __DEV__ &&
               );
             workInProgress.flags |= 128;
           }
-          didSuspendBefore = workInProgress.memoizedState;
-          null !== didSuspendBefore &&
-            ((didSuspendBefore.rendering = null),
-            (didSuspendBefore.tail = null),
-            (didSuspendBefore.lastEffect = null));
+          primaryChildLanes = workInProgress.memoizedState;
+          null !== primaryChildLanes &&
+            ((primaryChildLanes.rendering = null),
+            (primaryChildLanes.tail = null),
+            (primaryChildLanes.lastEffect = null));
           pushSuspenseListContext(workInProgress, suspenseStackCursor.current);
           if (stateNode) break;
           else return null;
@@ -12032,13 +12069,11 @@ __DEV__ &&
         case 11:
         case 14:
         case 15:
-          (!enableHiddenSubtreeInsertionEffectCleanup &&
-            offscreenSubtreeWasHidden) ||
-            commitHookEffectListUnmount(
-              Insertion,
-              deletedFiber,
-              nearestMountedAncestor
-            );
+          commitHookEffectListUnmount(
+            Insertion,
+            deletedFiber,
+            nearestMountedAncestor
+          );
           offscreenSubtreeWasHidden ||
             commitHookLayoutUnmountEffects(
               deletedFiber,
@@ -17134,8 +17169,6 @@ __DEV__ &&
       alwaysThrottleRetries = dynamicFlagsUntyped.alwaysThrottleRetries,
       enableEffectEventMutationPhase =
         dynamicFlagsUntyped.enableEffectEventMutationPhase,
-      enableHiddenSubtreeInsertionEffectCleanup =
-        dynamicFlagsUntyped.enableHiddenSubtreeInsertionEffectCleanup,
       enableObjectFiber = dynamicFlagsUntyped.enableObjectFiber,
       enableEagerAlternateStateNodeCleanup =
         dynamicFlagsUntyped.enableEagerAlternateStateNodeCleanup,
@@ -17271,7 +17304,7 @@ __DEV__ &&
       bubbles: null,
       cancelable: null,
       timeStamp: function (event) {
-        return event.timeStamp || Date.now();
+        return event.timeStamp || event.timestamp || currentTimeStamp();
       },
       defaultPrevented: null,
       isTrusted: null
@@ -20148,10 +20181,10 @@ __DEV__ &&
     (function () {
       var internals = {
         bundleType: 1,
-        version: "19.3.0-native-fb-38cd020c-20260219",
+        version: "19.3.0-native-fb-e0cc7202-20260227",
         rendererPackageName: "react-native-renderer",
         currentDispatcherRef: ReactSharedInternals,
-        reconcilerVersion: "19.3.0-native-fb-38cd020c-20260219"
+        reconcilerVersion: "19.3.0-native-fb-e0cc7202-20260227"
       };
       null !== extraDevToolsConfig &&
         (internals.rendererConfig = extraDevToolsConfig);
