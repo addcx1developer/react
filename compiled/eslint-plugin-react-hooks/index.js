@@ -18008,15 +18008,12 @@ function printCodeFrame(source, loc, message) {
 function printErrorSummary(category, message) {
     let heading;
     switch (category) {
-        case ErrorCategory.AutomaticEffectDependencies:
         case ErrorCategory.CapitalizedCalls:
         case ErrorCategory.Config:
         case ErrorCategory.EffectDerivationsOfState:
         case ErrorCategory.EffectSetState:
         case ErrorCategory.ErrorBoundaries:
-        case ErrorCategory.Factories:
         case ErrorCategory.FBT:
-        case ErrorCategory.Fire:
         case ErrorCategory.Gating:
         case ErrorCategory.Globals:
         case ErrorCategory.Hooks:
@@ -18062,7 +18059,6 @@ var ErrorCategory;
     ErrorCategory["StaticComponents"] = "StaticComponents";
     ErrorCategory["UseMemo"] = "UseMemo";
     ErrorCategory["VoidUseMemo"] = "VoidUseMemo";
-    ErrorCategory["Factories"] = "Factories";
     ErrorCategory["PreserveManualMemo"] = "PreserveManualMemo";
     ErrorCategory["MemoDependencies"] = "MemoDependencies";
     ErrorCategory["IncompatibleLibrary"] = "IncompatibleLibrary";
@@ -18083,8 +18079,6 @@ var ErrorCategory;
     ErrorCategory["Config"] = "Config";
     ErrorCategory["Gating"] = "Gating";
     ErrorCategory["Suppression"] = "Suppression";
-    ErrorCategory["AutomaticEffectDependencies"] = "AutomaticEffectDependencies";
-    ErrorCategory["Fire"] = "Fire";
     ErrorCategory["FBT"] = "FBT";
 })(ErrorCategory || (ErrorCategory = {}));
 var LintRulePreset;
@@ -18101,15 +18095,6 @@ function getRuleForCategory(category) {
 }
 function getRuleForCategoryImpl(category) {
     switch (category) {
-        case ErrorCategory.AutomaticEffectDependencies: {
-            return {
-                category,
-                severity: ErrorSeverity.Error,
-                name: 'automatic-effect-dependencies',
-                description: 'Verifies that automatic effect dependencies are compiled if opted-in',
-                preset: LintRulePreset.Off,
-            };
-        }
         case ErrorCategory.CapitalizedCalls: {
             return {
                 category,
@@ -18175,31 +18160,12 @@ function getRuleForCategoryImpl(category) {
                 preset: LintRulePreset.Recommended,
             };
         }
-        case ErrorCategory.Factories: {
-            return {
-                category,
-                severity: ErrorSeverity.Error,
-                name: 'component-hook-factories',
-                description: 'Validates against higher order functions defining nested components or hooks. ' +
-                    'Components and hooks should be defined at the module level',
-                preset: LintRulePreset.Recommended,
-            };
-        }
         case ErrorCategory.FBT: {
             return {
                 category,
                 severity: ErrorSeverity.Error,
                 name: 'fbt',
                 description: 'Validates usage of fbt',
-                preset: LintRulePreset.Off,
-            };
-        }
-        case ErrorCategory.Fire: {
-            return {
-                category,
-                severity: ErrorSeverity.Error,
-                name: 'fire',
-                description: 'Validates usage of `fire`',
                 preset: LintRulePreset.Off,
             };
         }
@@ -18514,9 +18480,6 @@ const GeneratedSource = Symbol();
 function isStatementBlockKind(kind) {
     return kind === 'block' || kind === 'catch';
 }
-function isExpressionBlockKind(kind) {
-    return !isStatementBlockKind(kind);
-}
 var GotoVariant;
 (function (GotoVariant) {
     GotoVariant["Break"] = "Break";
@@ -18562,9 +18525,6 @@ function makeTemporaryIdentifier(id, loc) {
         type: makeType(),
         loc,
     };
-}
-function forkTemporaryIdentifier(id, source) {
-    return Object.assign(Object.assign({}, source), { mutableRange: { start: makeInstructionId(0), end: makeInstructionId(0) }, id });
 }
 function validateIdentifierName(name) {
     if (isReservedWord(name)) {
@@ -18844,9 +18804,6 @@ function isUseReducerType(id) {
 function isDispatcherType(id) {
     return id.type.kind === 'Function' && id.type.shapeId === 'BuiltInDispatch';
 }
-function isFireFunctionType(id) {
-    return (id.type.kind === 'Function' && id.type.shapeId === 'BuiltInFireFunction');
-}
 function isEffectEventFunctionType(id) {
     return (id.type.kind === 'Function' &&
         id.type.shapeId === 'BuiltInEffectEventFunction');
@@ -18899,9 +18856,6 @@ function isUseInsertionEffectHookType(id) {
 }
 function isUseEffectEventType(id) {
     return (id.type.kind === 'Function' && id.type.shapeId === 'BuiltInUseEffectEvent');
-}
-function isUseContextHookType(id) {
-    return (id.type.kind === 'Function' && id.type.shapeId === 'BuiltInUseContextHook');
 }
 function getHookKind(env, id) {
     return getHookKindForType(env, id.type);
@@ -19586,14 +19540,6 @@ function printSourceLocation(loc) {
     }
     else {
         return `${loc.start.line}:${loc.start.column}:${loc.end.line}:${loc.end.column}`;
-    }
-}
-function printSourceLocationLine(loc) {
-    if (typeof loc === 'symbol') {
-        return 'generated';
-    }
-    else {
-        return `${loc.start.line}:${loc.end.line}`;
     }
 }
 function getFunctionName$2(instrValue, defaultValue) {
@@ -21092,13 +21038,15 @@ class HIRBuilder {
         _HIRBuilder_bindings.set(this, void 0);
         _HIRBuilder_env.set(this, void 0);
         _HIRBuilder_exceptionHandlerStack.set(this, []);
-        this.errors = new CompilerError();
         this.fbtDepth = 0;
         __classPrivateFieldSet(this, _HIRBuilder_env, env, "f");
         __classPrivateFieldSet(this, _HIRBuilder_bindings, (_a = options === null || options === void 0 ? void 0 : options.bindings) !== null && _a !== void 0 ? _a : new Map(), "f");
         __classPrivateFieldSet(this, _HIRBuilder_context, (_b = options === null || options === void 0 ? void 0 : options.context) !== null && _b !== void 0 ? _b : new Map(), "f");
         __classPrivateFieldSet(this, _HIRBuilder_entry, makeBlockId(env.nextBlockId), "f");
         __classPrivateFieldSet(this, _HIRBuilder_current, newBlock(__classPrivateFieldGet(this, _HIRBuilder_entry, "f"), (_c = options === null || options === void 0 ? void 0 : options.entryBlockKind) !== null && _c !== void 0 ? _c : 'block'), "f");
+    }
+    recordError(error) {
+        __classPrivateFieldGet(this, _HIRBuilder_env, "f").recordError(error);
     }
     currentBlockKind() {
         return __classPrivateFieldGet(this, _HIRBuilder_current, "f").kind;
@@ -21200,32 +21148,22 @@ class HIRBuilder {
     resolveBinding(node) {
         var _a, _b, _c;
         if (node.name === 'fbt') {
-            CompilerError.throwDiagnostic({
+            this.recordError(new CompilerErrorDetail({
                 category: ErrorCategory.Todo,
                 reason: 'Support local variables named `fbt`',
                 description: 'Local variables named `fbt` may conflict with the fbt plugin and are not yet supported',
-                details: [
-                    {
-                        kind: 'error',
-                        message: 'Rename to avoid conflict with fbt plugin',
-                        loc: (_a = node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
-                    },
-                ],
-            });
+                loc: (_a = node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
+                suggestions: null,
+            }));
         }
         if (node.name === 'this') {
-            CompilerError.throwDiagnostic({
+            this.recordError(new CompilerErrorDetail({
                 category: ErrorCategory.UnsupportedSyntax,
                 reason: '`this` is not supported syntax',
                 description: 'React Compiler does not support compiling functions that use `this`',
-                details: [
-                    {
-                        kind: 'error',
-                        message: '`this` was used here',
-                        loc: (_b = node.loc) !== null && _b !== void 0 ? _b : GeneratedSource,
-                    },
-                ],
-            });
+                loc: (_b = node.loc) !== null && _b !== void 0 ? _b : GeneratedSource,
+                suggestions: null,
+            }));
         }
         const originalName = node.name;
         let name = originalName;
@@ -21268,12 +21206,13 @@ class HIRBuilder {
         for (const [id, block] of ir.blocks) {
             if (!rpoBlocks.has(id) &&
                 block.instructions.some(instr => instr.value.kind === 'FunctionExpression')) {
-                CompilerError.throwTodo({
+                this.recordError(new CompilerErrorDetail({
                     reason: `Support functions with unreachable code that may contain hoisted declarations`,
                     loc: (_b = (_a = block.instructions[0]) === null || _a === void 0 ? void 0 : _a.loc) !== null && _b !== void 0 ? _b : block.terminal.loc,
                     description: null,
                     suggestions: null,
-                });
+                    category: ErrorCategory.Todo,
+                }));
             }
         }
         ir.blocks = rpoBlocks;
@@ -21821,12 +21760,8 @@ const BuiltInUseTransitionId = 'BuiltInUseTransition';
 const BuiltInUseOptimisticId = 'BuiltInUseOptimistic';
 const BuiltInSetOptimisticId = 'BuiltInSetOptimistic';
 const BuiltInStartTransitionId = 'BuiltInStartTransition';
-const BuiltInFireId = 'BuiltInFire';
-const BuiltInFireFunctionId = 'BuiltInFireFunction';
 const BuiltInUseEffectEventId = 'BuiltInUseEffectEvent';
 const BuiltInEffectEventId = 'BuiltInEffectEventFunction';
-const BuiltInAutodepsId = 'BuiltInAutoDepsId';
-const BuiltInEventHandlerId = 'BuiltInEventHandlerId';
 const ReanimatedSharedValueId = 'ReanimatedSharedValueId';
 const BUILTIN_SHAPES = new Map();
 addObject(BUILTIN_SHAPES, BuiltInPropsId, [
@@ -22487,13 +22422,6 @@ addFunction(BUILTIN_SHAPES, [], {
     calleeEffect: Effect.ConditionallyMutate,
     returnValueKind: ValueKind.Mutable,
 }, BuiltInEffectEventId);
-addFunction(BUILTIN_SHAPES, [], {
-    positionalParams: [],
-    restParam: Effect.ConditionallyMutate,
-    returnType: { kind: 'Poly' },
-    calleeEffect: Effect.ConditionallyMutate,
-    returnValueKind: ValueKind.Mutable,
-}, BuiltInEventHandlerId);
 addObject(BUILTIN_SHAPES, BuiltInMixedReadonlyId, [
     [
         'toString',
@@ -22745,7 +22673,7 @@ function lower(func, env, bindings = null, capturedRefs = new Map()) {
         if (param.isIdentifier()) {
             const binding = builder.resolveIdentifier(param);
             if (binding.kind !== 'Identifier') {
-                builder.errors.pushDiagnostic(CompilerDiagnostic.create({
+                builder.recordError(CompilerDiagnostic.create({
                     category: ErrorCategory.Invariant,
                     reason: 'Could not find binding',
                     description: `[BuildHIR] Could not find binding for param \`${param.node.name}\``,
@@ -22794,7 +22722,7 @@ function lower(func, env, bindings = null, capturedRefs = new Map()) {
             lowerAssignment(builder, (_h = param.node.loc) !== null && _h !== void 0 ? _h : GeneratedSource, InstructionKind.Let, param.get('argument'), place, 'Assignment');
         }
         else {
-            builder.errors.pushDiagnostic(CompilerDiagnostic.create({
+            builder.recordError(CompilerDiagnostic.create({
                 category: ErrorCategory.Todo,
                 reason: `Handle ${param.node.type} parameters`,
                 description: `[BuildHIR] Add support for ${param.node.type} parameters`,
@@ -22824,7 +22752,7 @@ function lower(func, env, bindings = null, capturedRefs = new Map()) {
         directives = body.get('directives').map(d => d.node.value.value);
     }
     else {
-        builder.errors.pushDiagnostic(CompilerDiagnostic.create({
+        builder.recordError(CompilerDiagnostic.create({
             category: ErrorCategory.Syntax,
             reason: `Unexpected function body kind`,
             description: `Expected function body to be an expression or a block statement, got \`${body.type}\``,
@@ -22838,14 +22766,13 @@ function lower(func, env, bindings = null, capturedRefs = new Map()) {
     if (id != null) {
         const idResult = validateIdentifierName(id);
         if (idResult.isErr()) {
-            builder.errors.merge(idResult.unwrapErr());
+            for (const detail of idResult.unwrapErr().details) {
+                builder.recordError(detail);
+            }
         }
         else {
             validatedId = idResult.unwrap().value;
         }
-    }
-    if (builder.errors.hasAnyErrors()) {
-        return Err(builder.errors);
     }
     builder.terminate({
         kind: 'return',
@@ -22859,26 +22786,26 @@ function lower(func, env, bindings = null, capturedRefs = new Map()) {
         id: makeInstructionId(0),
         effects: null,
     }, null);
-    return Ok({
+    const hirBody = builder.build();
+    return {
         id: validatedId,
         nameHint: null,
         params,
         fnType: bindings == null ? env.fnType : 'Other',
         returnTypeAnnotation: null,
         returns: createTemporaryPlace(env, (_b = func.node.loc) !== null && _b !== void 0 ? _b : GeneratedSource),
-        body: builder.build(),
+        body: hirBody,
         context,
         generator: func.node.generator === true,
         async: func.node.async === true,
         loc: (_c = func.node.loc) !== null && _c !== void 0 ? _c : GeneratedSource,
         env,
-        effects: null,
         aliasingEffects: null,
         directives,
-    });
+    };
 }
 function lowerStatement(builder, stmtPath, label = null) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36, _37, _38;
     const stmtNode = stmtPath.node;
     switch (stmtNode.type) {
         case 'ThrowStatement': {
@@ -22886,12 +22813,12 @@ function lowerStatement(builder, stmtPath, label = null) {
             const value = lowerExpressionToTemporary(builder, stmt.get('argument'));
             const handler = builder.resolveThrowHandler();
             if (handler != null) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: '(BuildHIR::lowerStatement) Support ThrowStatement inside of try/catch',
                     category: ErrorCategory.Todo,
                     loc: (_a = stmt.node.loc) !== null && _a !== void 0 ? _a : null,
                     suggestions: null,
-                });
+                }));
             }
             const terminal = {
                 kind: 'throw',
@@ -23040,23 +22967,23 @@ function lowerStatement(builder, stmtPath, label = null) {
                         kind = InstructionKind.HoistedFunction;
                     }
                     else if (!binding.path.isVariableDeclarator()) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             category: ErrorCategory.Todo,
                             reason: 'Unsupported declaration type for hoisting',
                             description: `variable "${binding.identifier.name}" declared with ${binding.path.type}`,
                             suggestions: null,
                             loc: (_f = id.parentPath.node.loc) !== null && _f !== void 0 ? _f : GeneratedSource,
-                        });
+                        }));
                         continue;
                     }
                     else {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             category: ErrorCategory.Todo,
                             reason: 'Handle non-const declarations for hoisting',
                             description: `variable "${binding.identifier.name}" declared with ${binding.kind}`,
                             suggestions: null,
                             loc: (_g = id.parentPath.node.loc) !== null && _g !== void 0 ? _g : GeneratedSource,
-                        });
+                        }));
                         continue;
                     }
                     const identifier = builder.resolveIdentifier(id);
@@ -23114,19 +23041,38 @@ function lowerStatement(builder, stmtPath, label = null) {
             const testBlock = builder.reserve('loop');
             const continuationBlock = builder.reserve('block');
             const initBlock = builder.enter('loop', _blockId => {
-                var _a, _b, _c, _d;
+                var _a, _b, _c, _d, _e, _f;
                 const init = stmt.get('init');
-                if (!init.isVariableDeclaration()) {
-                    builder.errors.push({
-                        reason: '(BuildHIR::lowerStatement) Handle non-variable initialization in ForStatement',
-                        category: ErrorCategory.Todo,
-                        loc: (_a = stmt.node.loc) !== null && _a !== void 0 ? _a : null,
-                        suggestions: null,
+                if (init.node == null) {
+                    lowerValueToTemporary(builder, {
+                        kind: 'Primitive',
+                        value: undefined,
+                        loc: (_a = stmt.node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
                     });
                     return {
-                        kind: 'unsupported',
+                        kind: 'goto',
+                        block: testBlock.id,
+                        variant: GotoVariant.Break,
                         id: makeInstructionId(0),
-                        loc: (_c = (_b = init.node) === null || _b === void 0 ? void 0 : _b.loc) !== null && _c !== void 0 ? _c : GeneratedSource,
+                        loc: (_b = stmt.node.loc) !== null && _b !== void 0 ? _b : GeneratedSource,
+                    };
+                }
+                if (!init.isVariableDeclaration()) {
+                    builder.recordError(new CompilerErrorDetail({
+                        reason: '(BuildHIR::lowerStatement) Handle non-variable initialization in ForStatement',
+                        category: ErrorCategory.Todo,
+                        loc: (_c = stmt.node.loc) !== null && _c !== void 0 ? _c : null,
+                        suggestions: null,
+                    }));
+                    if (init.isExpression()) {
+                        lowerExpressionToTemporary(builder, init);
+                    }
+                    return {
+                        kind: 'goto',
+                        block: testBlock.id,
+                        variant: GotoVariant.Break,
+                        id: makeInstructionId(0),
+                        loc: (_e = (_d = init.node) === null || _d === void 0 ? void 0 : _d.loc) !== null && _e !== void 0 ? _e : GeneratedSource,
                     };
                 }
                 lowerStatement(builder, init);
@@ -23135,7 +23081,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                     block: testBlock.id,
                     variant: GotoVariant.Break,
                     id: makeInstructionId(0),
-                    loc: (_d = init.node.loc) !== null && _d !== void 0 ? _d : GeneratedSource,
+                    loc: (_f = init.node.loc) !== null && _f !== void 0 ? _f : GeneratedSource,
                 };
             });
             let updateBlock = null;
@@ -23179,12 +23125,25 @@ function lowerStatement(builder, stmtPath, label = null) {
             }, testBlock);
             const test = stmt.get('test');
             if (test.node == null) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerStatement) Handle empty test in ForStatement`,
                     category: ErrorCategory.Todo,
                     loc: (_t = stmt.node.loc) !== null && _t !== void 0 ? _t : null,
                     suggestions: null,
-                });
+                }));
+                builder.terminateWithContinuation({
+                    kind: 'branch',
+                    test: lowerValueToTemporary(builder, {
+                        kind: 'Primitive',
+                        value: true,
+                        loc: (_u = stmt.node.loc) !== null && _u !== void 0 ? _u : GeneratedSource,
+                    }),
+                    consequent: bodyBlock,
+                    alternate: continuationBlock.id,
+                    fallthrough: continuationBlock.id,
+                    id: makeInstructionId(0),
+                    loc: (_v = stmt.node.loc) !== null && _v !== void 0 ? _v : GeneratedSource,
+                }, continuationBlock);
             }
             else {
                 builder.terminateWithContinuation({
@@ -23194,7 +23153,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                     alternate: continuationBlock.id,
                     fallthrough: continuationBlock.id,
                     id: makeInstructionId(0),
-                    loc: (_u = stmt.node.loc) !== null && _u !== void 0 ? _u : GeneratedSource,
+                    loc: (_w = stmt.node.loc) !== null && _w !== void 0 ? _w : GeneratedSource,
                 }, continuationBlock);
             }
             return;
@@ -23217,7 +23176,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                     };
                 });
             });
-            const loc = (_v = stmt.node.loc) !== null && _v !== void 0 ? _v : GeneratedSource;
+            const loc = (_x = stmt.node.loc) !== null && _x !== void 0 ? _x : GeneratedSource;
             builder.terminateWithContinuation({
                 kind: 'while',
                 loc,
@@ -23234,7 +23193,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                 alternate: continuationBlock.id,
                 fallthrough: conditionalBlock.id,
                 id: makeInstructionId(0),
-                loc: (_w = stmt.node.loc) !== null && _w !== void 0 ? _w : GeneratedSource,
+                loc: (_y = stmt.node.loc) !== null && _y !== void 0 ? _y : GeneratedSource,
             };
             builder.terminateWithContinuation(terminal, continuationBlock);
             return;
@@ -23273,7 +23232,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                         block,
                         fallthrough: continuationBlock.id,
                         id: makeInstructionId(0),
-                        loc: (_x = stmt.node.loc) !== null && _x !== void 0 ? _x : GeneratedSource,
+                        loc: (_z = stmt.node.loc) !== null && _z !== void 0 ? _z : GeneratedSource,
                     }, continuationBlock);
                 }
             }
@@ -23290,12 +23249,12 @@ function lowerStatement(builder, stmtPath, label = null) {
                 const testExpr = case_.get('test');
                 if (testExpr.node == null) {
                     if (hasDefault) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `Expected at most one \`default\` branch in a switch statement, this code should have failed to parse`,
                             category: ErrorCategory.Syntax,
-                            loc: (_y = case_.node.loc) !== null && _y !== void 0 ? _y : null,
+                            loc: (_0 = case_.node.loc) !== null && _0 !== void 0 ? _0 : null,
                             suggestions: null,
-                        });
+                        }));
                         break;
                     }
                     hasDefault = true;
@@ -23336,7 +23295,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                 cases,
                 fallthrough: continuationBlock.id,
                 id: makeInstructionId(0),
-                loc: (_z = stmt.node.loc) !== null && _z !== void 0 ? _z : GeneratedSource,
+                loc: (_1 = stmt.node.loc) !== null && _1 !== void 0 ? _1 : GeneratedSource,
             }, continuationBlock);
             return;
         }
@@ -23344,33 +23303,34 @@ function lowerStatement(builder, stmtPath, label = null) {
             const stmt = stmtPath;
             const nodeKind = stmt.node.kind;
             if (nodeKind === 'var') {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerStatement) Handle ${nodeKind} kinds in VariableDeclaration`,
                     category: ErrorCategory.Todo,
-                    loc: (_0 = stmt.node.loc) !== null && _0 !== void 0 ? _0 : null,
+                    loc: (_2 = stmt.node.loc) !== null && _2 !== void 0 ? _2 : null,
                     suggestions: null,
-                });
-                return;
+                }));
             }
-            const kind = nodeKind === 'let' ? InstructionKind.Let : InstructionKind.Const;
+            const kind = nodeKind === 'let' || nodeKind === 'var'
+                ? InstructionKind.Let
+                : InstructionKind.Const;
             for (const declaration of stmt.get('declarations')) {
                 const id = declaration.get('id');
                 const init = declaration.get('init');
                 if (hasNode(init)) {
                     const value = lowerExpressionToTemporary(builder, init);
-                    lowerAssignment(builder, (_1 = stmt.node.loc) !== null && _1 !== void 0 ? _1 : GeneratedSource, kind, id, value, id.isObjectPattern() || id.isArrayPattern()
+                    lowerAssignment(builder, (_3 = stmt.node.loc) !== null && _3 !== void 0 ? _3 : GeneratedSource, kind, id, value, id.isObjectPattern() || id.isArrayPattern()
                         ? 'Destructure'
                         : 'Assignment');
                 }
                 else if (id.isIdentifier()) {
                     const binding = builder.resolveIdentifier(id);
                     if (binding.kind !== 'Identifier') {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerAssignment) Could not find binding for declaration.`,
                             category: ErrorCategory.Invariant,
-                            loc: (_2 = id.node.loc) !== null && _2 !== void 0 ? _2 : null,
+                            loc: (_4 = id.node.loc) !== null && _4 !== void 0 ? _4 : null,
                             suggestions: null,
-                        });
+                        }));
                     }
                     else {
                         const place = {
@@ -23378,15 +23338,15 @@ function lowerStatement(builder, stmtPath, label = null) {
                             identifier: binding.identifier,
                             kind: 'Identifier',
                             reactive: false,
-                            loc: (_3 = id.node.loc) !== null && _3 !== void 0 ? _3 : GeneratedSource,
+                            loc: (_5 = id.node.loc) !== null && _5 !== void 0 ? _5 : GeneratedSource,
                         };
                         if (builder.isContextIdentifier(id)) {
                             if (kind === InstructionKind.Const) {
                                 const declRangeStart = declaration.parentPath.node.start;
-                                builder.errors.push({
+                                builder.recordError(new CompilerErrorDetail({
                                     reason: `Expect \`const\` declaration not to be reassigned`,
                                     category: ErrorCategory.Syntax,
-                                    loc: (_4 = id.node.loc) !== null && _4 !== void 0 ? _4 : null,
+                                    loc: (_6 = id.node.loc) !== null && _6 !== void 0 ? _6 : null,
                                     suggestions: [
                                         {
                                             description: 'Change to a `let` declaration',
@@ -23395,7 +23355,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                                             text: 'let',
                                         },
                                     ],
-                                });
+                                }));
                             }
                             lowerValueToTemporary(builder, {
                                 kind: 'DeclareContext',
@@ -23403,7 +23363,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                                     kind: InstructionKind.Let,
                                     place,
                                 },
-                                loc: (_5 = id.node.loc) !== null && _5 !== void 0 ? _5 : GeneratedSource,
+                                loc: (_7 = id.node.loc) !== null && _7 !== void 0 ? _7 : GeneratedSource,
                             });
                         }
                         else {
@@ -23427,19 +23387,19 @@ function lowerStatement(builder, stmtPath, label = null) {
                                     place,
                                 },
                                 type,
-                                loc: (_6 = id.node.loc) !== null && _6 !== void 0 ? _6 : GeneratedSource,
+                                loc: (_8 = id.node.loc) !== null && _8 !== void 0 ? _8 : GeneratedSource,
                             });
                         }
                     }
                 }
                 else {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `Expected variable declaration to be an identifier if no initializer was provided`,
                         description: `Got a \`${id.type}\``,
                         category: ErrorCategory.Syntax,
-                        loc: (_7 = stmt.node.loc) !== null && _7 !== void 0 ? _7 : null,
+                        loc: (_9 = stmt.node.loc) !== null && _9 !== void 0 ? _9 : null,
                         suggestions: null,
-                    });
+                    }));
                 }
             }
             return;
@@ -23468,7 +23428,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                     };
                 });
             });
-            const loc = (_8 = stmt.node.loc) !== null && _8 !== void 0 ? _8 : GeneratedSource;
+            const loc = (_10 = stmt.node.loc) !== null && _10 !== void 0 ? _10 : GeneratedSource;
             builder.terminateWithContinuation({
                 kind: 'do-while',
                 loc,
@@ -23495,11 +23455,11 @@ function lowerStatement(builder, stmtPath, label = null) {
             stmt.skip();
             CompilerError.invariant(stmt.get('id').type === 'Identifier', {
                 reason: 'function declarations must have a name',
-                loc: (_9 = stmt.node.loc) !== null && _9 !== void 0 ? _9 : GeneratedSource,
+                loc: (_11 = stmt.node.loc) !== null && _11 !== void 0 ? _11 : GeneratedSource,
             });
             const id = stmt.get('id');
             const fn = lowerValueToTemporary(builder, lowerFunctionToValue(builder, stmt));
-            lowerAssignment(builder, (_10 = stmt.node.loc) !== null && _10 !== void 0 ? _10 : GeneratedSource, InstructionKind.Function, id, fn, 'Assignment');
+            lowerAssignment(builder, (_12 = stmt.node.loc) !== null && _12 !== void 0 ? _12 : GeneratedSource, InstructionKind.Function, id, fn, 'Assignment');
             return;
         }
         case 'ForOfStatement': {
@@ -23508,12 +23468,12 @@ function lowerStatement(builder, stmtPath, label = null) {
             const initBlock = builder.reserve('loop');
             const testBlock = builder.reserve('loop');
             if (stmt.node.await) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerStatement) Handle for-await loops`,
                     category: ErrorCategory.Todo,
-                    loc: (_11 = stmt.node.loc) !== null && _11 !== void 0 ? _11 : null,
+                    loc: (_13 = stmt.node.loc) !== null && _13 !== void 0 ? _13 : null,
                     suggestions: null,
-                });
+                }));
                 return;
             }
             const loopBlock = builder.enter('block', _blockId => {
@@ -23530,7 +23490,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                     };
                 });
             });
-            const loc = (_12 = stmt.node.loc) !== null && _12 !== void 0 ? _12 : GeneratedSource;
+            const loc = (_14 = stmt.node.loc) !== null && _14 !== void 0 ? _14 : GeneratedSource;
             const value = lowerExpressionToTemporary(builder, stmt.get('right'));
             builder.terminateWithContinuation({
                 kind: 'for-of',
@@ -23551,10 +23511,10 @@ function lowerStatement(builder, stmtPath, label = null) {
                 kind: 'goto',
                 block: testBlock.id,
                 variant: GotoVariant.Break,
-                loc: (_13 = stmt.node.loc) !== null && _13 !== void 0 ? _13 : GeneratedSource,
+                loc: (_15 = stmt.node.loc) !== null && _15 !== void 0 ? _15 : GeneratedSource,
             }, testBlock);
             const left = stmt.get('left');
-            const leftLoc = (_14 = left.node.loc) !== null && _14 !== void 0 ? _14 : GeneratedSource;
+            const leftLoc = (_16 = left.node.loc) !== null && _16 !== void 0 ? _16 : GeneratedSource;
             let test;
             const advanceIterator = lowerValueToTemporary(builder, {
                 kind: 'IteratorNext',
@@ -23566,7 +23526,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                 const declarations = left.get('declarations');
                 CompilerError.invariant(declarations.length === 1, {
                     reason: `Expected only one declaration in the init of a ForOfStatement, got ${declarations.length}`,
-                    loc: (_15 = left.node.loc) !== null && _15 !== void 0 ? _15 : GeneratedSource,
+                    loc: (_17 = left.node.loc) !== null && _17 !== void 0 ? _17 : GeneratedSource,
                 });
                 const id = declarations[0].get('id');
                 const assign = lowerAssignment(builder, leftLoc, InstructionKind.Let, id, advanceIterator, 'Assignment');
@@ -23586,7 +23546,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                 test,
                 consequent: loopBlock,
                 alternate: continuationBlock.id,
-                loc: (_16 = stmt.node.loc) !== null && _16 !== void 0 ? _16 : GeneratedSource,
+                loc: (_18 = stmt.node.loc) !== null && _18 !== void 0 ? _18 : GeneratedSource,
                 fallthrough: continuationBlock.id,
             }, continuationBlock);
             return;
@@ -23609,7 +23569,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                     };
                 });
             });
-            const loc = (_17 = stmt.node.loc) !== null && _17 !== void 0 ? _17 : GeneratedSource;
+            const loc = (_19 = stmt.node.loc) !== null && _19 !== void 0 ? _19 : GeneratedSource;
             const value = lowerExpressionToTemporary(builder, stmt.get('right'));
             builder.terminateWithContinuation({
                 kind: 'for-in',
@@ -23620,7 +23580,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                 id: makeInstructionId(0),
             }, initBlock);
             const left = stmt.get('left');
-            const leftLoc = (_18 = left.node.loc) !== null && _18 !== void 0 ? _18 : GeneratedSource;
+            const leftLoc = (_20 = left.node.loc) !== null && _20 !== void 0 ? _20 : GeneratedSource;
             let test;
             const nextPropertyTemp = lowerValueToTemporary(builder, {
                 kind: 'NextPropertyOf',
@@ -23631,7 +23591,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                 const declarations = left.get('declarations');
                 CompilerError.invariant(declarations.length === 1, {
                     reason: `Expected only one declaration in the init of a ForInStatement, got ${declarations.length}`,
-                    loc: (_19 = left.node.loc) !== null && _19 !== void 0 ? _19 : GeneratedSource,
+                    loc: (_21 = left.node.loc) !== null && _21 !== void 0 ? _21 : GeneratedSource,
                 });
                 const id = declarations[0].get('id');
                 const assign = lowerAssignment(builder, leftLoc, InstructionKind.Let, id, nextPropertyTemp, 'Assignment');
@@ -23652,13 +23612,13 @@ function lowerStatement(builder, stmtPath, label = null) {
                 consequent: loopBlock,
                 alternate: continuationBlock.id,
                 fallthrough: continuationBlock.id,
-                loc: (_20 = stmt.node.loc) !== null && _20 !== void 0 ? _20 : GeneratedSource,
+                loc: (_22 = stmt.node.loc) !== null && _22 !== void 0 ? _22 : GeneratedSource,
             }, continuationBlock);
             return;
         }
         case 'DebuggerStatement': {
             const stmt = stmtPath;
-            const loc = (_21 = stmt.node.loc) !== null && _21 !== void 0 ? _21 : GeneratedSource;
+            const loc = (_23 = stmt.node.loc) !== null && _23 !== void 0 ? _23 : GeneratedSource;
             builder.push({
                 id: makeInstructionId(0),
                 lvalue: buildTemporaryPlace(builder, loc),
@@ -23679,31 +23639,31 @@ function lowerStatement(builder, stmtPath, label = null) {
             const continuationBlock = builder.reserve('block');
             const handlerPath = stmt.get('handler');
             if (!hasNode(handlerPath)) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerStatement) Handle TryStatement without a catch clause`,
                     category: ErrorCategory.Todo,
-                    loc: (_22 = stmt.node.loc) !== null && _22 !== void 0 ? _22 : null,
+                    loc: (_24 = stmt.node.loc) !== null && _24 !== void 0 ? _24 : null,
                     suggestions: null,
-                });
+                }));
                 return;
             }
             if (hasNode(stmt.get('finalizer'))) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerStatement) Handle TryStatement with a finalizer ('finally') clause`,
                     category: ErrorCategory.Todo,
-                    loc: (_23 = stmt.node.loc) !== null && _23 !== void 0 ? _23 : null,
+                    loc: (_25 = stmt.node.loc) !== null && _25 !== void 0 ? _25 : null,
                     suggestions: null,
-                });
+                }));
             }
             const handlerBindingPath = handlerPath.get('param');
             let handlerBinding = null;
             if (hasNode(handlerBindingPath)) {
                 const place = {
                     kind: 'Identifier',
-                    identifier: builder.makeTemporary((_24 = handlerBindingPath.node.loc) !== null && _24 !== void 0 ? _24 : GeneratedSource),
+                    identifier: builder.makeTemporary((_26 = handlerBindingPath.node.loc) !== null && _26 !== void 0 ? _26 : GeneratedSource),
                     effect: Effect.Unknown,
                     reactive: false,
-                    loc: (_25 = handlerBindingPath.node.loc) !== null && _25 !== void 0 ? _25 : GeneratedSource,
+                    loc: (_27 = handlerBindingPath.node.loc) !== null && _27 !== void 0 ? _27 : GeneratedSource,
                 };
                 promoteTemporary(place.identifier);
                 lowerValueToTemporary(builder, {
@@ -23713,7 +23673,7 @@ function lowerStatement(builder, stmtPath, label = null) {
                         place: Object.assign({}, place),
                     },
                     type: null,
-                    loc: (_26 = handlerBindingPath.node.loc) !== null && _26 !== void 0 ? _26 : GeneratedSource,
+                    loc: (_28 = handlerBindingPath.node.loc) !== null && _28 !== void 0 ? _28 : GeneratedSource,
                 });
                 handlerBinding = {
                     path: handlerBindingPath,
@@ -23755,36 +23715,36 @@ function lowerStatement(builder, stmtPath, label = null) {
                 handler,
                 fallthrough: continuationBlock.id,
                 id: makeInstructionId(0),
-                loc: (_27 = stmt.node.loc) !== null && _27 !== void 0 ? _27 : GeneratedSource,
+                loc: (_29 = stmt.node.loc) !== null && _29 !== void 0 ? _29 : GeneratedSource,
             }, continuationBlock);
             return;
         }
         case 'WithStatement': {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `JavaScript 'with' syntax is not supported`,
                 description: `'with' syntax is considered deprecated and removed from JavaScript standards, consider alternatives`,
                 category: ErrorCategory.UnsupportedSyntax,
-                loc: (_28 = stmtPath.node.loc) !== null && _28 !== void 0 ? _28 : null,
+                loc: (_30 = stmtPath.node.loc) !== null && _30 !== void 0 ? _30 : null,
                 suggestions: null,
-            });
+            }));
             lowerValueToTemporary(builder, {
                 kind: 'UnsupportedNode',
-                loc: (_29 = stmtPath.node.loc) !== null && _29 !== void 0 ? _29 : GeneratedSource,
+                loc: (_31 = stmtPath.node.loc) !== null && _31 !== void 0 ? _31 : GeneratedSource,
                 node: stmtPath.node,
             });
             return;
         }
         case 'ClassDeclaration': {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: 'Inline `class` declarations are not supported',
                 description: `Move class declarations outside of components/hooks`,
                 category: ErrorCategory.UnsupportedSyntax,
-                loc: (_30 = stmtPath.node.loc) !== null && _30 !== void 0 ? _30 : null,
+                loc: (_32 = stmtPath.node.loc) !== null && _32 !== void 0 ? _32 : null,
                 suggestions: null,
-            });
+            }));
             lowerValueToTemporary(builder, {
                 kind: 'UnsupportedNode',
-                loc: (_31 = stmtPath.node.loc) !== null && _31 !== void 0 ? _31 : GeneratedSource,
+                loc: (_33 = stmtPath.node.loc) !== null && _33 !== void 0 ? _33 : GeneratedSource,
                 node: stmtPath.node,
             });
             return;
@@ -23793,7 +23753,7 @@ function lowerStatement(builder, stmtPath, label = null) {
         case 'TSEnumDeclaration': {
             lowerValueToTemporary(builder, {
                 kind: 'UnsupportedNode',
-                loc: (_32 = stmtPath.node.loc) !== null && _32 !== void 0 ? _32 : GeneratedSource,
+                loc: (_34 = stmtPath.node.loc) !== null && _34 !== void 0 ? _34 : GeneratedSource,
                 node: stmtPath.node,
             });
             return;
@@ -23804,29 +23764,29 @@ function lowerStatement(builder, stmtPath, label = null) {
         case 'ImportDeclaration':
         case 'TSExportAssignment':
         case 'TSImportEqualsDeclaration': {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: 'JavaScript `import` and `export` statements may only appear at the top level of a module',
                 category: ErrorCategory.Syntax,
-                loc: (_33 = stmtPath.node.loc) !== null && _33 !== void 0 ? _33 : null,
+                loc: (_35 = stmtPath.node.loc) !== null && _35 !== void 0 ? _35 : null,
                 suggestions: null,
-            });
+            }));
             lowerValueToTemporary(builder, {
                 kind: 'UnsupportedNode',
-                loc: (_34 = stmtPath.node.loc) !== null && _34 !== void 0 ? _34 : GeneratedSource,
+                loc: (_36 = stmtPath.node.loc) !== null && _36 !== void 0 ? _36 : GeneratedSource,
                 node: stmtPath.node,
             });
             return;
         }
         case 'TSNamespaceExportDeclaration': {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: 'TypeScript `namespace` statements may only appear at the top level of a module',
                 category: ErrorCategory.Syntax,
-                loc: (_35 = stmtPath.node.loc) !== null && _35 !== void 0 ? _35 : null,
+                loc: (_37 = stmtPath.node.loc) !== null && _37 !== void 0 ? _37 : null,
                 suggestions: null,
-            });
+            }));
             lowerValueToTemporary(builder, {
                 kind: 'UnsupportedNode',
-                loc: (_36 = stmtPath.node.loc) !== null && _36 !== void 0 ? _36 : GeneratedSource,
+                loc: (_38 = stmtPath.node.loc) !== null && _38 !== void 0 ? _38 : GeneratedSource,
                 node: stmtPath.node,
             });
             return;
@@ -23859,9 +23819,6 @@ function lowerObjectMethod(builder, property) {
     var _a;
     const loc = (_a = property.node.loc) !== null && _a !== void 0 ? _a : GeneratedSource;
     const loweredFunc = lowerFunction(builder, property);
-    if (!loweredFunc) {
-        return { kind: 'UnsupportedNode', node: property.node, loc: loc };
-    }
     return {
         kind: 'ObjectMethod',
         loc,
@@ -23896,12 +23853,12 @@ function lowerObjectPropertyKey(builder, property) {
             name: String(key.node.value),
         };
     }
-    builder.errors.push({
+    builder.recordError(new CompilerErrorDetail({
         reason: `(BuildHIR::lowerExpression) Expected Identifier, got ${key.type} key in ObjectExpression`,
         category: ErrorCategory.Todo,
         loc: (_a = key.node.loc) !== null && _a !== void 0 ? _a : null,
         suggestions: null,
-    });
+    }));
     return null;
 }
 function lowerExpression(builder, exprPath) {
@@ -23948,12 +23905,12 @@ function lowerExpression(builder, exprPath) {
                     }
                     const valuePath = propertyPath.get('value');
                     if (!valuePath.isExpression()) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerExpression) Handle ${valuePath.type} values in ObjectExpression`,
                             category: ErrorCategory.Todo,
                             loc: (_b = valuePath.node.loc) !== null && _b !== void 0 ? _b : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     const value = lowerExpressionToTemporary(builder, valuePath);
@@ -23973,12 +23930,12 @@ function lowerExpression(builder, exprPath) {
                 }
                 else if (propertyPath.isObjectMethod()) {
                     if (propertyPath.node.kind !== 'method') {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerExpression) Handle ${propertyPath.node.kind} functions in ObjectExpression`,
                             category: ErrorCategory.Todo,
                             loc: (_c = propertyPath.node.loc) !== null && _c !== void 0 ? _c : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     const method = lowerObjectMethod(builder, propertyPath);
@@ -23995,12 +23952,12 @@ function lowerExpression(builder, exprPath) {
                     });
                 }
                 else {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `(BuildHIR::lowerExpression) Handle ${propertyPath.type} properties in ObjectExpression`,
                         category: ErrorCategory.Todo,
                         loc: (_d = propertyPath.node.loc) !== null && _d !== void 0 ? _d : null,
                         suggestions: null,
-                    });
+                    }));
                     continue;
                 }
             }
@@ -24028,12 +23985,12 @@ function lowerExpression(builder, exprPath) {
                     elements.push({ kind: 'Spread', place });
                 }
                 else {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `(BuildHIR::lowerExpression) Handle ${element.type} elements in ArrayExpression`,
                         category: ErrorCategory.Todo,
                         loc: (_e = element.node.loc) !== null && _e !== void 0 ? _e : null,
                         suggestions: null,
-                    });
+                    }));
                     continue;
                 }
             }
@@ -24047,13 +24004,13 @@ function lowerExpression(builder, exprPath) {
             const expr = exprPath;
             const calleePath = expr.get('callee');
             if (!calleePath.isExpression()) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `Expected an expression as the \`new\` expression receiver (v8 intrinsics are not supported)`,
                     description: `Got a \`${calleePath.node.type}\``,
                     category: ErrorCategory.Syntax,
                     loc: (_f = calleePath.node.loc) !== null && _f !== void 0 ? _f : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             const callee = lowerExpressionToTemporary(builder, calleePath);
@@ -24073,12 +24030,12 @@ function lowerExpression(builder, exprPath) {
             const expr = exprPath;
             const calleePath = expr.get('callee');
             if (!calleePath.isExpression()) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `Expected Expression, got ${calleePath.type} in CallExpression (v8 intrinsics not supported). This error is likely caused by a bug in React Compiler. Please file an issue`,
                     category: ErrorCategory.Todo,
                     loc: (_g = calleePath.node.loc) !== null && _g !== void 0 ? _g : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             if (calleePath.isMemberExpression()) {
@@ -24108,24 +24065,24 @@ function lowerExpression(builder, exprPath) {
             const expr = exprPath;
             const leftPath = expr.get('left');
             if (!leftPath.isExpression()) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerExpression) Expected Expression, got ${leftPath.type} lval in BinaryExpression`,
                     category: ErrorCategory.Todo,
                     loc: (_h = leftPath.node.loc) !== null && _h !== void 0 ? _h : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             const left = lowerExpressionToTemporary(builder, leftPath);
             const right = lowerExpressionToTemporary(builder, expr.get('right'));
             const operator = expr.node.operator;
             if (operator === '|>') {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerExpression) Pipe operator not supported`,
                     category: ErrorCategory.Todo,
                     loc: (_j = leftPath.node.loc) !== null && _j !== void 0 ? _j : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             return {
@@ -24148,12 +24105,12 @@ function lowerExpression(builder, exprPath) {
                     last = lowerExpressionToTemporary(builder, item);
                 }
                 if (last === null) {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `Expected sequence expression to have at least one expression`,
                         category: ErrorCategory.Syntax,
                         loc: (_a = expr.node.loc) !== null && _a !== void 0 ? _a : null,
                         suggestions: null,
-                    });
+                    }));
                 }
                 else {
                     lowerValueToTemporary(builder, {
@@ -24326,13 +24283,13 @@ function lowerExpression(builder, exprPath) {
                         : 'Assignment');
                 }
                 else {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `(BuildHIR::lowerExpression) Unsupported syntax on the left side of an AssignmentExpression`,
                         description: `Expected an LVal, got: ${left.type}`,
                         category: ErrorCategory.Todo,
                         loc: (_q = left.node.loc) !== null && _q !== void 0 ? _q : null,
                         suggestions: null,
-                    });
+                    }));
                     return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
                 }
             }
@@ -24352,12 +24309,12 @@ function lowerExpression(builder, exprPath) {
             };
             const binaryOperator = operators[operator];
             if (binaryOperator == null) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerExpression) Handle ${operator} operators in AssignmentExpression`,
                     category: ErrorCategory.Todo,
                     loc: (_r = expr.node.loc) !== null && _r !== void 0 ? _r : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             const left = expr.get('left');
@@ -24445,12 +24402,12 @@ function lowerExpression(builder, exprPath) {
                     }
                 }
                 default: {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `(BuildHIR::lowerExpression) Expected Identifier or MemberExpression, got ${expr.type} lval in AssignmentExpression`,
                         category: ErrorCategory.Todo,
                         loc: (_v = expr.node.loc) !== null && _v !== void 0 ? _v : null,
                         suggestions: null,
-                    });
+                    }));
                     return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
                 }
             }
@@ -24479,12 +24436,12 @@ function lowerExpression(builder, exprPath) {
                     continue;
                 }
                 if (!attribute.isJSXAttribute()) {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `(BuildHIR::lowerExpression) Handle ${attribute.type} attributes in JSXElement`,
                         category: ErrorCategory.Todo,
                         loc: (_x = attribute.node.loc) !== null && _x !== void 0 ? _x : null,
                         suggestions: null,
-                    });
+                    }));
                     continue;
                 }
                 const namePath = attribute.get('name');
@@ -24492,12 +24449,12 @@ function lowerExpression(builder, exprPath) {
                 if (namePath.isJSXIdentifier()) {
                     propName = namePath.node.name;
                     if (propName.indexOf(':') !== -1) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerExpression) Unexpected colon in attribute name \`${propName}\``,
                             category: ErrorCategory.Todo,
                             loc: (_y = namePath.node.loc) !== null && _y !== void 0 ? _y : null,
                             suggestions: null,
-                        });
+                        }));
                     }
                 }
                 else {
@@ -24523,22 +24480,22 @@ function lowerExpression(builder, exprPath) {
                 }
                 else {
                     if (!valueExpr.isJSXExpressionContainer()) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerExpression) Handle ${valueExpr.type} attribute values in JSXElement`,
                             category: ErrorCategory.Todo,
                             loc: (_2 = (_1 = valueExpr.node) === null || _1 === void 0 ? void 0 : _1.loc) !== null && _2 !== void 0 ? _2 : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     const expression = valueExpr.get('expression');
                     if (!expression.isExpression()) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerExpression) Handle ${expression.type} expressions in JSXExpressionContainer within JSXElement`,
                             category: ErrorCategory.Todo,
                             loc: (_3 = valueExpr.node.loc) !== null && _3 !== void 0 ? _3 : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     value = lowerExpressionToTemporary(builder, expression);
@@ -24586,7 +24543,7 @@ function lowerExpression(builder, exprPath) {
                 });
                 for (const [name, locations] of Object.entries(fbtLocations)) {
                     if (locations.length > 1) {
-                        CompilerError.throwDiagnostic({
+                        builder.recordError(new CompilerDiagnostic({
                             category: ErrorCategory.Todo,
                             reason: 'Support duplicate fbt tags',
                             description: `Support \`<${tagName}>\` tags with multiple \`<${tagName}:${name}>\` values`,
@@ -24597,7 +24554,7 @@ function lowerExpression(builder, exprPath) {
                                     loc,
                                 };
                             }),
-                        });
+                        }));
                     }
                 }
             }
@@ -24637,12 +24594,12 @@ function lowerExpression(builder, exprPath) {
         case 'TaggedTemplateExpression': {
             const expr = exprPath;
             if (expr.get('quasi').get('expressions').length !== 0) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: '(BuildHIR::lowerExpression) Handle tagged template with interpolations',
                     category: ErrorCategory.Todo,
                     loc: (_7 = exprPath.node.loc) !== null && _7 !== void 0 ? _7 : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             CompilerError.invariant(expr.get('quasi').get('quasis').length == 1, {
@@ -24651,12 +24608,12 @@ function lowerExpression(builder, exprPath) {
             });
             const value = expr.get('quasi').get('quasis').at(0).node.value;
             if (value.raw !== value.cooked) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: '(BuildHIR::lowerExpression) Handle tagged template where cooked value is different from raw value',
                     category: ErrorCategory.Todo,
                     loc: (_9 = exprPath.node.loc) !== null && _9 !== void 0 ? _9 : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             return {
@@ -24671,21 +24628,21 @@ function lowerExpression(builder, exprPath) {
             const subexprs = expr.get('expressions');
             const quasis = expr.get('quasis');
             if (subexprs.length !== quasis.length - 1) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `Unexpected quasi and subexpression lengths in template literal`,
                     category: ErrorCategory.Syntax,
                     loc: (_10 = exprPath.node.loc) !== null && _10 !== void 0 ? _10 : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             if (subexprs.some(e => !e.isExpression())) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerAssignment) Handle TSType in TemplateLiteral.`,
                     category: ErrorCategory.Todo,
                     loc: (_11 = exprPath.node.loc) !== null && _11 !== void 0 ? _11 : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             const subexprPlaces = subexprs.map(e => lowerExpressionToTemporary(builder, e));
@@ -24720,7 +24677,7 @@ function lowerExpression(builder, exprPath) {
                     }
                 }
                 else {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `Only object properties can be deleted`,
                         category: ErrorCategory.Syntax,
                         loc: (_12 = expr.node.loc) !== null && _12 !== void 0 ? _12 : null,
@@ -24731,12 +24688,12 @@ function lowerExpression(builder, exprPath) {
                                 op: CompilerSuggestionOperation.Remove,
                             },
                         ],
-                    });
+                    }));
                     return { kind: 'UnsupportedNode', node: expr.node, loc: exprLoc };
                 }
             }
             else if (expr.node.operator === 'throw') {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `Throw expressions are not supported`,
                     category: ErrorCategory.Syntax,
                     loc: (_13 = expr.node.loc) !== null && _13 !== void 0 ? _13 : null,
@@ -24747,7 +24704,7 @@ function lowerExpression(builder, exprPath) {
                             op: CompilerSuggestionOperation.Remove,
                         },
                     ],
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: expr.node, loc: exprLoc };
             }
             else {
@@ -24849,42 +24806,42 @@ function lowerExpression(builder, exprPath) {
                 };
             }
             if (!argument.isIdentifier()) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerExpression) Handle UpdateExpression with ${argument.type} argument`,
                     category: ErrorCategory.Todo,
                     loc: (_17 = exprPath.node.loc) !== null && _17 !== void 0 ? _17 : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             else if (builder.isContextIdentifier(argument)) {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerExpression) Handle UpdateExpression to variables captured within lambdas.`,
                     category: ErrorCategory.Todo,
                     loc: (_18 = exprPath.node.loc) !== null && _18 !== void 0 ? _18 : null,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             const lvalue = lowerIdentifierForAssignment(builder, (_19 = argument.node.loc) !== null && _19 !== void 0 ? _19 : GeneratedSource, InstructionKind.Reassign, argument);
             if (lvalue === null) {
-                if (!builder.errors.hasAnyErrors()) {
-                    builder.errors.push({
+                if (!builder.environment.hasErrors()) {
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `(BuildHIR::lowerExpression) Found an invalid UpdateExpression without a previously reported error`,
                         category: ErrorCategory.Invariant,
                         loc: exprLoc,
                         suggestions: null,
-                    });
+                    }));
                 }
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             else if (lvalue.kind === 'Global') {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `(BuildHIR::lowerExpression) Support UpdateExpression where argument is a global`,
                     category: ErrorCategory.Todo,
                     loc: exprLoc,
                     suggestions: null,
-                });
+                }));
                 return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
             }
             const value = lowerIdentifier(builder, argument);
@@ -24932,21 +24889,21 @@ function lowerExpression(builder, exprPath) {
                     loc: (_21 = expr.node.loc) !== null && _21 !== void 0 ? _21 : GeneratedSource,
                 };
             }
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `(BuildHIR::lowerExpression) Handle MetaProperty expressions other than import.meta`,
                 category: ErrorCategory.Todo,
                 loc: (_22 = exprPath.node.loc) !== null && _22 !== void 0 ? _22 : null,
                 suggestions: null,
-            });
+            }));
             return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
         }
         default: {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `(BuildHIR::lowerExpression) Handle ${exprPath.type} expressions`,
                 category: ErrorCategory.Todo,
                 loc: (_23 = exprPath.node.loc) !== null && _23 !== void 0 ? _23 : null,
                 suggestions: null,
-            });
+            }));
             return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
         }
     }
@@ -25172,12 +25129,12 @@ function lowerOptionalCallExpression(builder, expr, parentAlternate) {
 function lowerReorderableExpression(builder, expr) {
     var _a;
     if (!isReorderableExpression(builder, expr, true)) {
-        builder.errors.push({
+        builder.recordError(new CompilerErrorDetail({
             reason: `(BuildHIR::node.lowerReorderableExpression) Expression type \`${expr.type}\` cannot be safely reordered`,
             category: ErrorCategory.Todo,
             loc: (_a = expr.node.loc) !== null && _a !== void 0 ? _a : null,
             suggestions: null,
-        });
+        }));
     }
     return lowerExpressionToTemporary(builder, expr);
 }
@@ -25305,12 +25262,12 @@ function lowerArguments(builder, expr) {
             args.push(lowerExpressionToTemporary(builder, argPath));
         }
         else {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `(BuildHIR::lowerExpression) Handle ${argPath.type} arguments in CallExpression`,
                 category: ErrorCategory.Todo,
                 loc: (_a = argPath.node.loc) !== null && _a !== void 0 ? _a : null,
                 suggestions: null,
-            });
+            }));
         }
     }
     return args;
@@ -25331,12 +25288,12 @@ function lowerMemberExpression(builder, expr, loweredObject = null) {
             property = makePropertyLiteral(propertyNode.node.value);
         }
         else {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `(BuildHIR::lowerMemberExpression) Handle ${propertyNode.type} property`,
                 category: ErrorCategory.Todo,
                 loc: (_b = propertyNode.node.loc) !== null && _b !== void 0 ? _b : null,
                 suggestions: null,
-            });
+            }));
             return {
                 object,
                 property: propertyNode.toString(),
@@ -25353,12 +25310,12 @@ function lowerMemberExpression(builder, expr, loweredObject = null) {
     }
     else {
         if (!propertyNode.isExpression()) {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `(BuildHIR::lowerMemberExpression) Expected Expression, got ${propertyNode.type} property`,
                 category: ErrorCategory.Todo,
                 loc: (_c = propertyNode.node.loc) !== null && _c !== void 0 ? _c : null,
                 suggestions: null,
-            });
+            }));
             return {
                 object,
                 property: propertyNode.toString(),
@@ -25409,13 +25366,13 @@ function lowerJsxElementName(builder, exprPath) {
         const name = exprPath.node.name.name;
         const tag = `${namespace}:${name}`;
         if (namespace.indexOf(':') !== -1 || name.indexOf(':') !== -1) {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `Expected JSXNamespacedName to have no colons in the namespace or name`,
                 description: `Got \`${namespace}\` : \`${name}\``,
                 category: ErrorCategory.Syntax,
                 loc: (_b = exprPath.node.loc) !== null && _b !== void 0 ? _b : null,
                 suggestions: null,
-            });
+            }));
         }
         const place = lowerValueToTemporary(builder, {
             kind: 'Primitive',
@@ -25425,12 +25382,12 @@ function lowerJsxElementName(builder, exprPath) {
         return place;
     }
     else {
-        builder.errors.push({
+        builder.recordError(new CompilerErrorDetail({
             reason: `(BuildHIR::lowerJsxElementName) Handle ${exprPath.type} tags`,
             category: ErrorCategory.Todo,
             loc: (_c = exprPath.node.loc) !== null && _c !== void 0 ? _c : null,
             suggestions: null,
-        });
+        }));
         return lowerValueToTemporary(builder, {
             kind: 'UnsupportedNode',
             node: exprNode,
@@ -25505,12 +25462,12 @@ function lowerJsxElement(builder, exprPath) {
         return place;
     }
     else {
-        builder.errors.push({
+        builder.recordError(new CompilerErrorDetail({
             reason: `(BuildHIR::lowerJsxElement) Unhandled JsxElement, got: ${exprPath.type}`,
             category: ErrorCategory.Todo,
             loc: (_c = exprPath.node.loc) !== null && _c !== void 0 ? _c : null,
             suggestions: null,
-        });
+        }));
         const place = lowerValueToTemporary(builder, {
             kind: 'UnsupportedNode',
             node: exprNode,
@@ -25559,9 +25516,6 @@ function lowerFunctionToValue(builder, expr) {
     const exprNode = expr.node;
     const exprLoc = (_a = exprNode.loc) !== null && _a !== void 0 ? _a : GeneratedSource;
     const loweredFunc = lowerFunction(builder, expr);
-    if (!loweredFunc) {
-        return { kind: 'UnsupportedNode', node: exprNode, loc: exprLoc };
-    }
     return {
         kind: 'FunctionExpression',
         name: loweredFunc.func.id,
@@ -25574,14 +25528,7 @@ function lowerFunctionToValue(builder, expr) {
 function lowerFunction(builder, expr) {
     const componentScope = builder.environment.parentFunction.scope;
     const capturedContext = gatherCapturedContext(expr, componentScope);
-    const lowering = lower(expr, builder.environment, builder.bindings, new Map([...builder.context, ...capturedContext]));
-    let loweredFunc;
-    if (lowering.isErr()) {
-        const functionErrors = lowering.unwrapErr();
-        builder.errors.merge(functionErrors);
-        return null;
-    }
-    loweredFunc = lowering.unwrap();
+    const loweredFunc = lower(expr, builder.environment, builder.bindings, new Map([...builder.context, ...capturedContext]));
     return {
         func: loweredFunc,
     };
@@ -25622,13 +25569,13 @@ function lowerIdentifier(builder, exprPath) {
         }
         default: {
             if (binding.kind === 'Global' && binding.name === 'eval') {
-                builder.errors.push({
+                builder.recordError(new CompilerErrorDetail({
                     reason: `The 'eval' function is not supported`,
                     description: 'Eval is an anti-pattern in JavaScript, and the code executed cannot be evaluated by React Compiler',
                     category: ErrorCategory.UnsupportedSyntax,
                     loc: (_b = exprPath.node.loc) !== null && _b !== void 0 ? _b : null,
                     suggestions: null,
-                });
+                }));
             }
             return lowerValueToTemporary(builder, {
                 kind: 'LoadGlobal',
@@ -25664,25 +25611,25 @@ function lowerIdentifierForAssignment(builder, loc, kind, path) {
             return { kind: 'Global', name: path.node.name };
         }
         else {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `(BuildHIR::lowerAssignment) Could not find binding for declaration.`,
                 category: ErrorCategory.Invariant,
                 loc: (_a = path.node.loc) !== null && _a !== void 0 ? _a : null,
                 suggestions: null,
-            });
+            }));
             return null;
         }
     }
     else if (binding.bindingKind === 'const' &&
         kind === InstructionKind.Reassign) {
-        builder.errors.push({
+        builder.recordError(new CompilerErrorDetail({
             reason: `Cannot reassign a \`const\` variable`,
             category: ErrorCategory.Syntax,
             loc: (_b = path.node.loc) !== null && _b !== void 0 ? _b : null,
             description: binding.identifier.name != null
                 ? `\`${binding.identifier.name.value}\` is declared as const`
                 : null,
-        });
+        }));
         return null;
     }
     const place = {
@@ -25721,23 +25668,23 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
             let temporary;
             if (builder.isContextIdentifier(lvalue)) {
                 if (kind === InstructionKind.Const && !isHoistedIdentifier) {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `Expected \`const\` declaration not to be reassigned`,
                         category: ErrorCategory.Syntax,
                         loc: (_b = lvalue.node.loc) !== null && _b !== void 0 ? _b : null,
                         suggestions: null,
-                    });
+                    }));
                 }
                 if (kind !== InstructionKind.Const &&
                     kind !== InstructionKind.Reassign &&
                     kind !== InstructionKind.Let &&
                     kind !== InstructionKind.Function) {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `Unexpected context variable kind`,
                         category: ErrorCategory.Syntax,
                         loc: (_c = lvalue.node.loc) !== null && _c !== void 0 ? _c : null,
                         suggestions: null,
-                    });
+                    }));
                     temporary = lowerValueToTemporary(builder, {
                         kind: 'UnsupportedNode',
                         node: lvalueNode,
@@ -25806,24 +25753,24 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                     });
                 }
                 else {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: `(BuildHIR::lowerAssignment) Handle ${property.type} properties in MemberExpression`,
                         category: ErrorCategory.Todo,
                         loc: (_f = property.node.loc) !== null && _f !== void 0 ? _f : null,
                         suggestions: null,
-                    });
+                    }));
                     return { kind: 'UnsupportedNode', node: lvalueNode, loc };
                 }
                 return { kind: 'LoadLocal', place: temporary, loc: temporary.loc };
             }
             else {
                 if (!property.isExpression()) {
-                    builder.errors.push({
+                    builder.recordError(new CompilerErrorDetail({
                         reason: '(BuildHIR::lowerAssignment) Expected private name to appear as a non-computed property',
                         category: ErrorCategory.Todo,
                         loc: (_g = property.node.loc) !== null && _g !== void 0 ? _g : null,
                         suggestions: null,
-                    });
+                    }));
                     return { kind: 'UnsupportedNode', node: lvalueNode, loc };
                 }
                 const propertyPlace = lowerExpressionToTemporary(builder, property);
@@ -25866,11 +25813,11 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                             continue;
                         }
                         else if (identifier.kind === 'Global') {
-                            builder.errors.push({
+                            builder.recordError(new CompilerErrorDetail({
                                 category: ErrorCategory.Todo,
                                 reason: 'Expected reassignment of globals to enable forceTemporaries',
                                 loc: (_j = element.node.loc) !== null && _j !== void 0 ? _j : GeneratedSource,
-                            });
+                            }));
                             continue;
                         }
                         items.push({
@@ -25897,11 +25844,11 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                         continue;
                     }
                     else if (identifier.kind === 'Global') {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             category: ErrorCategory.Todo,
                             reason: 'Expected reassignment of globals to enable forceTemporaries',
                             loc: (_m = element.node.loc) !== null && _m !== void 0 ? _m : GeneratedSource,
-                        });
+                        }));
                         continue;
                     }
                     items.push(identifier);
@@ -25946,12 +25893,12 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                 if (property.isRestElement()) {
                     const argument = property.get('argument');
                     if (!argument.isIdentifier()) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerAssignment) Handle ${argument.node.type} rest element in ObjectPattern`,
                             category: ErrorCategory.Todo,
                             loc: (_r = argument.node.loc) !== null && _r !== void 0 ? _r : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     if (forceTemporaries ||
@@ -25970,11 +25917,11 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                             continue;
                         }
                         else if (identifier.kind === 'Global') {
-                            builder.errors.push({
+                            builder.recordError(new CompilerErrorDetail({
                                 category: ErrorCategory.Todo,
                                 reason: 'Expected reassignment of globals to enable forceTemporaries',
                                 loc: (_u = property.node.loc) !== null && _u !== void 0 ? _u : GeneratedSource,
-                            });
+                            }));
                             continue;
                         }
                         properties.push({
@@ -25985,21 +25932,21 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                 }
                 else {
                     if (!property.isObjectProperty()) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerAssignment) Handle ${property.type} properties in ObjectPattern`,
                             category: ErrorCategory.Todo,
                             loc: (_v = property.node.loc) !== null && _v !== void 0 ? _v : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     if (property.node.computed) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerAssignment) Handle computed properties in ObjectPattern`,
                             category: ErrorCategory.Todo,
                             loc: (_w = property.node.loc) !== null && _w !== void 0 ? _w : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     const loweredKey = lowerObjectPropertyKey(builder, property);
@@ -26008,12 +25955,12 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                     }
                     const element = property.get('value');
                     if (!element.isLVal()) {
-                        builder.errors.push({
+                        builder.recordError(new CompilerErrorDetail({
                             reason: `(BuildHIR::lowerAssignment) Expected object property value to be an LVal, got: ${element.type}`,
                             category: ErrorCategory.Todo,
                             loc: (_x = element.node.loc) !== null && _x !== void 0 ? _x : null,
                             suggestions: null,
-                        });
+                        }));
                         continue;
                     }
                     if (element.isIdentifier() &&
@@ -26025,11 +25972,11 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
                             continue;
                         }
                         else if (identifier.kind === 'Global') {
-                            builder.errors.push({
+                            builder.recordError(new CompilerErrorDetail({
                                 category: ErrorCategory.Todo,
                                 reason: 'Expected reassignment of globals to enable forceTemporaries',
                                 loc: (_z = element.node.loc) !== null && _z !== void 0 ? _z : GeneratedSource,
-                            });
+                            }));
                             continue;
                         }
                         properties.push({
@@ -26140,12 +26087,12 @@ function lowerAssignment(builder, loc, kind, lvaluePath, value, assignmentKind) 
             return lowerAssignment(builder, loc, kind, lvalue.get('left'), temp, assignmentKind);
         }
         default: {
-            builder.errors.push({
+            builder.recordError(new CompilerErrorDetail({
                 reason: `(BuildHIR::lowerAssignment) Handle ${lvaluePath.type} assignments`,
                 category: ErrorCategory.Todo,
                 loc: (_4 = lvaluePath.node.loc) !== null && _4 !== void 0 ? _4 : null,
                 suggestions: null,
-            });
+            }));
             return { kind: 'UnsupportedNode', node: lvalueNode, loc };
         }
     }
@@ -30784,21 +30731,6 @@ const REACT_APIS = [
         }, BuiltInUseOperatorId),
     ],
     [
-        'fire',
-        addFunction(DEFAULT_SHAPES, [], {
-            positionalParams: [],
-            restParam: null,
-            returnType: {
-                kind: 'Function',
-                return: { kind: 'Poly' },
-                shapeId: BuiltInFireFunctionId,
-                isConstructor: false,
-            },
-            calleeEffect: Effect.Read,
-            returnValueKind: ValueKind.Frozen,
-        }, BuiltInFireId),
-    ],
-    [
         'useEffectEvent',
         addHook(DEFAULT_SHAPES, {
             positionalParams: [],
@@ -30814,7 +30746,6 @@ const REACT_APIS = [
             returnValueKind: ValueKind.Frozen,
         }, BuiltInUseEffectEventId),
     ],
-    ['AUTODEPS', addObject(DEFAULT_SHAPES, BuiltInAutodepsId, [])],
 ];
 TYPED_GLOBALS.push([
     'React',
@@ -31693,14 +31624,7 @@ function defaultModuleTypeProvider(moduleName) {
     return null;
 }
 
-var _Environment_instances, _Environment_globals, _Environment_shapes, _Environment_moduleTypes, _Environment_nextIdentifer, _Environment_nextBlock, _Environment_nextScope, _Environment_scope, _Environment_outlinedFunctions, _Environment_contextIdentifiers, _Environment_hoistedIdentifiers, _Environment_flowTypeEnvironment, _Environment_resolveModuleType, _Environment_isKnownReactModule, _Environment_getCustomHookType;
-const ReactElementSymbolSchema = v4.z.object({
-    elementSymbol: v4.z.union([
-        v4.z.literal('react.element'),
-        v4.z.literal('react.transitional.element'),
-    ]),
-    globalDevVar: v4.z.string(),
-});
+var _Environment_instances, _Environment_globals, _Environment_shapes, _Environment_moduleTypes, _Environment_nextIdentifer, _Environment_nextBlock, _Environment_nextScope, _Environment_scope, _Environment_outlinedFunctions, _Environment_contextIdentifiers, _Environment_hoistedIdentifiers, _Environment_flowTypeEnvironment, _Environment_errors, _Environment_resolveModuleType, _Environment_isKnownReactModule, _Environment_getCustomHookType;
 const ExternalFunctionSchema = v4.z.object({
     source: v4.z.string(),
     importSpecifierName: v4.z.string(),
@@ -31712,8 +31636,6 @@ const InstrumentationSchema = v4.z
     globalGating: v4.z.string().nullable(),
 })
     .refine(opts => opts.gating != null || opts.globalGating != null, 'Expected at least one of gating or globalGating');
-const USE_FIRE_FUNCTION_NAME = 'useFire';
-const EMIT_FREEZE_GLOBAL_GATING = 'true';
 const MacroSchema = v4.z.string();
 const HookSchema = v4.z.object({
     effectKind: v4.z.nativeEnum(Effect),
@@ -31732,20 +31654,10 @@ const EnvironmentConfigSchema = v4.z.object({
     validateExhaustiveEffectDependencies: v4.z
         .enum(['off', 'all', 'missing-only', 'extra-only'])
         .default('off'),
-    enablePreserveExistingManualUseMemo: v4.z.boolean().default(false),
     enableForest: v4.z.boolean().default(false),
-    enableUseTypeAnnotations: v4.z.boolean().default(false),
     flowTypeProvider: v4.z.nullable(v4.z.any()).default(null),
     enableOptionalDependencies: v4.z.boolean().default(true),
-    enableFire: v4.z.boolean().default(false),
     enableNameAnonymousFunctions: v4.z.boolean().default(false),
-    inferEffectDependencies: v4.z
-        .nullable(v4.z.array(v4.z.object({
-        function: ExternalFunctionSchema,
-        autodepsIndex: v4.z.number().min(1, 'autodepsIndex must be > 0'),
-    })))
-        .default(null),
-    inlineJsxTransform: ReactElementSymbolSchema.nullable().default(null),
     validateHooksUsage: v4.z.boolean().default(true),
     validateRefAccessDuringRender: v4.z.boolean().default(true),
     validateNoSetStateInRender: v4.z.boolean().default(true),
@@ -31755,7 +31667,6 @@ const EnvironmentConfigSchema = v4.z.object({
     validateNoDerivedComputationsInEffects_exp: v4.z.boolean().default(false),
     validateNoJSXInTryStatements: v4.z.boolean().default(false),
     validateStaticComponents: v4.z.boolean().default(false),
-    validateMemoizedEffectDependencies: v4.z.boolean().default(false),
     validateNoCapitalizedCalls: v4.z.nullable(v4.z.array(v4.z.string())).default(null),
     validateBlocklistedImports: v4.z.nullable(v4.z.array(v4.z.string())).default(null),
     validateSourceLocations: v4.z.boolean().default(false),
@@ -31763,29 +31674,18 @@ const EnvironmentConfigSchema = v4.z.object({
     validateNoFreezingKnownMutableFunctions: v4.z.boolean().default(false),
     enableAssumeHooksFollowRulesOfReact: v4.z.boolean().default(true),
     enableTransitivelyFreezeFunctionExpressions: v4.z.boolean().default(true),
-    enableEmitFreeze: ExternalFunctionSchema.nullable().default(null),
     enableEmitHookGuards: ExternalFunctionSchema.nullable().default(null),
-    enableInstructionReordering: v4.z.boolean().default(false),
     enableFunctionOutlining: v4.z.boolean().default(true),
     enableJsxOutlining: v4.z.boolean().default(false),
     enableEmitInstrumentForget: InstrumentationSchema.nullable().default(null),
     assertValidMutableRanges: v4.z.boolean().default(false),
-    enableChangeVariableCodegen: v4.z.boolean().default(false),
-    enableMemoizationComments: v4.z.boolean().default(false),
     throwUnknownException__testonly: v4.z.boolean().default(false),
-    enableTreatFunctionDepsAsConditional: v4.z.boolean().default(false),
-    disableMemoizationForDebugging: v4.z.boolean().default(false),
-    enableChangeDetectionForDebugging: ExternalFunctionSchema.nullable().default(null),
     enableCustomTypeDefinitionForReanimated: v4.z.boolean().default(false),
-    hookPattern: v4.z.string().nullable().default(null),
     enableTreatRefLikeIdentifiersAsRefs: v4.z.boolean().default(true),
     enableTreatSetIdentifiersAsStateSetters: v4.z.boolean().default(false),
-    lowerContextAccess: ExternalFunctionSchema.nullable().default(null),
     validateNoVoidUseMemo: v4.z.boolean().default(true),
-    validateNoDynamicallyCreatedComponentsOrHooks: v4.z.boolean().default(false),
     enableAllowSetStateFromRefsInEffects: v4.z.boolean().default(true),
     enableVerboseNoSetStateInEffect: v4.z.boolean().default(false),
-    enableInferEventHandlers: v4.z.boolean().default(false),
 });
 class Environment {
     constructor(scope, fnType, outputMode, config, contextIdentifiers, parentFunction, logger, filename, code, programContext) {
@@ -31798,10 +31698,10 @@ class Environment {
         _Environment_nextScope.set(this, 0);
         _Environment_scope.set(this, void 0);
         _Environment_outlinedFunctions.set(this, []);
-        this.inferredEffectLocations = new Set();
         _Environment_contextIdentifiers.set(this, void 0);
         _Environment_hoistedIdentifiers.set(this, void 0);
         _Environment_flowTypeEnvironment.set(this, void 0);
+        _Environment_errors.set(this, new CompilerError());
         __classPrivateFieldSet(this, _Environment_scope, scope, "f");
         this.fnType = fnType;
         this.outputMode = outputMode;
@@ -31812,17 +31712,6 @@ class Environment {
         this.programContext = programContext;
         __classPrivateFieldSet(this, _Environment_shapes, new Map(DEFAULT_SHAPES), "f");
         __classPrivateFieldSet(this, _Environment_globals, new Map(DEFAULT_GLOBALS), "f");
-        this.hasFireRewrite = false;
-        this.hasInferredEffect = false;
-        if (config.disableMemoizationForDebugging &&
-            config.enableChangeDetectionForDebugging != null) {
-            CompilerError.throwInvalidConfig({
-                reason: `Invalid environment config: the 'disableMemoizationForDebugging' and 'enableChangeDetectionForDebugging' options cannot be used together`,
-                description: null,
-                loc: null,
-                suggestions: null,
-            });
-        }
         for (const [hookName, hook] of this.config.customHooks) {
             CompilerError.invariant(!__classPrivateFieldGet(this, _Environment_globals, "f").has(hookName), {
                 reason: `[Globals] Found existing definition in global registry for custom hook ${hookName}`,
@@ -31875,9 +31764,6 @@ class Environment {
             case 'ssr': {
                 return true;
             }
-            case 'client-no-memo': {
-                return false;
-            }
             default: {
                 assertExhaustive$1(this.outputMode, `Unexpected output mode '${this.outputMode}'`);
             }
@@ -31889,8 +31775,7 @@ class Environment {
             case 'lint': {
                 return true;
             }
-            case 'ssr':
-            case 'client-no-memo': {
+            case 'ssr': {
                 return false;
             }
             default: {
@@ -31904,9 +31789,6 @@ class Environment {
             case 'lint':
             case 'ssr': {
                 return true;
-            }
-            case 'client-no-memo': {
-                return false;
             }
             default: {
                 assertExhaustive$1(this.outputMode, `Unexpected output mode '${this.outputMode}'`);
@@ -31940,6 +31822,35 @@ class Environment {
             });
         }
     }
+    recordError(error) {
+        if (error.category === ErrorCategory.Invariant) {
+            const compilerError = new CompilerError();
+            if (error instanceof CompilerDiagnostic) {
+                compilerError.pushDiagnostic(error);
+            }
+            else {
+                compilerError.pushErrorDetail(error);
+            }
+            throw compilerError;
+        }
+        if (error instanceof CompilerDiagnostic) {
+            __classPrivateFieldGet(this, _Environment_errors, "f").pushDiagnostic(error);
+        }
+        else {
+            __classPrivateFieldGet(this, _Environment_errors, "f").pushErrorDetail(error);
+        }
+    }
+    recordErrors(error) {
+        for (const detail of error.details) {
+            this.recordError(detail);
+        }
+    }
+    hasErrors() {
+        return __classPrivateFieldGet(this, _Environment_errors, "f").hasAnyErrors();
+    }
+    aggregateErrors() {
+        return __classPrivateFieldGet(this, _Environment_errors, "f");
+    }
     isContextIdentifier(node) {
         return __classPrivateFieldGet(this, _Environment_contextIdentifiers, "f").has(node);
     }
@@ -31957,26 +31868,17 @@ class Environment {
         return __classPrivateFieldGet(this, _Environment_outlinedFunctions, "f");
     }
     getGlobalDeclaration(binding, loc) {
-        var _a, _b, _c, _d;
-        if (this.config.hookPattern != null) {
-            const match = new RegExp(this.config.hookPattern).exec(binding.name);
-            if (match != null &&
-                typeof match[1] === 'string' &&
-                isHookName$2(match[1])) {
-                const resolvedName = match[1];
-                return (_a = __classPrivateFieldGet(this, _Environment_globals, "f").get(resolvedName)) !== null && _a !== void 0 ? _a : __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_getCustomHookType).call(this);
-            }
-        }
+        var _a, _b, _c;
         switch (binding.kind) {
             case 'ModuleLocal': {
                 return isHookName$2(binding.name) ? __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_getCustomHookType).call(this) : null;
             }
             case 'Global': {
-                return ((_b = __classPrivateFieldGet(this, _Environment_globals, "f").get(binding.name)) !== null && _b !== void 0 ? _b : (isHookName$2(binding.name) ? __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_getCustomHookType).call(this) : null));
+                return ((_a = __classPrivateFieldGet(this, _Environment_globals, "f").get(binding.name)) !== null && _a !== void 0 ? _a : (isHookName$2(binding.name) ? __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_getCustomHookType).call(this) : null));
             }
             case 'ImportSpecifier': {
                 if (__classPrivateFieldGet(this, _Environment_instances, "m", _Environment_isKnownReactModule).call(this, binding.module)) {
-                    return ((_c = __classPrivateFieldGet(this, _Environment_globals, "f").get(binding.imported)) !== null && _c !== void 0 ? _c : (isHookName$2(binding.imported) || isHookName$2(binding.name)
+                    return ((_b = __classPrivateFieldGet(this, _Environment_globals, "f").get(binding.imported)) !== null && _b !== void 0 ? _b : (isHookName$2(binding.imported) || isHookName$2(binding.name)
                         ? __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_getCustomHookType).call(this)
                         : null));
                 }
@@ -32005,7 +31907,7 @@ class Environment {
             case 'ImportDefault':
             case 'ImportNamespace': {
                 if (__classPrivateFieldGet(this, _Environment_instances, "m", _Environment_isKnownReactModule).call(this, binding.module)) {
-                    return ((_d = __classPrivateFieldGet(this, _Environment_globals, "f").get(binding.name)) !== null && _d !== void 0 ? _d : (isHookName$2(binding.name) ? __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_getCustomHookType).call(this) : null));
+                    return ((_c = __classPrivateFieldGet(this, _Environment_globals, "f").get(binding.name)) !== null && _c !== void 0 ? _c : (isHookName$2(binding.name) ? __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_getCustomHookType).call(this) : null));
                 }
                 else {
                     const moduleType = __classPrivateFieldGet(this, _Environment_instances, "m", _Environment_resolveModuleType).call(this, binding.module, loc);
@@ -32095,7 +31997,7 @@ class Environment {
         __classPrivateFieldGet(this, _Environment_hoistedIdentifiers, "f").add(node);
     }
 }
-_Environment_globals = new WeakMap(), _Environment_shapes = new WeakMap(), _Environment_moduleTypes = new WeakMap(), _Environment_nextIdentifer = new WeakMap(), _Environment_nextBlock = new WeakMap(), _Environment_nextScope = new WeakMap(), _Environment_scope = new WeakMap(), _Environment_outlinedFunctions = new WeakMap(), _Environment_contextIdentifiers = new WeakMap(), _Environment_hoistedIdentifiers = new WeakMap(), _Environment_flowTypeEnvironment = new WeakMap(), _Environment_instances = new WeakSet(), _Environment_resolveModuleType = function _Environment_resolveModuleType(moduleName, loc) {
+_Environment_globals = new WeakMap(), _Environment_shapes = new WeakMap(), _Environment_moduleTypes = new WeakMap(), _Environment_nextIdentifer = new WeakMap(), _Environment_nextBlock = new WeakMap(), _Environment_nextScope = new WeakMap(), _Environment_scope = new WeakMap(), _Environment_outlinedFunctions = new WeakMap(), _Environment_contextIdentifiers = new WeakMap(), _Environment_hoistedIdentifiers = new WeakMap(), _Environment_flowTypeEnvironment = new WeakMap(), _Environment_errors = new WeakMap(), _Environment_instances = new WeakSet(), _Environment_resolveModuleType = function _Environment_resolveModuleType(moduleName, loc) {
     var _a;
     let moduleType = __classPrivateFieldGet(this, _Environment_moduleTypes, "f").get(moduleName);
     if (moduleType === undefined) {
@@ -32177,7 +32079,6 @@ function tryParseExternalFunction(maybeExternalFunction) {
         suggestions: null,
     });
 }
-const DEFAULT_EXPORT = 'default';
 
 var _MergedBlocks_map;
 function mergeConsecutiveBlocks(fn) {
@@ -32927,7 +32828,7 @@ function findContextIdentifiers(func) {
             var _a;
             const currentFn = (_a = state.currentFn.at(-1)) !== null && _a !== void 0 ? _a : null;
             if (path.isReferencedIdentifier()) {
-                handleIdentifier$1(currentFn, state.identifiers, path);
+                handleIdentifier(currentFn, state.identifiers, path);
             }
         },
     }, state);
@@ -32942,7 +32843,7 @@ function findContextIdentifiers(func) {
     }
     return result;
 }
-function handleIdentifier$1(currentFn, identifiers, path) {
+function handleIdentifier(currentFn, identifiers, path) {
     const name = path.node.name;
     const binding = path.scope.getBinding(name);
     if (binding == null) {
@@ -34243,527 +34144,6 @@ function instructionMayThrow(instr) {
     }
 }
 
-function inlineJsxTransform(fn, inlineJsxTransformConfig) {
-    var _a;
-    const inlinedJsxDeclarations = new Map();
-    for (const [_, currentBlock] of [...fn.body.blocks]) {
-        let fallthroughBlockInstructions = null;
-        const instructionCount = currentBlock.instructions.length;
-        for (let i = 0; i < instructionCount; i++) {
-            const instr = currentBlock.instructions[i];
-            if (currentBlock.kind === 'value') {
-                (_a = fn.env.logger) === null || _a === void 0 ? void 0 : _a.logEvent(fn.env.filename, {
-                    kind: 'CompileDiagnostic',
-                    fnLoc: null,
-                    detail: {
-                        category: ErrorCategory.Todo,
-                        reason: 'JSX Inlining is not supported on value blocks',
-                        loc: instr.loc,
-                    },
-                });
-                continue;
-            }
-            switch (instr.value.kind) {
-                case 'JsxExpression':
-                case 'JsxFragment': {
-                    const currentBlockInstructions = currentBlock.instructions.slice(0, i);
-                    const thenBlockInstructions = currentBlock.instructions.slice(i, i + 1);
-                    const elseBlockInstructions = [];
-                    fallthroughBlockInstructions !== null && fallthroughBlockInstructions !== void 0 ? fallthroughBlockInstructions : (fallthroughBlockInstructions = currentBlock.instructions.slice(i + 1));
-                    const fallthroughBlockId = fn.env.nextBlockId;
-                    const fallthroughBlock = {
-                        kind: currentBlock.kind,
-                        id: fallthroughBlockId,
-                        instructions: fallthroughBlockInstructions,
-                        terminal: currentBlock.terminal,
-                        preds: new Set(),
-                        phis: new Set(),
-                    };
-                    const varPlace = createTemporaryPlace(fn.env, instr.value.loc);
-                    promoteTemporary(varPlace.identifier);
-                    const varLValuePlace = createTemporaryPlace(fn.env, instr.value.loc);
-                    const thenVarPlace = Object.assign(Object.assign({}, varPlace), { identifier: forkTemporaryIdentifier(fn.env.nextIdentifierId, varPlace.identifier) });
-                    const elseVarPlace = Object.assign(Object.assign({}, varPlace), { identifier: forkTemporaryIdentifier(fn.env.nextIdentifierId, varPlace.identifier) });
-                    const varInstruction = {
-                        id: makeInstructionId(0),
-                        lvalue: Object.assign({}, varLValuePlace),
-                        value: {
-                            kind: 'DeclareLocal',
-                            lvalue: { place: Object.assign({}, varPlace), kind: InstructionKind.Let },
-                            type: null,
-                            loc: instr.value.loc,
-                        },
-                        effects: null,
-                        loc: instr.loc,
-                    };
-                    currentBlockInstructions.push(varInstruction);
-                    const devGlobalPlace = createTemporaryPlace(fn.env, instr.value.loc);
-                    const devGlobalInstruction = {
-                        id: makeInstructionId(0),
-                        lvalue: Object.assign(Object.assign({}, devGlobalPlace), { effect: Effect.Mutate }),
-                        value: {
-                            kind: 'LoadGlobal',
-                            binding: {
-                                kind: 'Global',
-                                name: inlineJsxTransformConfig.globalDevVar,
-                            },
-                            loc: instr.value.loc,
-                        },
-                        effects: null,
-                        loc: instr.loc,
-                    };
-                    currentBlockInstructions.push(devGlobalInstruction);
-                    const thenBlockId = fn.env.nextBlockId;
-                    const elseBlockId = fn.env.nextBlockId;
-                    const ifTerminal = {
-                        kind: 'if',
-                        test: Object.assign(Object.assign({}, devGlobalPlace), { effect: Effect.Read }),
-                        consequent: thenBlockId,
-                        alternate: elseBlockId,
-                        fallthrough: fallthroughBlockId,
-                        loc: instr.loc,
-                        id: makeInstructionId(0),
-                    };
-                    currentBlock.instructions = currentBlockInstructions;
-                    currentBlock.terminal = ifTerminal;
-                    const thenBlock = {
-                        id: thenBlockId,
-                        instructions: thenBlockInstructions,
-                        kind: 'block',
-                        phis: new Set(),
-                        preds: new Set(),
-                        terminal: {
-                            kind: 'goto',
-                            block: fallthroughBlockId,
-                            variant: GotoVariant.Break,
-                            id: makeInstructionId(0),
-                            loc: instr.loc,
-                        },
-                    };
-                    fn.body.blocks.set(thenBlockId, thenBlock);
-                    const resassignElsePlace = createTemporaryPlace(fn.env, instr.value.loc);
-                    const reassignElseInstruction = {
-                        id: makeInstructionId(0),
-                        lvalue: Object.assign({}, resassignElsePlace),
-                        value: {
-                            kind: 'StoreLocal',
-                            lvalue: {
-                                place: elseVarPlace,
-                                kind: InstructionKind.Reassign,
-                            },
-                            value: Object.assign({}, instr.lvalue),
-                            type: null,
-                            loc: instr.value.loc,
-                        },
-                        effects: null,
-                        loc: instr.loc,
-                    };
-                    thenBlockInstructions.push(reassignElseInstruction);
-                    const elseBlockTerminal = {
-                        kind: 'goto',
-                        block: fallthroughBlockId,
-                        variant: GotoVariant.Break,
-                        id: makeInstructionId(0),
-                        loc: instr.loc,
-                    };
-                    const elseBlock = {
-                        id: elseBlockId,
-                        instructions: elseBlockInstructions,
-                        kind: 'block',
-                        phis: new Set(),
-                        preds: new Set(),
-                        terminal: elseBlockTerminal,
-                    };
-                    fn.body.blocks.set(elseBlockId, elseBlock);
-                    const { refProperty, keyProperty, propsProperty } = createPropsProperties(fn, instr, elseBlockInstructions, instr.value.kind === 'JsxExpression' ? instr.value.props : [], instr.value.children);
-                    const reactElementInstructionPlace = createTemporaryPlace(fn.env, instr.value.loc);
-                    const reactElementInstruction = {
-                        id: makeInstructionId(0),
-                        lvalue: Object.assign(Object.assign({}, reactElementInstructionPlace), { effect: Effect.Store }),
-                        value: {
-                            kind: 'ObjectExpression',
-                            properties: [
-                                createSymbolProperty(fn, instr, elseBlockInstructions, '$$typeof', inlineJsxTransformConfig.elementSymbol),
-                                instr.value.kind === 'JsxExpression'
-                                    ? createTagProperty(fn, instr, elseBlockInstructions, instr.value.tag)
-                                    : createSymbolProperty(fn, instr, elseBlockInstructions, 'type', 'react.fragment'),
-                                refProperty,
-                                keyProperty,
-                                propsProperty,
-                            ],
-                            loc: instr.value.loc,
-                        },
-                        effects: null,
-                        loc: instr.loc,
-                    };
-                    elseBlockInstructions.push(reactElementInstruction);
-                    const reassignConditionalInstruction = {
-                        id: makeInstructionId(0),
-                        lvalue: Object.assign({}, createTemporaryPlace(fn.env, instr.value.loc)),
-                        value: {
-                            kind: 'StoreLocal',
-                            lvalue: {
-                                place: Object.assign({}, elseVarPlace),
-                                kind: InstructionKind.Reassign,
-                            },
-                            value: Object.assign({}, reactElementInstruction.lvalue),
-                            type: null,
-                            loc: instr.value.loc,
-                        },
-                        effects: null,
-                        loc: instr.loc,
-                    };
-                    elseBlockInstructions.push(reassignConditionalInstruction);
-                    const operands = new Map();
-                    operands.set(thenBlockId, Object.assign({}, elseVarPlace));
-                    operands.set(elseBlockId, Object.assign({}, thenVarPlace));
-                    const phiIdentifier = forkTemporaryIdentifier(fn.env.nextIdentifierId, varPlace.identifier);
-                    const phiPlace = Object.assign(Object.assign({}, createTemporaryPlace(fn.env, instr.value.loc)), { identifier: phiIdentifier });
-                    const phis = new Set([
-                        {
-                            kind: 'Phi',
-                            operands,
-                            place: phiPlace,
-                        },
-                    ]);
-                    fallthroughBlock.phis = phis;
-                    fn.body.blocks.set(fallthroughBlockId, fallthroughBlock);
-                    inlinedJsxDeclarations.set(instr.lvalue.identifier.declarationId, {
-                        identifier: phiIdentifier,
-                        blockIdsToIgnore: new Set([thenBlockId, elseBlockId]),
-                    });
-                    break;
-                }
-                case 'FunctionExpression':
-                case 'ObjectMethod': {
-                    inlineJsxTransform(instr.value.loweredFunc.func, inlineJsxTransformConfig);
-                    break;
-                }
-            }
-        }
-    }
-    for (const [blockId, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            mapInstructionOperands(instr, place => handlePlace(place, blockId, inlinedJsxDeclarations));
-            mapInstructionLValues(instr, lvalue => handlelValue(lvalue, blockId, inlinedJsxDeclarations));
-            mapInstructionValueOperands(instr.value, place => handlePlace(place, blockId, inlinedJsxDeclarations));
-        }
-        mapTerminalOperands(block.terminal, place => handlePlace(place, blockId, inlinedJsxDeclarations));
-        if (block.terminal.kind === 'scope') {
-            const scope = block.terminal.scope;
-            for (const dep of scope.dependencies) {
-                dep.identifier = handleIdentifier(dep.identifier, inlinedJsxDeclarations);
-            }
-            for (const [origId, decl] of [...scope.declarations]) {
-                const newDecl = handleIdentifier(decl.identifier, inlinedJsxDeclarations);
-                if (newDecl.id !== origId) {
-                    scope.declarations.delete(origId);
-                    scope.declarations.set(decl.identifier.id, {
-                        identifier: newDecl,
-                        scope: decl.scope,
-                    });
-                }
-            }
-        }
-    }
-    reversePostorderBlocks(fn.body);
-    markPredecessors(fn.body);
-    markInstructionIds(fn.body);
-    fixScopeAndIdentifierRanges(fn.body);
-}
-function createSymbolProperty(fn, instr, nextInstructions, propertyName, symbolName) {
-    const symbolPlace = createTemporaryPlace(fn.env, instr.value.loc);
-    const symbolInstruction = {
-        id: makeInstructionId(0),
-        lvalue: Object.assign(Object.assign({}, symbolPlace), { effect: Effect.Mutate }),
-        value: {
-            kind: 'LoadGlobal',
-            binding: { kind: 'Global', name: 'Symbol' },
-            loc: instr.value.loc,
-        },
-        effects: null,
-        loc: instr.loc,
-    };
-    nextInstructions.push(symbolInstruction);
-    const symbolForPlace = createTemporaryPlace(fn.env, instr.value.loc);
-    const symbolForInstruction = {
-        id: makeInstructionId(0),
-        lvalue: Object.assign(Object.assign({}, symbolForPlace), { effect: Effect.Read }),
-        value: {
-            kind: 'PropertyLoad',
-            object: Object.assign({}, symbolInstruction.lvalue),
-            property: makePropertyLiteral('for'),
-            loc: instr.value.loc,
-        },
-        effects: null,
-        loc: instr.loc,
-    };
-    nextInstructions.push(symbolForInstruction);
-    const symbolValuePlace = createTemporaryPlace(fn.env, instr.value.loc);
-    const symbolValueInstruction = {
-        id: makeInstructionId(0),
-        lvalue: Object.assign(Object.assign({}, symbolValuePlace), { effect: Effect.Mutate }),
-        value: {
-            kind: 'Primitive',
-            value: symbolName,
-            loc: instr.value.loc,
-        },
-        effects: null,
-        loc: instr.loc,
-    };
-    nextInstructions.push(symbolValueInstruction);
-    const $$typeofPlace = createTemporaryPlace(fn.env, instr.value.loc);
-    const $$typeofInstruction = {
-        id: makeInstructionId(0),
-        lvalue: Object.assign(Object.assign({}, $$typeofPlace), { effect: Effect.Mutate }),
-        value: {
-            kind: 'MethodCall',
-            receiver: symbolInstruction.lvalue,
-            property: symbolForInstruction.lvalue,
-            args: [symbolValueInstruction.lvalue],
-            loc: instr.value.loc,
-        },
-        effects: null,
-        loc: instr.loc,
-    };
-    const $$typeofProperty = {
-        kind: 'ObjectProperty',
-        key: { name: propertyName, kind: 'string' },
-        type: 'property',
-        place: Object.assign(Object.assign({}, $$typeofPlace), { effect: Effect.Capture }),
-    };
-    nextInstructions.push($$typeofInstruction);
-    return $$typeofProperty;
-}
-function createTagProperty(fn, instr, nextInstructions, componentTag) {
-    let tagProperty;
-    switch (componentTag.kind) {
-        case 'BuiltinTag': {
-            const tagPropertyPlace = createTemporaryPlace(fn.env, instr.value.loc);
-            const tagInstruction = {
-                id: makeInstructionId(0),
-                lvalue: Object.assign(Object.assign({}, tagPropertyPlace), { effect: Effect.Mutate }),
-                value: {
-                    kind: 'Primitive',
-                    value: componentTag.name,
-                    loc: instr.value.loc,
-                },
-                effects: null,
-                loc: instr.loc,
-            };
-            tagProperty = {
-                kind: 'ObjectProperty',
-                key: { name: 'type', kind: 'string' },
-                type: 'property',
-                place: Object.assign(Object.assign({}, tagPropertyPlace), { effect: Effect.Capture }),
-            };
-            nextInstructions.push(tagInstruction);
-            break;
-        }
-        case 'Identifier': {
-            tagProperty = {
-                kind: 'ObjectProperty',
-                key: { name: 'type', kind: 'string' },
-                type: 'property',
-                place: Object.assign(Object.assign({}, componentTag), { effect: Effect.Capture }),
-            };
-            break;
-        }
-    }
-    return tagProperty;
-}
-function createPropsProperties(fn, instr, nextInstructions, propAttributes, children) {
-    let refProperty;
-    let keyProperty;
-    const props = [];
-    const jsxAttributesWithoutKey = propAttributes.filter(p => p.kind === 'JsxAttribute' && p.name !== 'key');
-    const jsxSpreadAttributes = propAttributes.filter(p => p.kind === 'JsxSpreadAttribute');
-    const spreadPropsOnly = jsxAttributesWithoutKey.length === 0 && jsxSpreadAttributes.length === 1;
-    propAttributes.forEach(prop => {
-        switch (prop.kind) {
-            case 'JsxAttribute': {
-                switch (prop.name) {
-                    case 'key': {
-                        keyProperty = {
-                            kind: 'ObjectProperty',
-                            key: { name: 'key', kind: 'string' },
-                            type: 'property',
-                            place: Object.assign({}, prop.place),
-                        };
-                        break;
-                    }
-                    case 'ref': {
-                        refProperty = {
-                            kind: 'ObjectProperty',
-                            key: { name: 'ref', kind: 'string' },
-                            type: 'property',
-                            place: Object.assign({}, prop.place),
-                        };
-                        const refPropProperty = {
-                            kind: 'ObjectProperty',
-                            key: { name: 'ref', kind: 'string' },
-                            type: 'property',
-                            place: Object.assign({}, prop.place),
-                        };
-                        props.push(refPropProperty);
-                        break;
-                    }
-                    default: {
-                        const attributeProperty = {
-                            kind: 'ObjectProperty',
-                            key: { name: prop.name, kind: 'string' },
-                            type: 'property',
-                            place: Object.assign({}, prop.place),
-                        };
-                        props.push(attributeProperty);
-                    }
-                }
-                break;
-            }
-            case 'JsxSpreadAttribute': {
-                props.push({
-                    kind: 'Spread',
-                    place: Object.assign({}, prop.argument),
-                });
-                break;
-            }
-        }
-    });
-    const propsPropertyPlace = createTemporaryPlace(fn.env, instr.value.loc);
-    if (children) {
-        let childrenPropProperty;
-        if (children.length === 1) {
-            childrenPropProperty = {
-                kind: 'ObjectProperty',
-                key: { name: 'children', kind: 'string' },
-                type: 'property',
-                place: Object.assign(Object.assign({}, children[0]), { effect: Effect.Capture }),
-            };
-        }
-        else {
-            const childrenPropPropertyPlace = createTemporaryPlace(fn.env, instr.value.loc);
-            const childrenPropInstruction = {
-                id: makeInstructionId(0),
-                lvalue: Object.assign(Object.assign({}, childrenPropPropertyPlace), { effect: Effect.Mutate }),
-                value: {
-                    kind: 'ArrayExpression',
-                    elements: [...children],
-                    loc: instr.value.loc,
-                },
-                effects: null,
-                loc: instr.loc,
-            };
-            nextInstructions.push(childrenPropInstruction);
-            childrenPropProperty = {
-                kind: 'ObjectProperty',
-                key: { name: 'children', kind: 'string' },
-                type: 'property',
-                place: Object.assign(Object.assign({}, childrenPropPropertyPlace), { effect: Effect.Capture }),
-            };
-        }
-        props.push(childrenPropProperty);
-    }
-    if (refProperty == null) {
-        const refPropertyPlace = createTemporaryPlace(fn.env, instr.value.loc);
-        const refInstruction = {
-            id: makeInstructionId(0),
-            lvalue: Object.assign(Object.assign({}, refPropertyPlace), { effect: Effect.Mutate }),
-            value: {
-                kind: 'Primitive',
-                value: null,
-                loc: instr.value.loc,
-            },
-            effects: null,
-            loc: instr.loc,
-        };
-        refProperty = {
-            kind: 'ObjectProperty',
-            key: { name: 'ref', kind: 'string' },
-            type: 'property',
-            place: Object.assign(Object.assign({}, refPropertyPlace), { effect: Effect.Capture }),
-        };
-        nextInstructions.push(refInstruction);
-    }
-    if (keyProperty == null) {
-        const keyPropertyPlace = createTemporaryPlace(fn.env, instr.value.loc);
-        const keyInstruction = {
-            id: makeInstructionId(0),
-            lvalue: Object.assign(Object.assign({}, keyPropertyPlace), { effect: Effect.Mutate }),
-            value: {
-                kind: 'Primitive',
-                value: null,
-                loc: instr.value.loc,
-            },
-            effects: null,
-            loc: instr.loc,
-        };
-        keyProperty = {
-            kind: 'ObjectProperty',
-            key: { name: 'key', kind: 'string' },
-            type: 'property',
-            place: Object.assign(Object.assign({}, keyPropertyPlace), { effect: Effect.Capture }),
-        };
-        nextInstructions.push(keyInstruction);
-    }
-    let propsProperty;
-    if (spreadPropsOnly) {
-        const spreadProp = jsxSpreadAttributes[0];
-        CompilerError.invariant(spreadProp.kind === 'JsxSpreadAttribute', {
-            reason: 'Spread prop attribute must be of kind JSXSpreadAttribute',
-            loc: instr.loc,
-        });
-        propsProperty = {
-            kind: 'ObjectProperty',
-            key: { name: 'props', kind: 'string' },
-            type: 'property',
-            place: Object.assign(Object.assign({}, spreadProp.argument), { effect: Effect.Mutate }),
-        };
-    }
-    else {
-        const propsInstruction = {
-            id: makeInstructionId(0),
-            lvalue: Object.assign(Object.assign({}, propsPropertyPlace), { effect: Effect.Mutate }),
-            value: {
-                kind: 'ObjectExpression',
-                properties: props,
-                loc: instr.value.loc,
-            },
-            effects: null,
-            loc: instr.loc,
-        };
-        propsProperty = {
-            kind: 'ObjectProperty',
-            key: { name: 'props', kind: 'string' },
-            type: 'property',
-            place: Object.assign(Object.assign({}, propsPropertyPlace), { effect: Effect.Capture }),
-        };
-        nextInstructions.push(propsInstruction);
-    }
-    return { refProperty, keyProperty, propsProperty };
-}
-function handlePlace(place, blockId, inlinedJsxDeclarations) {
-    const inlinedJsxDeclaration = inlinedJsxDeclarations.get(place.identifier.declarationId);
-    if (inlinedJsxDeclaration == null ||
-        inlinedJsxDeclaration.blockIdsToIgnore.has(blockId)) {
-        return place;
-    }
-    return Object.assign(Object.assign({}, place), { identifier: inlinedJsxDeclaration.identifier });
-}
-function handlelValue(lvalue, blockId, inlinedJsxDeclarations) {
-    const inlinedJsxDeclaration = inlinedJsxDeclarations.get(lvalue.identifier.declarationId);
-    if (inlinedJsxDeclaration == null ||
-        inlinedJsxDeclaration.blockIdsToIgnore.has(blockId)) {
-        return lvalue;
-    }
-    return Object.assign(Object.assign({}, lvalue), { identifier: inlinedJsxDeclaration.identifier });
-}
-function handleIdentifier(identifier, inlinedJsxDeclarations) {
-    const inlinedJsxDeclaration = inlinedJsxDeclarations.get(identifier.declarationId);
-    return inlinedJsxDeclaration == null
-        ? identifier
-        : inlinedJsxDeclaration.identifier;
-}
-
 function findScopesToMerge(fn) {
     const objectMethodDecls = new Set();
     const mergeScopesBuilder = new DisjointSet();
@@ -35333,9 +34713,9 @@ class CheckInstructionsAgainstScopesVisitor extends ReactiveFunctionVisitor {
 }
 
 function assertWellFormedBreakTargets(fn) {
-    visitReactiveFunction(fn, new Visitor$a(), new Set());
+    visitReactiveFunction(fn, new Visitor$8(), new Set());
 }
-let Visitor$a = class Visitor extends ReactiveFunctionVisitor {
+let Visitor$8 = class Visitor extends ReactiveFunctionVisitor {
     visitTerminal(stmt, seenLabels) {
         if (stmt.label != null) {
             seenLabels.add(stmt.label.id);
@@ -35352,7 +34732,7 @@ let Visitor$a = class Visitor extends ReactiveFunctionVisitor {
 
 var _Context_nextScheduleId, _Context_scheduled, _Context_catchHandlers, _Context_controlFlowStack;
 function buildReactiveFunction(fn) {
-    const cx = new Context$3(fn.body);
+    const cx = new Context$2(fn.body);
     const driver = new Driver(cx);
     const body = driver.traverseBlock(cx.block(fn.body.entry));
     return {
@@ -36072,11 +35452,10 @@ class Driver {
         const test = this.visitValueBlock(testBlockId, loc);
         const testBlock = this.cx.ir.blocks.get(test.block);
         if (testBlock.terminal.kind !== 'branch') {
-            CompilerError.throwTodo({
-                reason: `Unexpected terminal kind \`${testBlock.terminal.kind}\` for ${terminalKind} test block`,
-                description: null,
+            CompilerError.invariant(false, {
+                reason: `Expected a branch terminal for ${terminalKind} test block`,
+                description: `Got \`${testBlock.terminal.kind}\``,
                 loc: testBlock.terminal.loc,
-                suggestions: null,
             });
         }
         return {
@@ -36253,7 +35632,7 @@ class Driver {
         };
     }
 }
-let Context$3 = class Context {
+let Context$2 = class Context {
     constructor(ir) {
         _Context_nextScheduleId.set(this, 0);
         this.emitted = new Set();
@@ -36588,7 +35967,7 @@ const MEMO_CACHE_SENTINEL = 'react.memo_cache_sentinel';
 const EARLY_RETURN_SENTINEL = 'react.early_return_sentinel';
 function codegenFunction(fn, { uniqueIdentifiers, fbtOperands, }) {
     var _a, _b, _c;
-    const cx = new Context$2(fn.env, (_a = fn.id) !== null && _a !== void 0 ? _a : '[[ anonymous ]]', uniqueIdentifiers, fbtOperands, null);
+    const cx = new Context$1(fn.env, (_a = fn.id) !== null && _a !== void 0 ? _a : '[[ anonymous ]]', uniqueIdentifiers, fbtOperands, null);
     let fastRefreshState = null;
     if (fn.env.config.enableResetCacheOnSourceFileChanges &&
         fn.env.code !== null) {
@@ -36598,11 +35977,7 @@ function codegenFunction(fn, { uniqueIdentifiers, fbtOperands, }) {
             hash,
         };
     }
-    const compileResult = codegenReactiveFunction(cx, fn);
-    if (compileResult.isErr()) {
-        return compileResult;
-    }
-    const compiled = compileResult.unwrap();
+    const compiled = codegenReactiveFunction(cx, fn);
     const hookGuard = fn.env.config.enableEmitHookGuards;
     if (hookGuard != null && fn.env.outputMode === 'client') {
         compiled.body = libExports$1.blockStatement([
@@ -36644,7 +36019,7 @@ function codegenFunction(fn, { uniqueIdentifiers, fbtOperands, }) {
         if (emitInstrumentForget.globalGating != null) {
             const assertResult = fn.env.programContext.assertGlobalBinding(emitInstrumentForget.globalGating);
             if (assertResult.isErr()) {
-                return assertResult;
+                fn.env.recordErrors(assertResult.unwrapErr());
             }
         }
         let ifTest;
@@ -36675,14 +36050,11 @@ function codegenFunction(fn, { uniqueIdentifiers, fbtOperands, }) {
         pruneUnusedLValues(reactiveFunction);
         pruneHoistedContexts(reactiveFunction);
         const identifiers = renameVariables(reactiveFunction);
-        const codegen = codegenReactiveFunction(new Context$2(cx.env, (_c = reactiveFunction.id) !== null && _c !== void 0 ? _c : '[[ anonymous ]]', identifiers, cx.fbtOperands), reactiveFunction);
-        if (codegen.isErr()) {
-            return codegen;
-        }
-        outlined.push({ fn: codegen.unwrap(), type });
+        const codegen = codegenReactiveFunction(new Context$1(cx.env, (_c = reactiveFunction.id) !== null && _c !== void 0 ? _c : '[[ anonymous ]]', identifiers, cx.fbtOperands), reactiveFunction);
+        outlined.push({ fn: codegen, type });
     }
     compiled.outlined = outlined;
-    return compileResult;
+    return compiled;
 }
 function codegenReactiveFunction(cx, fn) {
     for (const param of fn.params) {
@@ -36700,12 +36072,9 @@ function codegenReactiveFunction(cx, fn) {
             statements.pop();
         }
     }
-    if (cx.errors.hasAnyErrors()) {
-        return Err(cx.errors);
-    }
     const countMemoBlockVisitor = new CountMemoBlockVisitor(fn.env);
     visitReactiveFunction(fn, countMemoBlockVisitor, undefined);
-    return Ok({
+    return {
         type: 'CodegenFunction',
         loc: fn.loc,
         id: fn.id !== null ? libExports$1.identifier(fn.id) : null,
@@ -36720,10 +36089,7 @@ function codegenReactiveFunction(cx, fn) {
         prunedMemoBlocks: countMemoBlockVisitor.prunedMemoBlocks,
         prunedMemoValues: countMemoBlockVisitor.prunedMemoValues,
         outlined: [],
-        hasFireRewrite: fn.env.hasFireRewrite,
-        hasInferredEffect: fn.env.hasInferredEffect,
-        inferredEffectLocations: fn.env.inferredEffectLocations,
-    });
+    };
 }
 class CountMemoBlockVisitor extends ReactiveFunctionVisitor {
     constructor(env) {
@@ -36753,11 +36119,10 @@ function convertParameter(param) {
         return libExports$1.restElement(convertIdentifier(param.place.identifier));
     }
 }
-let Context$2 = class Context {
+let Context$1 = class Context {
     constructor(env, fnName, uniqueIdentifiers, fbtOperands, temporaries = null) {
         _Context_nextCacheIndex.set(this, 0);
         _Context_declarations.set(this, new Set());
-        this.errors = new CompilerError();
         this.objectMethods = new Map();
         this.synthesizedNames = new Map();
         this.env = env;
@@ -36765,6 +36130,9 @@ let Context$2 = class Context {
         this.uniqueIdentifiers = uniqueIdentifiers;
         this.fbtOperands = fbtOperands;
         this.temp = temporaries !== null ? new Map(temporaries) : new Map();
+    }
+    recordError(error) {
+        this.env.recordError(error);
     }
     get nextCacheIndex() {
         var _a, _b;
@@ -36855,43 +36223,15 @@ function codegenBlockNoReset(cx, block) {
     }
     return libExports$1.blockStatement(statements);
 }
-function wrapCacheDep(cx, value) {
-    if (cx.env.config.enableEmitFreeze != null &&
-        cx.env.outputMode === 'client') {
-        const emitFreezeIdentifier = cx.env.programContext.addImportSpecifier(cx.env.config.enableEmitFreeze).name;
-        cx.env.programContext
-            .assertGlobalBinding(EMIT_FREEZE_GLOBAL_GATING, cx.env.scope)
-            .unwrap();
-        return libExports$1.conditionalExpression(libExports$1.identifier(EMIT_FREEZE_GLOBAL_GATING), libExports$1.callExpression(libExports$1.identifier(emitFreezeIdentifier), [
-            value,
-            libExports$1.stringLiteral(cx.fnName),
-        ]), value);
-    }
-    else {
-        return value;
-    }
-}
 function codegenReactiveScope(cx, statements, scope, block) {
     const cacheStoreStatements = [];
     const cacheLoadStatements = [];
     const cacheLoads = [];
     const changeExpressions = [];
-    const changeExpressionComments = [];
-    const outputComments = [];
     for (const dep of [...scope.dependencies].sort(compareScopeDependency)) {
         const index = cx.nextCacheIndex;
-        changeExpressionComments.push(printDependencyComment(dep));
         const comparison = libExports$1.binaryExpression('!==', libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(index), true), codegenDependency(cx, dep));
-        if (cx.env.config.enableChangeVariableCodegen) {
-            const changeIdentifier = libExports$1.identifier(cx.synthesizeName(`c_${index}`));
-            statements.push(libExports$1.variableDeclaration('const', [
-                libExports$1.variableDeclarator(changeIdentifier, comparison),
-            ]));
-            changeExpressions.push(changeIdentifier);
-        }
-        else {
-            changeExpressions.push(comparison);
-        }
+        changeExpressions.push(comparison);
         cacheStoreStatements.push(libExports$1.expressionStatement(libExports$1.assignmentExpression('=', libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(index), true), codegenDependency(cx, dep))));
     }
     let firstOutputIndex = null;
@@ -36906,11 +36246,10 @@ function codegenReactiveScope(cx, statements, scope, block) {
             loc: GeneratedSource,
         });
         const name = convertIdentifier(identifier);
-        outputComments.push(name.name);
         if (!cx.hasDeclared(identifier)) {
             statements.push(libExports$1.variableDeclaration('let', [createVariableDeclarator(name, null)]));
         }
-        cacheLoads.push({ name, index, value: wrapCacheDep(cx, name) });
+        cacheLoads.push({ name, index, value: name });
         cx.declare(identifier);
     }
     for (const reassignment of scope.reassignments) {
@@ -36919,8 +36258,7 @@ function codegenReactiveScope(cx, statements, scope, block) {
             firstOutputIndex = index;
         }
         const name = convertIdentifier(reassignment);
-        outputComments.push(name.name);
-        cacheLoads.push({ name, index, value: wrapCacheDep(cx, name) });
+        cacheLoads.push({ name, index, value: name });
     }
     let testCondition = changeExpressions.reduce((acc, ident) => {
         if (acc == null) {
@@ -36936,92 +36274,14 @@ function codegenReactiveScope(cx, statements, scope, block) {
         });
         testCondition = libExports$1.binaryExpression('===', libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(firstOutputIndex), true), libExports$1.callExpression(libExports$1.memberExpression(libExports$1.identifier('Symbol'), libExports$1.identifier('for')), [libExports$1.stringLiteral(MEMO_CACHE_SENTINEL)]));
     }
-    if (cx.env.config.disableMemoizationForDebugging) {
-        CompilerError.invariant(cx.env.config.enableChangeDetectionForDebugging == null, {
-            reason: `Expected to not have both change detection enabled and memoization disabled`,
-            description: `Incompatible config options`,
-            loc: GeneratedSource,
-        });
-        testCondition = libExports$1.logicalExpression('||', testCondition, libExports$1.booleanLiteral(true));
-    }
     let computationBlock = codegenBlock(cx, block);
     let memoStatement;
-    const detectionFunction = cx.env.config.enableChangeDetectionForDebugging;
-    if (detectionFunction != null && changeExpressions.length > 0) {
-        const loc = typeof scope.loc === 'symbol'
-            ? 'unknown location'
-            : `(${scope.loc.start.line}:${scope.loc.end.line})`;
-        const importedDetectionFunctionIdentifier = cx.env.programContext.addImportSpecifier(detectionFunction).name;
-        const cacheLoadOldValueStatements = [];
-        const changeDetectionStatements = [];
-        const idempotenceDetectionStatements = [];
-        for (const { name, index, value } of cacheLoads) {
-            const loadName = cx.synthesizeName(`old$${name.name}`);
-            const slot = libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(index), true);
-            cacheStoreStatements.push(libExports$1.expressionStatement(libExports$1.assignmentExpression('=', slot, value)));
-            cacheLoadOldValueStatements.push(libExports$1.variableDeclaration('let', [
-                libExports$1.variableDeclarator(libExports$1.identifier(loadName), slot),
-            ]));
-            changeDetectionStatements.push(libExports$1.expressionStatement(libExports$1.callExpression(libExports$1.identifier(importedDetectionFunctionIdentifier), [
-                libExports$1.identifier(loadName),
-                libExports$1.cloneNode(name, true),
-                libExports$1.stringLiteral(name.name),
-                libExports$1.stringLiteral(cx.fnName),
-                libExports$1.stringLiteral('cached'),
-                libExports$1.stringLiteral(loc),
-            ])));
-            idempotenceDetectionStatements.push(libExports$1.expressionStatement(libExports$1.callExpression(libExports$1.identifier(importedDetectionFunctionIdentifier), [
-                libExports$1.cloneNode(slot, true),
-                libExports$1.cloneNode(name, true),
-                libExports$1.stringLiteral(name.name),
-                libExports$1.stringLiteral(cx.fnName),
-                libExports$1.stringLiteral('recomputed'),
-                libExports$1.stringLiteral(loc),
-            ])));
-            idempotenceDetectionStatements.push(libExports$1.expressionStatement(libExports$1.assignmentExpression('=', name, slot)));
-        }
-        const condition = cx.synthesizeName('condition');
-        const recomputationBlock = libExports$1.cloneNode(computationBlock, true);
-        memoStatement = libExports$1.blockStatement([
-            ...computationBlock.body,
-            libExports$1.variableDeclaration('let', [
-                libExports$1.variableDeclarator(libExports$1.identifier(condition), testCondition),
-            ]),
-            libExports$1.ifStatement(libExports$1.unaryExpression('!', libExports$1.identifier(condition)), libExports$1.blockStatement([
-                ...cacheLoadOldValueStatements,
-                ...changeDetectionStatements,
-            ])),
-            ...cacheStoreStatements,
-            libExports$1.ifStatement(libExports$1.identifier(condition), libExports$1.blockStatement([
-                ...recomputationBlock.body,
-                ...idempotenceDetectionStatements,
-            ])),
-        ]);
+    for (const { name, index, value } of cacheLoads) {
+        cacheStoreStatements.push(libExports$1.expressionStatement(libExports$1.assignmentExpression('=', libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(index), true), value)));
+        cacheLoadStatements.push(libExports$1.expressionStatement(libExports$1.assignmentExpression('=', name, libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(index), true))));
     }
-    else {
-        for (const { name, index, value } of cacheLoads) {
-            cacheStoreStatements.push(libExports$1.expressionStatement(libExports$1.assignmentExpression('=', libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(index), true), value)));
-            cacheLoadStatements.push(libExports$1.expressionStatement(libExports$1.assignmentExpression('=', name, libExports$1.memberExpression(libExports$1.identifier(cx.synthesizeName('$')), libExports$1.numericLiteral(index), true))));
-        }
-        computationBlock.body.push(...cacheStoreStatements);
-        memoStatement = libExports$1.ifStatement(testCondition, computationBlock, libExports$1.blockStatement(cacheLoadStatements));
-    }
-    if (cx.env.config.enableMemoizationComments) {
-        if (changeExpressionComments.length) {
-            libExports$1.addComment(memoStatement, 'leading', ` check if ${printDelimitedCommentList(changeExpressionComments, 'or')} changed`, true);
-            libExports$1.addComment(memoStatement, 'leading', ` "useMemo" for ${printDelimitedCommentList(outputComments, 'and')}:`, true);
-        }
-        else {
-            libExports$1.addComment(memoStatement, 'leading', ' cache value with no dependencies', true);
-            libExports$1.addComment(memoStatement, 'leading', ` "useMemo" for ${printDelimitedCommentList(outputComments, 'and')}:`, true);
-        }
-        if (computationBlock.body.length > 0) {
-            libExports$1.addComment(computationBlock.body[0], 'leading', ` Inputs changed, recompute`, true);
-        }
-        if (cacheLoadStatements.length > 0) {
-            libExports$1.addComment(cacheLoadStatements[0], 'leading', ` Inputs did not change, use cached value`, true);
-        }
-    }
+    computationBlock.body.push(...cacheStoreStatements);
+    memoStatement = libExports$1.ifStatement(testCondition, computationBlock, libExports$1.blockStatement(cacheLoadStatements));
     statements.push(memoStatement);
     const earlyReturnValue = scope.earlyReturnValue;
     if (earlyReturnValue !== null) {
@@ -37064,12 +36324,13 @@ function codegenTerminal(cx, terminal) {
                 loc: terminal.init.loc,
             });
             if (terminal.init.instructions.length !== 2) {
-                CompilerError.throwTodo({
+                cx.recordError(new CompilerErrorDetail({
                     reason: 'Support non-trivial for..in inits',
-                    description: null,
+                    category: ErrorCategory.Todo,
                     loc: terminal.init.loc,
                     suggestions: null,
-                });
+                }));
+                return libExports$1.emptyStatement();
             }
             const iterableCollection = terminal.init.instructions[0];
             const iterableItem = terminal.init.instructions[1];
@@ -37084,12 +36345,13 @@ function codegenTerminal(cx, terminal) {
                     break;
                 }
                 case 'StoreContext': {
-                    CompilerError.throwTodo({
+                    cx.recordError(new CompilerErrorDetail({
                         reason: 'Support non-trivial for..in inits',
-                        description: null,
+                        category: ErrorCategory.Todo,
                         loc: terminal.init.loc,
                         suggestions: null,
-                    });
+                    }));
+                    return libExports$1.emptyStatement();
                 }
                 default:
                     CompilerError.invariant(false, {
@@ -37142,12 +36404,13 @@ function codegenTerminal(cx, terminal) {
                 loc: terminal.test.loc,
             });
             if (terminal.test.instructions.length !== 2) {
-                CompilerError.throwTodo({
+                cx.recordError(new CompilerErrorDetail({
                     reason: 'Support non-trivial for..of inits',
-                    description: null,
+                    category: ErrorCategory.Todo,
                     loc: terminal.init.loc,
                     suggestions: null,
-                });
+                }));
+                return libExports$1.emptyStatement();
             }
             const iterableItem = terminal.test.instructions[1];
             let lval;
@@ -37161,12 +36424,13 @@ function codegenTerminal(cx, terminal) {
                     break;
                 }
                 case 'StoreContext': {
-                    CompilerError.throwTodo({
+                    cx.recordError(new CompilerErrorDetail({
                         reason: 'Support non-trivial for..of inits',
-                        description: null,
+                        category: ErrorCategory.Todo,
                         loc: terminal.init.loc,
                         suggestions: null,
-                    });
+                    }));
+                    return libExports$1.emptyStatement();
                 }
                 default:
                     CompilerError.invariant(false, {
@@ -37438,38 +36702,6 @@ function codegenForInit(cx, init) {
         return codegenInstructionValueToExpression(cx, init);
     }
 }
-function printDependencyComment(dependency) {
-    const identifier = convertIdentifier(dependency.identifier);
-    let name = identifier.name;
-    if (dependency.path !== null) {
-        for (const path of dependency.path) {
-            name += `.${path.property}`;
-        }
-    }
-    return name;
-}
-function printDelimitedCommentList(items, finalCompletion) {
-    if (items.length === 2) {
-        return items.join(` ${finalCompletion} `);
-    }
-    else if (items.length <= 1) {
-        return items.join('');
-    }
-    let output = [];
-    for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (i < items.length - 2) {
-            output.push(`${item}, `);
-        }
-        else if (i === items.length - 2) {
-            output.push(`${item}, ${finalCompletion} `);
-        }
-        else {
-            output.push(item);
-        }
-    }
-    return output.join('');
-}
 function codegenDependency(cx, dependency) {
     let object = convertIdentifier(dependency.identifier);
     if (dependency.path.length !== 0) {
@@ -37731,7 +36963,7 @@ function codegenInstructionValue(cx, instrValue) {
                             const reactiveFunction = buildReactiveFunction(loweredFunc.func);
                             pruneUnusedLabels(reactiveFunction);
                             pruneUnusedLValues(reactiveFunction);
-                            const fn = codegenReactiveFunction(new Context$2(cx.env, (_e = reactiveFunction.id) !== null && _e !== void 0 ? _e : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction).unwrap();
+                            const fn = codegenReactiveFunction(new Context$1(cx.env, (_e = reactiveFunction.id) !== null && _e !== void 0 ? _e : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction);
                             const babelNode = libExports$1.objectMethod('method', key, fn.params, fn.body, false);
                             babelNode.async = fn.async;
                             babelNode.generator = fn.generator;
@@ -37859,7 +37091,7 @@ function codegenInstructionValue(cx, instrValue) {
             pruneUnusedLabels(reactiveFunction);
             pruneUnusedLValues(reactiveFunction);
             pruneHoistedContexts(reactiveFunction);
-            const fn = codegenReactiveFunction(new Context$2(cx.env, (_g = reactiveFunction.id) !== null && _g !== void 0 ? _g : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction).unwrap();
+            const fn = codegenReactiveFunction(new Context$1(cx.env, (_g = reactiveFunction.id) !== null && _g !== void 0 ? _g : '[[ anonymous ]]', cx.uniqueIdentifiers, cx.fbtOperands, cx.temp), reactiveFunction);
             if (instrValue.type === 'ArrowFunctionExpression') {
                 let body = fn.body;
                 if (body.body.length === 1 && loweredFunc.directives.length == 0) {
@@ -37920,21 +37152,21 @@ function codegenInstructionValue(cx, instrValue) {
                 else {
                     if (libExports$1.isVariableDeclaration(stmt)) {
                         const declarator = stmt.declarations[0];
-                        cx.errors.push({
+                        cx.recordError(new CompilerErrorDetail({
                             reason: `(CodegenReactiveFunction::codegenInstructionValue) Cannot declare variables in a value block, tried to declare '${declarator.id.name}'`,
                             category: ErrorCategory.Todo,
                             loc: (_a = declarator.loc) !== null && _a !== void 0 ? _a : null,
                             suggestions: null,
-                        });
+                        }));
                         return libExports$1.stringLiteral(`TODO handle ${declarator.id}`);
                     }
                     else {
-                        cx.errors.push({
+                        cx.recordError(new CompilerErrorDetail({
                             reason: `(CodegenReactiveFunction::codegenInstructionValue) Handle conversion of ${stmt.type} to expression`,
                             category: ErrorCategory.Todo,
                             loc: (_b = stmt.loc) !== null && _b !== void 0 ? _b : null,
                             suggestions: null,
-                        });
+                        }));
                         return libExports$1.stringLiteral(`TODO handle ${stmt.type}`);
                     }
                 }
@@ -38288,7 +37520,7 @@ function extractScopeDeclarationsFromDestructuring(fn) {
         const place = param.kind === 'Identifier' ? param : param.place;
         state.declared.add(place.identifier.declarationId);
     }
-    visitReactiveFunction(fn, new Visitor$9(), state);
+    visitReactiveFunction(fn, new Visitor$7(), state);
 }
 let State$1 = class State {
     constructor(env) {
@@ -38296,7 +37528,7 @@ let State$1 = class State {
         this.env = env;
     }
 };
-let Visitor$9 = class Visitor extends ReactiveFunctionTransform {
+let Visitor$7 = class Visitor extends ReactiveFunctionTransform {
     visitScope(scope, state) {
         for (const [, declaration] of scope.scope.declarations) {
             state.declared.add(declaration.identifier.declarationId);
@@ -39206,12 +38438,12 @@ class Empty {
 const EMPTY = new Empty();
 
 function pruneHoistedContexts(fn) {
-    visitReactiveFunction(fn, new Visitor$8(), {
+    visitReactiveFunction(fn, new Visitor$6(), {
         activeScopes: empty(),
         uninitialized: new Map(),
     });
 }
-let Visitor$8 = class Visitor extends ReactiveFunctionTransform {
+let Visitor$6 = class Visitor extends ReactiveFunctionTransform {
     visitScope(scope, state) {
         state.activeScopes = state.activeScopes.push(new Set(scope.scope.declarations.keys()));
         for (const decl of scope.scope.declarations.values()) {
@@ -39434,7 +38666,7 @@ function inferMutationAliasingEffects(fn, { isFunctionExpression } = {
     }
     queue(fn.body.entry, initialState);
     const hoistedContextDeclarations = findHoistedContextDeclarations(fn);
-    const context = new Context$1(isFunctionExpression, fn, hoistedContextDeclarations, findNonMutatedDestructureSpreads(fn));
+    const context = new Context(isFunctionExpression, fn, hoistedContextDeclarations, findNonMutatedDestructureSpreads(fn));
     let iterationCount = 0;
     while (queuedStates.size !== 0) {
         iterationCount++;
@@ -39459,7 +38691,7 @@ function inferMutationAliasingEffects(fn, { isFunctionExpression } = {
             }
         }
     }
-    return Ok(undefined);
+    return;
 }
 function findHoistedContextDeclarations(fn) {
     const hoisted = new Map();
@@ -39491,7 +38723,7 @@ function findHoistedContextDeclarations(fn) {
     }
     return hoisted;
 }
-let Context$1 = class Context {
+class Context {
     constructor(isFunctionExpression, fn, hoistedContextDeclarations, nonMutatingSpreads) {
         this.internedEffects = new Map();
         this.instructionSignatureCache = new Map();
@@ -39517,7 +38749,7 @@ let Context$1 = class Context {
         }
         return interned;
     }
-};
+}
 function findNonMutatedDestructureSpreads(fn) {
     const knownFrozen = new Set();
     if (fn.fnType === 'Component') {
@@ -42139,7 +41371,7 @@ class PruneScopesTransform extends ReactiveFunctionTransform {
     }
 }
 
-let Visitor$7 = class Visitor extends ReactiveFunctionVisitor {
+let Visitor$5 = class Visitor extends ReactiveFunctionVisitor {
     visitLValue(id, lvalue, state) {
         this.visitPlace(id, lvalue, state);
     }
@@ -42162,7 +41394,7 @@ function isStableRefType(identifier, reactiveIdentifiers) {
     return isUseRefType(identifier) && !reactiveIdentifiers.has(identifier.id);
 }
 function collectReactiveIdentifiers(fn) {
-    const visitor = new Visitor$7();
+    const visitor = new Visitor$5();
     const state = new Set();
     visitReactiveFunction(fn, visitor, state);
     return state;
@@ -42170,9 +41402,9 @@ function collectReactiveIdentifiers(fn) {
 
 function pruneNonReactiveDependencies(fn) {
     const reactiveIdentifiers = collectReactiveIdentifiers(fn);
-    visitReactiveFunction(fn, new Visitor$6(), reactiveIdentifiers);
+    visitReactiveFunction(fn, new Visitor$4(), reactiveIdentifiers);
 }
-let Visitor$6 = class Visitor extends ReactiveFunctionVisitor {
+let Visitor$4 = class Visitor extends ReactiveFunctionVisitor {
     visitInstruction(instruction, state) {
         this.traverseInstruction(instruction, state);
         const { lvalue, value } = instruction;
@@ -42245,12 +41477,12 @@ let Visitor$6 = class Visitor extends ReactiveFunctionVisitor {
 
 function pruneUnusedLValues(fn) {
     const lvalues = new Map();
-    visitReactiveFunction(fn, new Visitor$5(), lvalues);
+    visitReactiveFunction(fn, new Visitor$3(), lvalues);
     for (const [, instr] of lvalues) {
         instr.lvalue = null;
     }
 }
-let Visitor$5 = class Visitor extends ReactiveFunctionVisitor {
+let Visitor$3 = class Visitor extends ReactiveFunctionVisitor {
     visitPlace(id, place, state) {
         state.delete(place.identifier.declarationId);
     }
@@ -42340,10 +41572,10 @@ function hasOwnDeclaration(block) {
 
 function collectReferencedGlobals(fn) {
     const identifiers = new Set();
-    visitReactiveFunction(fn, new Visitor$4(), identifiers);
+    visitReactiveFunction(fn, new Visitor$2(), identifiers);
     return identifiers;
 }
-let Visitor$4 = class Visitor extends ReactiveFunctionVisitor {
+let Visitor$2 = class Visitor extends ReactiveFunctionVisitor {
     visitValue(id, value, state) {
         this.traverseValue(id, value, state);
         if (value.kind === 'FunctionExpression' || value.kind === 'ObjectMethod') {
@@ -42362,7 +41594,7 @@ var _Scopes_instances, _Scopes_seen, _Scopes_stack, _Scopes_globals, _Scopes_pro
 function renameVariables(fn) {
     const globals = collectReferencedGlobals(fn);
     const scopes = new Scopes(globals, fn.env.programContext);
-    renameVariablesImpl(fn, new Visitor$3(), scopes);
+    renameVariablesImpl(fn, new Visitor$1(), scopes);
     return new Set([...scopes.names, ...globals]);
 }
 function renameVariablesImpl(fn, visitor, scopes) {
@@ -42378,7 +41610,7 @@ function renameVariablesImpl(fn, visitor, scopes) {
         visitReactiveFunction(fn, visitor, scopes);
     });
 }
-let Visitor$3 = class Visitor extends ReactiveFunctionVisitor {
+let Visitor$1 = class Visitor extends ReactiveFunctionVisitor {
     visitParam(place, state) {
         state.visit(place.identifier);
     }
@@ -42538,7 +41770,7 @@ function inferMutationAliasingRanges(fn, { isFunctionExpression }) {
     const mutations = [];
     const renders = [];
     let index = 0;
-    const errors = new CompilerError();
+    const shouldRecordErrors = !isFunctionExpression && fn.env.enableValidations;
     for (const param of [...fn.params, ...fn.context, fn.returns]) {
         const place = param.kind === 'Identifier' ? param : param.place;
         state.create(place, { kind: 'Object' });
@@ -42618,7 +41850,9 @@ function inferMutationAliasingRanges(fn, { isFunctionExpression }) {
                 else if (effect.kind === 'MutateFrozen' ||
                     effect.kind === 'MutateGlobal' ||
                     effect.kind === 'Impure') {
-                    errors.pushDiagnostic(effect.error);
+                    if (shouldRecordErrors) {
+                        fn.env.recordError(effect.error);
+                    }
                     functionEffects.push(effect);
                 }
                 else if (effect.kind === 'Render') {
@@ -42653,10 +41887,10 @@ function inferMutationAliasingRanges(fn, { isFunctionExpression }) {
         }
     }
     for (const mutation of mutations) {
-        state.mutate(mutation.index, mutation.place.identifier, makeInstructionId(mutation.id + 1), mutation.transitive, mutation.kind, mutation.place.loc, mutation.reason, errors);
+        state.mutate(mutation.index, mutation.place.identifier, makeInstructionId(mutation.id + 1), mutation.transitive, mutation.kind, mutation.place.loc, mutation.reason, shouldRecordErrors ? fn.env : null);
     }
     for (const render of renders) {
-        state.render(render.index, render.place.identifier, errors);
+        state.render(render.index, render.place.identifier, shouldRecordErrors ? fn.env : null);
     }
     for (const param of [...fn.context, ...fn.params]) {
         const place = param.kind === 'Identifier' ? param : param.place;
@@ -42831,14 +42065,13 @@ function inferMutationAliasingRanges(fn, { isFunctionExpression }) {
         reason: ValueReason.KnownReturnSignature,
     });
     const tracked = [];
-    const ignoredErrors = new CompilerError();
     for (const param of [...fn.params, ...fn.context, fn.returns]) {
         const place = param.kind === 'Identifier' ? param : param.place;
         tracked.push(place);
     }
     for (const into of tracked) {
         const mutationIndex = index++;
-        state.mutate(mutationIndex, into.identifier, null, true, MutationKind.Conditional, into.loc, null, ignoredErrors);
+        state.mutate(mutationIndex, into.identifier, null, true, MutationKind.Conditional, into.loc, null, null);
         for (const from of tracked) {
             if (from.identifier.id === into.identifier.id ||
                 from.identifier.id === fn.returns.identifier.id) {
@@ -42867,19 +42100,18 @@ function inferMutationAliasingRanges(fn, { isFunctionExpression }) {
             }
         }
     }
-    if (errors.hasAnyErrors() && !isFunctionExpression) {
-        return Err(errors);
-    }
-    return Ok(functionEffects);
+    return functionEffects;
 }
-function appendFunctionErrors(errors, fn) {
+function appendFunctionErrors(env, fn) {
     var _a;
+    if (env == null)
+        return;
     for (const effect of (_a = fn.aliasingEffects) !== null && _a !== void 0 ? _a : []) {
         switch (effect.kind) {
             case 'Impure':
             case 'MutateFrozen':
             case 'MutateGlobal': {
-                errors.pushDiagnostic(effect.error);
+                env.recordError(effect.error);
                 break;
             }
         }
@@ -42955,7 +42187,7 @@ class AliasingState {
             toNode.maybeAliases.set(from.identifier, index);
         }
     }
-    render(index, start, errors) {
+    render(index, start, env) {
         const seen = new Set();
         const queue = [start];
         while (queue.length !== 0) {
@@ -42969,7 +42201,7 @@ class AliasingState {
                 continue;
             }
             if (node.value.kind === 'Function') {
-                appendFunctionErrors(errors, node.value.function);
+                appendFunctionErrors(env, node.value.function);
             }
             for (const [alias, when] of node.createdFrom) {
                 if (when >= index) {
@@ -42991,7 +42223,7 @@ class AliasingState {
             }
         }
     }
-    mutate(index, start, end, transitive, startKind, loc, reason, errors) {
+    mutate(index, start, end, transitive, startKind, loc, reason, env) {
         var _a;
         const seen = new Map();
         const queue = [{ place: start, transitive, direction: 'backwards', kind: startKind }];
@@ -43014,7 +42246,7 @@ class AliasingState {
             if (node.value.kind === 'Function' &&
                 node.transitive == null &&
                 node.local == null) {
-                appendFunctionErrors(errors, node.value.function);
+                appendFunctionErrors(env, node.value.function);
             }
             if (transitive) {
                 if (node.transitive == null || node.transitive.kind < kind) {
@@ -43116,7 +42348,7 @@ function lowerWithMutationAliasing(fn) {
     deadCodeElimination(fn);
     const functionEffects = inferMutationAliasingRanges(fn, {
         isFunctionExpression: true,
-    }).unwrap();
+    });
     rewriteInstructionKindsBasedOnReassignment(fn);
     inferReactiveScopeVariables(fn);
     fn.aliasingEffects = functionEffects;
@@ -43336,10 +42568,10 @@ function getManualMemoizationReplacement(fn, loc, kind) {
         };
     }
 }
-function extractManualMemoizationArgs(instr, kind, sidemap, errors) {
+function extractManualMemoizationArgs(instr, kind, sidemap, env) {
     const [fnPlace, depsListPlace] = instr.value.args;
     if (fnPlace == null || fnPlace.kind !== 'Identifier') {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
+        env.recordError(CompilerDiagnostic.create({
             category: ErrorCategory.UseMemo,
             reason: `Expected a callback function to be passed to ${kind}`,
             description: kind === 'useCallback'
@@ -43366,7 +42598,7 @@ function extractManualMemoizationArgs(instr, kind, sidemap, errors) {
         ? sidemap.maybeDepsLists.get(depsListPlace.identifier.id)
         : null;
     if (maybeDepsList == null) {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
+        env.recordError(CompilerDiagnostic.create({
             category: ErrorCategory.UseMemo,
             reason: `Expected the dependency list for ${kind} to be an array literal`,
             description: `Expected the dependency list for ${kind} to be an array literal`,
@@ -43382,7 +42614,7 @@ function extractManualMemoizationArgs(instr, kind, sidemap, errors) {
     for (const dep of maybeDepsList.deps) {
         const maybeDep = sidemap.maybeDeps.get(dep.identifier.id);
         if (maybeDep == null) {
-            errors.pushDiagnostic(CompilerDiagnostic.create({
+            env.recordError(CompilerDiagnostic.create({
                 category: ErrorCategory.UseMemo,
                 reason: `Expected the dependency list to be an array of simple expressions (e.g. \`x\`, \`x.y.z\`, \`x?.y?.z\`)`,
                 description: `Expected the dependency list to be an array of simple expressions (e.g. \`x\`, \`x.y.z\`, \`x?.y?.z\`)`,
@@ -43404,7 +42636,6 @@ function extractManualMemoizationArgs(instr, kind, sidemap, errors) {
     };
 }
 function dropManualMemoization(func) {
-    const errors = new CompilerError();
     const isValidationEnabled = func.env.config.validatePreserveExistingMemoizationGuarantees ||
         func.env.config.validateNoSetStateInRender ||
         func.env.config.enablePreserveExistingMemoizationGuarantees;
@@ -43429,7 +42660,7 @@ function dropManualMemoization(func) {
                     : instr.value.property.identifier.id;
                 const manualMemo = sidemap.manualMemos.get(id);
                 if (manualMemo != null) {
-                    const memoDetails = extractManualMemoizationArgs(instr, manualMemo.kind, sidemap, errors);
+                    const memoDetails = extractManualMemoizationArgs(instr, manualMemo.kind, sidemap, func.env);
                     if (memoDetails == null) {
                         continue;
                     }
@@ -43437,7 +42668,7 @@ function dropManualMemoization(func) {
                     instr.value = getManualMemoizationReplacement(fnPlace, instr.value.loc, manualMemo.kind);
                     if (isValidationEnabled) {
                         if (!sidemap.functions.has(fnPlace.identifier.id)) {
-                            errors.pushDiagnostic(CompilerDiagnostic.create({
+                            func.env.recordError(CompilerDiagnostic.create({
                                 category: ErrorCategory.UseMemo,
                                 reason: `Expected the first argument to be an inline function expression`,
                                 description: `Expected the first argument to be an inline function expression`,
@@ -43494,7 +42725,6 @@ function dropManualMemoization(func) {
             markInstructionIds(func.body);
         }
     }
-    return errors.asResult();
 }
 function findOptionalPlaces$1(fn) {
     const optionals = new Set();
@@ -44011,6 +43241,3378 @@ function declareTemporary(env, block, result) {
     });
 }
 
+function alignMethodCallScopes(fn) {
+    const scopeMapping = new Map();
+    const mergedScopes = new DisjointSet();
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            const { lvalue, value } = instr;
+            if (value.kind === 'MethodCall') {
+                const lvalueScope = lvalue.identifier.scope;
+                const propertyScope = value.property.identifier.scope;
+                if (lvalueScope !== null) {
+                    if (propertyScope !== null) {
+                        mergedScopes.union([lvalueScope, propertyScope]);
+                    }
+                    else {
+                        scopeMapping.set(value.property.identifier.id, lvalueScope);
+                    }
+                }
+                else if (propertyScope !== null) {
+                    scopeMapping.set(value.property.identifier.id, null);
+                }
+            }
+            else if (value.kind === 'FunctionExpression' ||
+                value.kind === 'ObjectMethod') {
+                alignMethodCallScopes(value.loweredFunc.func);
+            }
+        }
+    }
+    mergedScopes.forEach((scope, root) => {
+        if (scope === root) {
+            return;
+        }
+        root.range.start = makeInstructionId(Math.min(scope.range.start, root.range.start));
+        root.range.end = makeInstructionId(Math.max(scope.range.end, root.range.end));
+    });
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            const mappedScope = scopeMapping.get(instr.lvalue.identifier.id);
+            if (mappedScope !== undefined) {
+                instr.lvalue.identifier.scope = mappedScope;
+            }
+            else if (instr.lvalue.identifier.scope !== null) {
+                const mergedScope = mergedScopes.find(instr.lvalue.identifier.scope);
+                if (mergedScope != null) {
+                    instr.lvalue.identifier.scope = mergedScope;
+                }
+            }
+        }
+    }
+}
+
+function alignReactiveScopesToBlockScopesHIR(fn) {
+    var _a, _b, _c, _d, _e, _f, _g;
+    const activeBlockFallthroughRanges = [];
+    const activeScopes = new Set();
+    const seen = new Set();
+    const valueBlockNodes = new Map();
+    const placeScopes = new Map();
+    function recordPlace(id, place, node) {
+        if (place.identifier.scope !== null) {
+            placeScopes.set(place, place.identifier.scope);
+        }
+        const scope = getPlaceScope(id, place);
+        if (scope == null) {
+            return;
+        }
+        activeScopes.add(scope);
+        node === null || node === void 0 ? void 0 : node.children.push({ kind: 'scope', scope, id });
+        if (seen.has(scope)) {
+            return;
+        }
+        seen.add(scope);
+        if (node != null && node.valueRange !== null) {
+            scope.range.start = makeInstructionId(Math.min(node.valueRange.start, scope.range.start));
+            scope.range.end = makeInstructionId(Math.max(node.valueRange.end, scope.range.end));
+        }
+    }
+    for (const [, block] of fn.body.blocks) {
+        const startingId = (_b = (_a = block.instructions[0]) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : block.terminal.id;
+        retainWhere_Set(activeScopes, scope => scope.range.end > startingId);
+        const top = activeBlockFallthroughRanges.at(-1);
+        if ((top === null || top === void 0 ? void 0 : top.fallthrough) === block.id) {
+            activeBlockFallthroughRanges.pop();
+            for (const scope of activeScopes) {
+                scope.range.start = makeInstructionId(Math.min(scope.range.start, top.range.start));
+            }
+        }
+        const { instructions, terminal } = block;
+        const node = (_c = valueBlockNodes.get(block.id)) !== null && _c !== void 0 ? _c : null;
+        for (const instr of instructions) {
+            for (const lvalue of eachInstructionLValue(instr)) {
+                recordPlace(instr.id, lvalue, node);
+            }
+            for (const operand of eachInstructionValueOperand(instr.value)) {
+                recordPlace(instr.id, operand, node);
+            }
+        }
+        for (const operand of eachTerminalOperand(terminal)) {
+            recordPlace(terminal.id, operand, node);
+        }
+        const fallthrough = terminalFallthrough(terminal);
+        if (fallthrough !== null && terminal.kind !== 'branch') {
+            const fallthroughBlock = fn.body.blocks.get(fallthrough);
+            const nextId = (_e = (_d = fallthroughBlock.instructions[0]) === null || _d === void 0 ? void 0 : _d.id) !== null && _e !== void 0 ? _e : fallthroughBlock.terminal.id;
+            for (const scope of activeScopes) {
+                if (scope.range.end > terminal.id) {
+                    scope.range.end = makeInstructionId(Math.max(scope.range.end, nextId));
+                }
+            }
+            activeBlockFallthroughRanges.push({
+                fallthrough,
+                range: {
+                    start: terminal.id,
+                    end: nextId,
+                },
+            });
+            CompilerError.invariant(!valueBlockNodes.has(fallthrough), {
+                reason: 'Expect hir blocks to have unique fallthroughs',
+                loc: terminal.loc,
+            });
+            if (node != null) {
+                valueBlockNodes.set(fallthrough, node);
+            }
+        }
+        else if (terminal.kind === 'goto') {
+            const start = activeBlockFallthroughRanges.find(range => range.fallthrough === terminal.block);
+            if (start != null && start !== activeBlockFallthroughRanges.at(-1)) {
+                const fallthroughBlock = fn.body.blocks.get(start.fallthrough);
+                const firstId = (_g = (_f = fallthroughBlock.instructions[0]) === null || _f === void 0 ? void 0 : _f.id) !== null && _g !== void 0 ? _g : fallthroughBlock.terminal.id;
+                for (const scope of activeScopes) {
+                    if (scope.range.end <= terminal.id) {
+                        continue;
+                    }
+                    scope.range.start = makeInstructionId(Math.min(start.range.start, scope.range.start));
+                    scope.range.end = makeInstructionId(Math.max(firstId, scope.range.end));
+                }
+            }
+        }
+        mapTerminalSuccessors(terminal, successor => {
+            var _a, _b;
+            if (valueBlockNodes.has(successor)) {
+                return successor;
+            }
+            const successorBlock = fn.body.blocks.get(successor);
+            if (successorBlock.kind === 'block' || successorBlock.kind === 'catch') ;
+            else if (node == null ||
+                terminal.kind === 'ternary' ||
+                terminal.kind === 'logical' ||
+                terminal.kind === 'optional') {
+                let valueRange;
+                if (node == null) {
+                    CompilerError.invariant(fallthrough !== null, {
+                        reason: `Expected a fallthrough for value block`,
+                        loc: terminal.loc,
+                    });
+                    const fallthroughBlock = fn.body.blocks.get(fallthrough);
+                    const nextId = (_b = (_a = fallthroughBlock.instructions[0]) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : fallthroughBlock.terminal.id;
+                    valueRange = {
+                        start: terminal.id,
+                        end: nextId,
+                    };
+                }
+                else {
+                    valueRange = node.valueRange;
+                }
+                const childNode = {
+                    kind: 'node',
+                    id: terminal.id,
+                    children: [],
+                    valueRange,
+                };
+                node === null || node === void 0 ? void 0 : node.children.push(childNode);
+                valueBlockNodes.set(successor, childNode);
+            }
+            else {
+                valueBlockNodes.set(successor, node);
+            }
+            return successor;
+        });
+    }
+}
+
+function flattenReactiveLoopsHIR(fn) {
+    const activeLoops = Array();
+    for (const [, block] of fn.body.blocks) {
+        retainWhere(activeLoops, id => id !== block.id);
+        const { terminal } = block;
+        switch (terminal.kind) {
+            case 'do-while':
+            case 'for':
+            case 'for-in':
+            case 'for-of':
+            case 'while': {
+                activeLoops.push(terminal.fallthrough);
+                break;
+            }
+            case 'scope': {
+                if (activeLoops.length !== 0) {
+                    block.terminal = {
+                        kind: 'pruned-scope',
+                        block: terminal.block,
+                        fallthrough: terminal.fallthrough,
+                        id: terminal.id,
+                        loc: terminal.loc,
+                        scope: terminal.scope,
+                    };
+                }
+                break;
+            }
+            case 'branch':
+            case 'goto':
+            case 'if':
+            case 'label':
+            case 'logical':
+            case 'maybe-throw':
+            case 'optional':
+            case 'pruned-scope':
+            case 'return':
+            case 'sequence':
+            case 'switch':
+            case 'ternary':
+            case 'throw':
+            case 'try':
+            case 'unreachable':
+            case 'unsupported': {
+                break;
+            }
+            default: {
+                assertExhaustive$1(terminal, `Unexpected terminal kind \`${terminal.kind}\``);
+            }
+        }
+    }
+}
+
+function flattenScopesWithHooksOrUseHIR(fn) {
+    const activeScopes = [];
+    const prune = [];
+    for (const [, block] of fn.body.blocks) {
+        retainWhere(activeScopes, current => current.fallthrough !== block.id);
+        for (const instr of block.instructions) {
+            const { value } = instr;
+            switch (value.kind) {
+                case 'MethodCall':
+                case 'CallExpression': {
+                    const callee = value.kind === 'MethodCall' ? value.property : value.callee;
+                    if (getHookKind(fn.env, callee.identifier) != null ||
+                        isUseOperator(callee.identifier)) {
+                        prune.push(...activeScopes.map(entry => entry.block));
+                        activeScopes.length = 0;
+                    }
+                }
+            }
+        }
+        if (block.terminal.kind === 'scope') {
+            activeScopes.push({
+                block: block.id,
+                fallthrough: block.terminal.fallthrough,
+            });
+        }
+    }
+    for (const id of prune) {
+        const block = fn.body.blocks.get(id);
+        const terminal = block.terminal;
+        CompilerError.invariant(terminal.kind === 'scope', {
+            reason: `Expected block to have a scope terminal`,
+            description: `Expected block bb${block.id} to end in a scope terminal`,
+            loc: terminal.loc,
+        });
+        const body = fn.body.blocks.get(terminal.block);
+        if (body.instructions.length === 1 &&
+            body.terminal.kind === 'goto' &&
+            body.terminal.block === terminal.fallthrough) {
+            block.terminal = {
+                kind: 'label',
+                block: terminal.block,
+                fallthrough: terminal.fallthrough,
+                id: terminal.id,
+                loc: terminal.loc,
+            };
+            continue;
+        }
+        block.terminal = {
+            kind: 'pruned-scope',
+            block: terminal.block,
+            fallthrough: terminal.fallthrough,
+            id: terminal.id,
+            loc: terminal.loc,
+            scope: terminal.scope,
+        };
+    }
+}
+
+function pruneAlwaysInvalidatingScopes(fn) {
+    visitReactiveFunction(fn, new Transform(), false);
+}
+class Transform extends ReactiveFunctionTransform {
+    constructor() {
+        super(...arguments);
+        this.alwaysInvalidatingValues = new Set();
+        this.unmemoizedValues = new Set();
+    }
+    transformInstruction(instruction, withinScope) {
+        this.visitInstruction(instruction, withinScope);
+        const { lvalue, value } = instruction;
+        switch (value.kind) {
+            case 'ArrayExpression':
+            case 'ObjectExpression':
+            case 'JsxExpression':
+            case 'JsxFragment':
+            case 'NewExpression': {
+                if (lvalue !== null) {
+                    this.alwaysInvalidatingValues.add(lvalue.identifier);
+                    if (!withinScope) {
+                        this.unmemoizedValues.add(lvalue.identifier);
+                    }
+                }
+                break;
+            }
+            case 'StoreLocal': {
+                if (this.alwaysInvalidatingValues.has(value.value.identifier)) {
+                    this.alwaysInvalidatingValues.add(value.lvalue.place.identifier);
+                }
+                if (this.unmemoizedValues.has(value.value.identifier)) {
+                    this.unmemoizedValues.add(value.lvalue.place.identifier);
+                }
+                break;
+            }
+            case 'LoadLocal': {
+                if (lvalue !== null &&
+                    this.alwaysInvalidatingValues.has(value.place.identifier)) {
+                    this.alwaysInvalidatingValues.add(lvalue.identifier);
+                }
+                if (lvalue !== null &&
+                    this.unmemoizedValues.has(value.place.identifier)) {
+                    this.unmemoizedValues.add(lvalue.identifier);
+                }
+                break;
+            }
+        }
+        return { kind: 'keep' };
+    }
+    transformScope(scopeBlock, _withinScope) {
+        this.visitScope(scopeBlock, true);
+        for (const dep of scopeBlock.scope.dependencies) {
+            if (this.unmemoizedValues.has(dep.identifier)) {
+                for (const [_, decl] of scopeBlock.scope.declarations) {
+                    if (this.alwaysInvalidatingValues.has(decl.identifier)) {
+                        this.unmemoizedValues.add(decl.identifier);
+                    }
+                }
+                for (const identifier of scopeBlock.scope.reassignments) {
+                    if (this.alwaysInvalidatingValues.has(identifier)) {
+                        this.unmemoizedValues.add(identifier);
+                    }
+                }
+                return {
+                    kind: 'replace',
+                    value: {
+                        kind: 'pruned-scope',
+                        scope: scopeBlock.scope,
+                        instructions: scopeBlock.instructions,
+                    },
+                };
+            }
+        }
+        return { kind: 'keep' };
+    }
+}
+
+function isPrimitiveBinaryOp(op) {
+    switch (op) {
+        case '+':
+        case '-':
+        case '/':
+        case '%':
+        case '*':
+        case '**':
+        case '&':
+        case '|':
+        case '>>':
+        case '<<':
+        case '^':
+        case '>':
+        case '<':
+        case '>=':
+        case '<=':
+        case '|>':
+            return true;
+        default:
+            return false;
+    }
+}
+function inferTypes(func) {
+    const unifier = new Unifier(func.env);
+    for (const e of generate(func)) {
+        unifier.unify(e.left, e.right);
+    }
+    apply(func, unifier);
+}
+function apply(func, unifier) {
+    for (const [_, block] of func.body.blocks) {
+        for (const phi of block.phis) {
+            phi.place.identifier.type = unifier.get(phi.place.identifier.type);
+        }
+        for (const instr of block.instructions) {
+            for (const operand of eachInstructionLValue(instr)) {
+                operand.identifier.type = unifier.get(operand.identifier.type);
+            }
+            for (const place of eachInstructionOperand(instr)) {
+                place.identifier.type = unifier.get(place.identifier.type);
+            }
+            const { lvalue, value } = instr;
+            lvalue.identifier.type = unifier.get(lvalue.identifier.type);
+            if (value.kind === 'FunctionExpression' ||
+                value.kind === 'ObjectMethod') {
+                apply(value.loweredFunc.func, unifier);
+            }
+        }
+    }
+    const returns = func.returns.identifier;
+    returns.type = unifier.get(returns.type);
+}
+function equation(left, right) {
+    return {
+        left,
+        right,
+    };
+}
+function* generate(func) {
+    if (func.fnType === 'Component') {
+        const [props, ref] = func.params;
+        if (props && props.kind === 'Identifier') {
+            yield equation(props.identifier.type, {
+                kind: 'Object',
+                shapeId: BuiltInPropsId,
+            });
+        }
+        if (ref && ref.kind === 'Identifier') {
+            yield equation(ref.identifier.type, {
+                kind: 'Object',
+                shapeId: BuiltInUseRefId,
+            });
+        }
+    }
+    const names = new Map();
+    const returnTypes = [];
+    for (const [_, block] of func.body.blocks) {
+        for (const phi of block.phis) {
+            yield equation(phi.place.identifier.type, {
+                kind: 'Phi',
+                operands: [...phi.operands.values()].map(id => id.identifier.type),
+            });
+        }
+        for (const instr of block.instructions) {
+            yield* generateInstructionTypes(func.env, names, instr);
+        }
+        const terminal = block.terminal;
+        if (terminal.kind === 'return') {
+            returnTypes.push(terminal.value.identifier.type);
+        }
+    }
+    if (returnTypes.length > 1) {
+        yield equation(func.returns.identifier.type, {
+            kind: 'Phi',
+            operands: returnTypes,
+        });
+    }
+    else if (returnTypes.length === 1) {
+        yield equation(func.returns.identifier.type, returnTypes[0]);
+    }
+}
+function setName(names, id, name) {
+    var _a;
+    if (((_a = name.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named') {
+        names.set(id, name.name.value);
+    }
+}
+function getName(names, id) {
+    var _a;
+    return (_a = names.get(id)) !== null && _a !== void 0 ? _a : '';
+}
+function* generateInstructionTypes(env, names, instr) {
+    const { lvalue, value } = instr;
+    const left = lvalue.identifier.type;
+    switch (value.kind) {
+        case 'TemplateLiteral':
+        case 'JSXText':
+        case 'Primitive': {
+            yield equation(left, { kind: 'Primitive' });
+            break;
+        }
+        case 'UnaryExpression': {
+            yield equation(left, { kind: 'Primitive' });
+            break;
+        }
+        case 'LoadLocal': {
+            setName(names, lvalue.identifier.id, value.place.identifier);
+            yield equation(left, value.place.identifier.type);
+            break;
+        }
+        case 'DeclareContext':
+        case 'LoadContext': {
+            break;
+        }
+        case 'StoreContext': {
+            if (value.lvalue.kind === InstructionKind.Const) {
+                yield equation(value.lvalue.place.identifier.type, value.value.identifier.type);
+            }
+            break;
+        }
+        case 'StoreLocal': {
+            yield equation(left, value.value.identifier.type);
+            yield equation(value.lvalue.place.identifier.type, value.value.identifier.type);
+            break;
+        }
+        case 'StoreGlobal': {
+            yield equation(left, value.value.identifier.type);
+            break;
+        }
+        case 'BinaryExpression': {
+            if (isPrimitiveBinaryOp(value.operator)) {
+                yield equation(value.left.identifier.type, { kind: 'Primitive' });
+                yield equation(value.right.identifier.type, { kind: 'Primitive' });
+            }
+            yield equation(left, { kind: 'Primitive' });
+            break;
+        }
+        case 'PostfixUpdate':
+        case 'PrefixUpdate': {
+            yield equation(value.value.identifier.type, { kind: 'Primitive' });
+            yield equation(value.lvalue.identifier.type, { kind: 'Primitive' });
+            yield equation(left, { kind: 'Primitive' });
+            break;
+        }
+        case 'LoadGlobal': {
+            const globalType = env.getGlobalDeclaration(value.binding, value.loc);
+            if (globalType) {
+                yield equation(left, globalType);
+            }
+            break;
+        }
+        case 'CallExpression': {
+            const returnType = makeType();
+            let shapeId = null;
+            if (env.config.enableTreatSetIdentifiersAsStateSetters) {
+                const name = getName(names, value.callee.identifier.id);
+                if (name.startsWith('set')) {
+                    shapeId = BuiltInSetStateId;
+                }
+            }
+            yield equation(value.callee.identifier.type, {
+                kind: 'Function',
+                shapeId,
+                return: returnType,
+                isConstructor: false,
+            });
+            yield equation(left, returnType);
+            break;
+        }
+        case 'TaggedTemplateExpression': {
+            const returnType = makeType();
+            yield equation(value.tag.identifier.type, {
+                kind: 'Function',
+                shapeId: null,
+                return: returnType,
+                isConstructor: false,
+            });
+            yield equation(left, returnType);
+            break;
+        }
+        case 'ObjectExpression': {
+            for (const property of value.properties) {
+                if (property.kind === 'ObjectProperty' &&
+                    property.key.kind === 'computed') {
+                    yield equation(property.key.name.identifier.type, {
+                        kind: 'Primitive',
+                    });
+                }
+            }
+            yield equation(left, { kind: 'Object', shapeId: BuiltInObjectId });
+            break;
+        }
+        case 'ArrayExpression': {
+            yield equation(left, { kind: 'Object', shapeId: BuiltInArrayId });
+            break;
+        }
+        case 'PropertyLoad': {
+            yield equation(left, {
+                kind: 'Property',
+                objectType: value.object.identifier.type,
+                objectName: getName(names, value.object.identifier.id),
+                propertyName: {
+                    kind: 'literal',
+                    value: value.property,
+                },
+            });
+            break;
+        }
+        case 'ComputedLoad': {
+            yield equation(left, {
+                kind: 'Property',
+                objectType: value.object.identifier.type,
+                objectName: getName(names, value.object.identifier.id),
+                propertyName: {
+                    kind: 'computed',
+                    value: value.property.identifier.type,
+                },
+            });
+            break;
+        }
+        case 'MethodCall': {
+            const returnType = makeType();
+            yield equation(value.property.identifier.type, {
+                kind: 'Function',
+                return: returnType,
+                shapeId: null,
+                isConstructor: false,
+            });
+            yield equation(left, returnType);
+            break;
+        }
+        case 'Destructure': {
+            const pattern = value.lvalue.pattern;
+            if (pattern.kind === 'ArrayPattern') {
+                for (let i = 0; i < pattern.items.length; i++) {
+                    const item = pattern.items[i];
+                    if (item.kind === 'Identifier') {
+                        const propertyName = String(i);
+                        yield equation(item.identifier.type, {
+                            kind: 'Property',
+                            objectType: value.value.identifier.type,
+                            objectName: getName(names, value.value.identifier.id),
+                            propertyName: {
+                                kind: 'literal',
+                                value: makePropertyLiteral(propertyName),
+                            },
+                        });
+                    }
+                    else if (item.kind === 'Spread') {
+                        yield equation(item.place.identifier.type, {
+                            kind: 'Object',
+                            shapeId: BuiltInArrayId,
+                        });
+                    }
+                    else {
+                        continue;
+                    }
+                }
+            }
+            else {
+                for (const property of pattern.properties) {
+                    if (property.kind === 'ObjectProperty') {
+                        if (property.key.kind === 'identifier' ||
+                            property.key.kind === 'string') {
+                            yield equation(property.place.identifier.type, {
+                                kind: 'Property',
+                                objectType: value.value.identifier.type,
+                                objectName: getName(names, value.value.identifier.id),
+                                propertyName: {
+                                    kind: 'literal',
+                                    value: makePropertyLiteral(property.key.name),
+                                },
+                            });
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        case 'TypeCastExpression': {
+            yield equation(left, value.value.identifier.type);
+            break;
+        }
+        case 'PropertyDelete':
+        case 'ComputedDelete': {
+            yield equation(left, { kind: 'Primitive' });
+            break;
+        }
+        case 'FunctionExpression': {
+            yield* generate(value.loweredFunc.func);
+            yield equation(left, {
+                kind: 'Function',
+                shapeId: BuiltInFunctionId,
+                return: value.loweredFunc.func.returns.identifier.type,
+                isConstructor: false,
+            });
+            break;
+        }
+        case 'NextPropertyOf': {
+            yield equation(left, { kind: 'Primitive' });
+            break;
+        }
+        case 'ObjectMethod': {
+            yield* generate(value.loweredFunc.func);
+            yield equation(left, { kind: 'ObjectMethod' });
+            break;
+        }
+        case 'JsxExpression':
+        case 'JsxFragment': {
+            if (env.config.enableTreatRefLikeIdentifiersAsRefs) {
+                if (value.kind === 'JsxExpression') {
+                    for (const prop of value.props) {
+                        if (prop.kind === 'JsxAttribute' && prop.name === 'ref') {
+                            yield equation(prop.place.identifier.type, {
+                                kind: 'Object',
+                                shapeId: BuiltInUseRefId,
+                            });
+                        }
+                    }
+                }
+            }
+            yield equation(left, { kind: 'Object', shapeId: BuiltInJsxId });
+            break;
+        }
+        case 'NewExpression': {
+            const returnType = makeType();
+            yield equation(value.callee.identifier.type, {
+                kind: 'Function',
+                return: returnType,
+                shapeId: null,
+                isConstructor: true,
+            });
+            yield equation(left, returnType);
+            break;
+        }
+        case 'PropertyStore': {
+            yield equation(makeType(), {
+                kind: 'Property',
+                objectType: value.object.identifier.type,
+                objectName: getName(names, value.object.identifier.id),
+                propertyName: {
+                    kind: 'literal',
+                    value: value.property,
+                },
+            });
+            break;
+        }
+        case 'DeclareLocal':
+        case 'RegExpLiteral':
+        case 'MetaProperty':
+        case 'ComputedStore':
+        case 'Await':
+        case 'GetIterator':
+        case 'IteratorNext':
+        case 'UnsupportedNode':
+        case 'Debugger':
+        case 'FinishMemoize':
+        case 'StartMemoize': {
+            break;
+        }
+        default:
+            assertExhaustive$1(value, `Unhandled instruction value kind: ${value.kind}`);
+    }
+}
+class Unifier {
+    constructor(env) {
+        this.substitutions = new Map();
+        this.env = env;
+    }
+    unify(tA, tB) {
+        if (tB.kind === 'Property') {
+            if (this.env.config.enableTreatRefLikeIdentifiersAsRefs &&
+                isRefLikeName(tB)) {
+                this.unify(tB.objectType, {
+                    kind: 'Object',
+                    shapeId: BuiltInUseRefId,
+                });
+                this.unify(tA, {
+                    kind: 'Object',
+                    shapeId: BuiltInRefValueId,
+                });
+                return;
+            }
+            const objectType = this.get(tB.objectType);
+            const propertyType = tB.propertyName.kind === 'literal'
+                ? this.env.getPropertyType(objectType, tB.propertyName.value)
+                : this.env.getFallthroughPropertyType(objectType, tB.propertyName.value);
+            if (propertyType !== null) {
+                this.unify(tA, propertyType);
+            }
+            return;
+        }
+        if (typeEquals(tA, tB)) {
+            return;
+        }
+        if (tA.kind === 'Type') {
+            this.bindVariableTo(tA, tB);
+            return;
+        }
+        if (tB.kind === 'Type') {
+            this.bindVariableTo(tB, tA);
+            return;
+        }
+        if (tB.kind === 'Function' &&
+            tA.kind === 'Function' &&
+            tA.isConstructor === tB.isConstructor) {
+            this.unify(tA.return, tB.return);
+            return;
+        }
+    }
+    bindVariableTo(v, type) {
+        if (type.kind === 'Poly') {
+            return;
+        }
+        if (this.substitutions.has(v.id)) {
+            this.unify(this.substitutions.get(v.id), type);
+            return;
+        }
+        if (type.kind === 'Type' && this.substitutions.has(type.id)) {
+            this.unify(v, this.substitutions.get(type.id));
+            return;
+        }
+        if (type.kind === 'Phi') {
+            CompilerError.invariant(type.operands.length > 0, {
+                reason: 'there should be at least one operand',
+                loc: GeneratedSource,
+            });
+            let candidateType = null;
+            for (const operand of type.operands) {
+                const resolved = this.get(operand);
+                if (candidateType === null) {
+                    candidateType = resolved;
+                }
+                else if (!typeEquals(resolved, candidateType)) {
+                    const unionType = tryUnionTypes(resolved, candidateType);
+                    if (unionType === null) {
+                        candidateType = null;
+                        break;
+                    }
+                    else {
+                        candidateType = unionType;
+                    }
+                }
+            }
+            if (candidateType !== null) {
+                this.unify(v, candidateType);
+                return;
+            }
+        }
+        if (this.occursCheck(v, type)) {
+            const resolvedType = this.tryResolveType(v, type);
+            if (resolvedType !== null) {
+                this.substitutions.set(v.id, resolvedType);
+                return;
+            }
+            throw new Error('cycle detected');
+        }
+        this.substitutions.set(v.id, type);
+    }
+    tryResolveType(v, type) {
+        switch (type.kind) {
+            case 'Phi': {
+                const operands = [];
+                for (const operand of type.operands) {
+                    if (operand.kind === 'Type' && operand.id === v.id) {
+                        continue;
+                    }
+                    const resolved = this.tryResolveType(v, operand);
+                    if (resolved === null) {
+                        return null;
+                    }
+                    operands.push(resolved);
+                }
+                return { kind: 'Phi', operands };
+            }
+            case 'Type': {
+                const substitution = this.get(type);
+                if (substitution !== type) {
+                    const resolved = this.tryResolveType(v, substitution);
+                    if (resolved !== null) {
+                        this.substitutions.set(type.id, resolved);
+                    }
+                    return resolved;
+                }
+                return type;
+            }
+            case 'Property': {
+                const objectType = this.tryResolveType(v, this.get(type.objectType));
+                if (objectType === null) {
+                    return null;
+                }
+                return {
+                    kind: 'Property',
+                    objectName: type.objectName,
+                    objectType,
+                    propertyName: type.propertyName,
+                };
+            }
+            case 'Function': {
+                const returnType = this.tryResolveType(v, this.get(type.return));
+                if (returnType === null) {
+                    return null;
+                }
+                return {
+                    kind: 'Function',
+                    return: returnType,
+                    shapeId: type.shapeId,
+                    isConstructor: type.isConstructor,
+                };
+            }
+            case 'ObjectMethod':
+            case 'Object':
+            case 'Primitive':
+            case 'Poly': {
+                return type;
+            }
+            default: {
+                assertExhaustive$1(type, `Unexpected type kind '${type.kind}'`);
+            }
+        }
+    }
+    occursCheck(v, type) {
+        if (typeEquals(v, type))
+            return true;
+        if (type.kind === 'Type' && this.substitutions.has(type.id)) {
+            return this.occursCheck(v, this.substitutions.get(type.id));
+        }
+        if (type.kind === 'Phi') {
+            return type.operands.some(o => this.occursCheck(v, o));
+        }
+        if (type.kind === 'Function') {
+            return this.occursCheck(v, type.return);
+        }
+        return false;
+    }
+    get(type) {
+        if (type.kind === 'Type') {
+            if (this.substitutions.has(type.id)) {
+                return this.get(this.substitutions.get(type.id));
+            }
+        }
+        if (type.kind === 'Phi') {
+            return { kind: 'Phi', operands: type.operands.map(o => this.get(o)) };
+        }
+        if (type.kind === 'Function') {
+            return {
+                kind: 'Function',
+                isConstructor: type.isConstructor,
+                shapeId: type.shapeId,
+                return: this.get(type.return),
+            };
+        }
+        return type;
+    }
+}
+const RefLikeNameRE = /^(?:[a-zA-Z$_][a-zA-Z$_0-9]*)Ref$|^ref$/;
+function isRefLikeName(t) {
+    return (t.propertyName.kind === 'literal' &&
+        RefLikeNameRE.test(t.objectName) &&
+        t.propertyName.value === 'current');
+}
+function tryUnionTypes(ty1, ty2) {
+    let readonlyType;
+    let otherType;
+    if (ty1.kind === 'Object' && ty1.shapeId === BuiltInMixedReadonlyId) {
+        readonlyType = ty1;
+        otherType = ty2;
+    }
+    else if (ty2.kind === 'Object' && ty2.shapeId === BuiltInMixedReadonlyId) {
+        readonlyType = ty2;
+        otherType = ty1;
+    }
+    else {
+        return null;
+    }
+    if (otherType.kind === 'Primitive') {
+        return readonlyType;
+    }
+    else if (otherType.kind === 'Object' &&
+        otherType.shapeId === BuiltInArrayId) {
+        return otherType;
+    }
+    return null;
+}
+
+function validateContextVariableLValues(fn) {
+    const identifierKinds = new Map();
+    validateContextVariableLValuesImpl(fn, identifierKinds, fn.env);
+}
+function validateContextVariableLValuesImpl(fn, identifierKinds, env) {
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            const { value } = instr;
+            switch (value.kind) {
+                case 'DeclareContext':
+                case 'StoreContext': {
+                    visit(identifierKinds, value.lvalue.place, 'context', env);
+                    break;
+                }
+                case 'LoadContext': {
+                    visit(identifierKinds, value.place, 'context', env);
+                    break;
+                }
+                case 'StoreLocal':
+                case 'DeclareLocal': {
+                    visit(identifierKinds, value.lvalue.place, 'local', env);
+                    break;
+                }
+                case 'LoadLocal': {
+                    visit(identifierKinds, value.place, 'local', env);
+                    break;
+                }
+                case 'PostfixUpdate':
+                case 'PrefixUpdate': {
+                    visit(identifierKinds, value.lvalue, 'local', env);
+                    break;
+                }
+                case 'Destructure': {
+                    for (const lvalue of eachPatternOperand(value.lvalue.pattern)) {
+                        visit(identifierKinds, lvalue, 'destructure', env);
+                    }
+                    break;
+                }
+                case 'ObjectMethod':
+                case 'FunctionExpression': {
+                    validateContextVariableLValuesImpl(value.loweredFunc.func, identifierKinds, env);
+                    break;
+                }
+                default: {
+                    for (const _ of eachInstructionValueLValue(value)) {
+                        fn.env.recordError(CompilerDiagnostic.create({
+                            category: ErrorCategory.Todo,
+                            reason: 'ValidateContextVariableLValues: unhandled instruction variant',
+                            description: `Handle '${value.kind} lvalues`,
+                        }).withDetails({
+                            kind: 'error',
+                            loc: value.loc,
+                            message: null,
+                        }));
+                    }
+                }
+            }
+        }
+    }
+}
+function visit(identifiers, place, kind, env) {
+    const prev = identifiers.get(place.identifier.id);
+    if (prev !== undefined) {
+        const wasContext = prev.kind === 'context';
+        const isContext = kind === 'context';
+        if (wasContext !== isContext) {
+            if (prev.kind === 'destructure' || kind === 'destructure') {
+                env.recordError(CompilerDiagnostic.create({
+                    category: ErrorCategory.Todo,
+                    reason: `Support destructuring of context variables`,
+                    description: null,
+                }).withDetails({
+                    kind: 'error',
+                    loc: kind === 'destructure' ? place.loc : prev.place.loc,
+                    message: null,
+                }));
+                return;
+            }
+            CompilerError.invariant(false, {
+                reason: 'Expected all references to a variable to be consistently local or context references',
+                description: `Identifier ${printPlace(place)} is referenced as a ${kind} variable, but was previously referenced as a ${prev.kind} variable`,
+                message: `this is ${prev.kind}`,
+                loc: place.loc,
+            });
+        }
+    }
+    identifiers.set(place.identifier.id, { place, kind });
+}
+
+function computeUnconditionalBlocks(fn) {
+    const unconditionalBlocks = new Set();
+    const dominators = computePostDominatorTree(fn, {
+        includeThrowsAsExitNode: false,
+    });
+    const exit = dominators.exit;
+    let current = fn.body.entry;
+    while (current !== null && current !== exit) {
+        CompilerError.invariant(!unconditionalBlocks.has(current), {
+            reason: 'Internal error: non-terminating loop in ComputeUnconditionalBlocks',
+            loc: GeneratedSource,
+        });
+        unconditionalBlocks.add(current);
+        current = dominators.get(current);
+    }
+    return unconditionalBlocks;
+}
+
+var Kind;
+(function (Kind) {
+    Kind["Error"] = "Error";
+    Kind["KnownHook"] = "KnownHook";
+    Kind["PotentialHook"] = "PotentialHook";
+    Kind["Global"] = "Global";
+    Kind["Local"] = "Local";
+})(Kind || (Kind = {}));
+function joinKinds(a, b) {
+    if (a === Kind.Error || b === Kind.Error) {
+        return Kind.Error;
+    }
+    else if (a === Kind.KnownHook || b === Kind.KnownHook) {
+        return Kind.KnownHook;
+    }
+    else if (a === Kind.PotentialHook || b === Kind.PotentialHook) {
+        return Kind.PotentialHook;
+    }
+    else if (a === Kind.Global || b === Kind.Global) {
+        return Kind.Global;
+    }
+    else {
+        return Kind.Local;
+    }
+}
+function validateHooksUsage(fn) {
+    const unconditionalBlocks = computeUnconditionalBlocks(fn);
+    const errorsByPlace = new Map();
+    function trackError(loc, errorDetail) {
+        if (typeof loc === 'symbol') {
+            fn.env.recordError(errorDetail);
+        }
+        else {
+            errorsByPlace.set(loc, errorDetail);
+        }
+    }
+    function recordConditionalHookError(place) {
+        setKind(place, Kind.Error);
+        const reason = 'Hooks must always be called in a consistent order, and may not be called conditionally. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)';
+        const previousError = typeof place.loc !== 'symbol' ? errorsByPlace.get(place.loc) : undefined;
+        if (previousError === undefined || previousError.reason !== reason) {
+            trackError(place.loc, new CompilerErrorDetail({
+                category: ErrorCategory.Hooks,
+                description: null,
+                reason,
+                loc: place.loc,
+                suggestions: null,
+            }));
+        }
+    }
+    function recordInvalidHookUsageError(place) {
+        const previousError = typeof place.loc !== 'symbol' ? errorsByPlace.get(place.loc) : undefined;
+        if (previousError === undefined) {
+            trackError(place.loc, new CompilerErrorDetail({
+                category: ErrorCategory.Hooks,
+                description: null,
+                reason: 'Hooks may not be referenced as normal values, they must be called. See https://react.dev/reference/rules/react-calls-components-and-hooks#never-pass-around-hooks-as-regular-values',
+                loc: place.loc,
+                suggestions: null,
+            }));
+        }
+    }
+    function recordDynamicHookUsageError(place) {
+        const previousError = typeof place.loc !== 'symbol' ? errorsByPlace.get(place.loc) : undefined;
+        if (previousError === undefined) {
+            trackError(place.loc, new CompilerErrorDetail({
+                category: ErrorCategory.Hooks,
+                description: null,
+                reason: 'Hooks must be the same function on every render, but this value may change over time to a different function. See https://react.dev/reference/rules/react-calls-components-and-hooks#dont-dynamically-use-hooks',
+                loc: place.loc,
+                suggestions: null,
+            }));
+        }
+    }
+    const valueKinds = new Map();
+    function getKindForPlace(place) {
+        const knownKind = valueKinds.get(place.identifier.id);
+        if (place.identifier.name !== null &&
+            isHookName$2(place.identifier.name.value)) {
+            return joinKinds(knownKind !== null && knownKind !== void 0 ? knownKind : Kind.Local, Kind.PotentialHook);
+        }
+        else {
+            return knownKind !== null && knownKind !== void 0 ? knownKind : Kind.Local;
+        }
+    }
+    function visitPlace(place) {
+        const kind = valueKinds.get(place.identifier.id);
+        if (kind === Kind.KnownHook) {
+            recordInvalidHookUsageError(place);
+        }
+    }
+    function setKind(place, kind) {
+        valueKinds.set(place.identifier.id, kind);
+    }
+    for (const param of fn.params) {
+        const place = param.kind === 'Identifier' ? param : param.place;
+        const kind = getKindForPlace(place);
+        setKind(place, kind);
+    }
+    for (const [, block] of fn.body.blocks) {
+        for (const phi of block.phis) {
+            let kind = phi.place.identifier.name !== null &&
+                isHookName$2(phi.place.identifier.name.value)
+                ? Kind.PotentialHook
+                : Kind.Local;
+            for (const [, operand] of phi.operands) {
+                const operandKind = valueKinds.get(operand.identifier.id);
+                if (operandKind !== undefined) {
+                    kind = joinKinds(kind, operandKind);
+                }
+            }
+            valueKinds.set(phi.place.identifier.id, kind);
+        }
+        for (const instr of block.instructions) {
+            switch (instr.value.kind) {
+                case 'LoadGlobal': {
+                    if (getHookKind(fn.env, instr.lvalue.identifier) != null) {
+                        setKind(instr.lvalue, Kind.KnownHook);
+                    }
+                    else {
+                        setKind(instr.lvalue, Kind.Global);
+                    }
+                    break;
+                }
+                case 'LoadContext':
+                case 'LoadLocal': {
+                    visitPlace(instr.value.place);
+                    const kind = getKindForPlace(instr.value.place);
+                    setKind(instr.lvalue, kind);
+                    break;
+                }
+                case 'StoreLocal':
+                case 'StoreContext': {
+                    visitPlace(instr.value.value);
+                    const kind = joinKinds(getKindForPlace(instr.value.value), getKindForPlace(instr.value.lvalue.place));
+                    setKind(instr.value.lvalue.place, kind);
+                    setKind(instr.lvalue, kind);
+                    break;
+                }
+                case 'ComputedLoad': {
+                    visitPlace(instr.value.object);
+                    const kind = getKindForPlace(instr.value.object);
+                    setKind(instr.lvalue, joinKinds(getKindForPlace(instr.lvalue), kind));
+                    break;
+                }
+                case 'PropertyLoad': {
+                    const objectKind = getKindForPlace(instr.value.object);
+                    const isHookProperty = typeof instr.value.property === 'string' &&
+                        isHookName$2(instr.value.property);
+                    let kind;
+                    switch (objectKind) {
+                        case Kind.Error: {
+                            kind = Kind.Error;
+                            break;
+                        }
+                        case Kind.KnownHook: {
+                            kind = isHookProperty ? Kind.KnownHook : Kind.Local;
+                            break;
+                        }
+                        case Kind.PotentialHook: {
+                            kind = Kind.PotentialHook;
+                            break;
+                        }
+                        case Kind.Global: {
+                            kind = isHookProperty ? Kind.KnownHook : Kind.Global;
+                            break;
+                        }
+                        case Kind.Local: {
+                            kind = isHookProperty ? Kind.PotentialHook : Kind.Local;
+                            break;
+                        }
+                        default: {
+                            assertExhaustive$1(objectKind, `Unexpected kind \`${objectKind}\``);
+                        }
+                    }
+                    setKind(instr.lvalue, kind);
+                    break;
+                }
+                case 'CallExpression': {
+                    const calleeKind = getKindForPlace(instr.value.callee);
+                    const isHookCallee = calleeKind === Kind.KnownHook || calleeKind === Kind.PotentialHook;
+                    if (isHookCallee && !unconditionalBlocks.has(block.id)) {
+                        recordConditionalHookError(instr.value.callee);
+                    }
+                    else if (calleeKind === Kind.PotentialHook) {
+                        recordDynamicHookUsageError(instr.value.callee);
+                    }
+                    for (const operand of eachInstructionOperand(instr)) {
+                        if (operand === instr.value.callee) {
+                            continue;
+                        }
+                        visitPlace(operand);
+                    }
+                    break;
+                }
+                case 'MethodCall': {
+                    const calleeKind = getKindForPlace(instr.value.property);
+                    const isHookCallee = calleeKind === Kind.KnownHook || calleeKind === Kind.PotentialHook;
+                    if (isHookCallee && !unconditionalBlocks.has(block.id)) {
+                        recordConditionalHookError(instr.value.property);
+                    }
+                    else if (calleeKind === Kind.PotentialHook) {
+                        recordDynamicHookUsageError(instr.value.property);
+                    }
+                    for (const operand of eachInstructionOperand(instr)) {
+                        if (operand === instr.value.property) {
+                            continue;
+                        }
+                        visitPlace(operand);
+                    }
+                    break;
+                }
+                case 'Destructure': {
+                    visitPlace(instr.value.value);
+                    const objectKind = getKindForPlace(instr.value.value);
+                    for (const lvalue of eachInstructionLValue(instr)) {
+                        const isHookProperty = lvalue.identifier.name !== null &&
+                            isHookName$2(lvalue.identifier.name.value);
+                        let kind;
+                        switch (objectKind) {
+                            case Kind.Error: {
+                                kind = Kind.Error;
+                                break;
+                            }
+                            case Kind.KnownHook: {
+                                kind = Kind.KnownHook;
+                                break;
+                            }
+                            case Kind.PotentialHook: {
+                                kind = Kind.PotentialHook;
+                                break;
+                            }
+                            case Kind.Global: {
+                                kind = isHookProperty ? Kind.KnownHook : Kind.Global;
+                                break;
+                            }
+                            case Kind.Local: {
+                                kind = isHookProperty ? Kind.PotentialHook : Kind.Local;
+                                break;
+                            }
+                            default: {
+                                assertExhaustive$1(objectKind, `Unexpected kind \`${objectKind}\``);
+                            }
+                        }
+                        setKind(lvalue, kind);
+                    }
+                    break;
+                }
+                case 'ObjectMethod':
+                case 'FunctionExpression': {
+                    visitFunctionExpression(fn.env, instr.value.loweredFunc.func);
+                    break;
+                }
+                default: {
+                    for (const operand of eachInstructionOperand(instr)) {
+                        visitPlace(operand);
+                    }
+                    for (const lvalue of eachInstructionLValue(instr)) {
+                        const kind = getKindForPlace(lvalue);
+                        setKind(lvalue, kind);
+                    }
+                }
+            }
+        }
+        for (const operand of eachTerminalOperand(block.terminal)) {
+            visitPlace(operand);
+        }
+    }
+    for (const [, error] of errorsByPlace) {
+        fn.env.recordError(error);
+    }
+}
+function visitFunctionExpression(env, fn) {
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            switch (instr.value.kind) {
+                case 'ObjectMethod':
+                case 'FunctionExpression': {
+                    visitFunctionExpression(env, instr.value.loweredFunc.func);
+                    break;
+                }
+                case 'MethodCall':
+                case 'CallExpression': {
+                    const callee = instr.value.kind === 'CallExpression'
+                        ? instr.value.callee
+                        : instr.value.property;
+                    const hookKind = getHookKind(fn.env, callee.identifier);
+                    if (hookKind != null) {
+                        env.recordError(new CompilerErrorDetail({
+                            category: ErrorCategory.Hooks,
+                            reason: 'Hooks must be called at the top level in the body of a function component or custom hook, and may not be called within function expressions. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)',
+                            loc: callee.loc,
+                            description: `Cannot call ${hookKind === 'Custom' ? 'hook' : hookKind} within a function expression`,
+                            suggestions: null,
+                        }));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+function validateNoCapitalizedCalls(fn) {
+    var _a;
+    const envConfig = fn.env.config;
+    const ALLOW_LIST = new Set([
+        ...DEFAULT_GLOBALS.keys(),
+        ...((_a = envConfig.validateNoCapitalizedCalls) !== null && _a !== void 0 ? _a : []),
+    ]);
+    const isAllowed = (name) => {
+        return ALLOW_LIST.has(name);
+    };
+    const capitalLoadGlobals = new Map();
+    const capitalizedProperties = new Map();
+    const reason = 'Capitalized functions are reserved for components, which must be invoked with JSX. If this is a component, render it with JSX. Otherwise, ensure that it has no hook calls and rename it to begin with a lowercase letter. Alternatively, if you know for a fact that this function is not a component, you can allowlist it via the compiler config';
+    for (const [, block] of fn.body.blocks) {
+        for (const { lvalue, value } of block.instructions) {
+            switch (value.kind) {
+                case 'LoadGlobal': {
+                    if (value.binding.name != '' &&
+                        /^[A-Z]/.test(value.binding.name) &&
+                        !(value.binding.name.toUpperCase() === value.binding.name) &&
+                        !isAllowed(value.binding.name)) {
+                        capitalLoadGlobals.set(lvalue.identifier.id, value.binding.name);
+                    }
+                    break;
+                }
+                case 'CallExpression': {
+                    const calleeIdentifier = value.callee.identifier.id;
+                    const calleeName = capitalLoadGlobals.get(calleeIdentifier);
+                    if (calleeName != null) {
+                        fn.env.recordError(new CompilerErrorDetail({
+                            category: ErrorCategory.CapitalizedCalls,
+                            reason,
+                            description: `${calleeName} may be a component`,
+                            loc: value.loc,
+                            suggestions: null,
+                        }));
+                        continue;
+                    }
+                    break;
+                }
+                case 'PropertyLoad': {
+                    if (typeof value.property === 'string' &&
+                        /^[A-Z]/.test(value.property)) {
+                        capitalizedProperties.set(lvalue.identifier.id, value.property);
+                    }
+                    break;
+                }
+                case 'MethodCall': {
+                    const propertyIdentifier = value.property.identifier.id;
+                    const propertyName = capitalizedProperties.get(propertyIdentifier);
+                    if (propertyName != null) {
+                        fn.env.recordError(new CompilerErrorDetail({
+                            category: ErrorCategory.CapitalizedCalls,
+                            reason,
+                            description: `${propertyName} may be a component`,
+                            loc: value.loc,
+                            suggestions: null,
+                        }));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+var _Env_changed, _Env_data, _Env_temporaries;
+function makeRefId(id) {
+    CompilerError.invariant(id >= 0 && Number.isInteger(id), {
+        reason: 'Expected identifier id to be a non-negative integer',
+        loc: GeneratedSource,
+    });
+    return id;
+}
+let _refId = 0;
+function nextRefId() {
+    return makeRefId(_refId++);
+}
+class Env {
+    constructor() {
+        _Env_changed.set(this, false);
+        _Env_data.set(this, new Map());
+        _Env_temporaries.set(this, new Map());
+    }
+    lookup(place) {
+        var _a;
+        return (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(place.identifier.id)) !== null && _a !== void 0 ? _a : place;
+    }
+    define(place, value) {
+        __classPrivateFieldGet(this, _Env_temporaries, "f").set(place.identifier.id, value);
+    }
+    resetChanged() {
+        __classPrivateFieldSet(this, _Env_changed, false, "f");
+    }
+    hasChanged() {
+        return __classPrivateFieldGet(this, _Env_changed, "f");
+    }
+    get(key) {
+        var _a, _b;
+        const operandId = (_b = (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(key)) === null || _a === void 0 ? void 0 : _a.identifier.id) !== null && _b !== void 0 ? _b : key;
+        return __classPrivateFieldGet(this, _Env_data, "f").get(operandId);
+    }
+    set(key, value) {
+        var _a, _b;
+        const operandId = (_b = (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(key)) === null || _a === void 0 ? void 0 : _a.identifier.id) !== null && _b !== void 0 ? _b : key;
+        const cur = __classPrivateFieldGet(this, _Env_data, "f").get(operandId);
+        const widenedValue = joinRefAccessTypes(value, cur !== null && cur !== void 0 ? cur : { kind: 'None' });
+        if (!(cur == null && widenedValue.kind === 'None') &&
+            (cur == null || !tyEqual(cur, widenedValue))) {
+            __classPrivateFieldSet(this, _Env_changed, true, "f");
+        }
+        __classPrivateFieldGet(this, _Env_data, "f").set(operandId, widenedValue);
+        return this;
+    }
+}
+_Env_changed = new WeakMap(), _Env_data = new WeakMap(), _Env_temporaries = new WeakMap();
+function validateNoRefAccessInRender(fn) {
+    const env = new Env();
+    collectTemporariesSidemap$1(fn, env);
+    const errors = new CompilerError();
+    validateNoRefAccessInRenderImpl(fn, env, errors);
+    for (const detail of errors.details) {
+        fn.env.recordError(detail);
+    }
+}
+function collectTemporariesSidemap$1(fn, env) {
+    for (const block of fn.body.blocks.values()) {
+        for (const instr of block.instructions) {
+            const { lvalue, value } = instr;
+            switch (value.kind) {
+                case 'LoadLocal': {
+                    const temp = env.lookup(value.place);
+                    if (temp != null) {
+                        env.define(lvalue, temp);
+                    }
+                    break;
+                }
+                case 'StoreLocal': {
+                    const temp = env.lookup(value.value);
+                    if (temp != null) {
+                        env.define(lvalue, temp);
+                        env.define(value.lvalue.place, temp);
+                    }
+                    break;
+                }
+                case 'PropertyLoad': {
+                    if (isUseRefType(value.object.identifier) &&
+                        value.property === 'current') {
+                        continue;
+                    }
+                    const temp = env.lookup(value.object);
+                    if (temp != null) {
+                        env.define(lvalue, temp);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+function refTypeOfType(place) {
+    if (isRefValueType(place.identifier)) {
+        return { kind: 'RefValue' };
+    }
+    else if (isUseRefType(place.identifier)) {
+        return { kind: 'Ref', refId: nextRefId() };
+    }
+    else {
+        return { kind: 'None' };
+    }
+}
+function tyEqual(a, b) {
+    if (a.kind !== b.kind) {
+        return false;
+    }
+    switch (a.kind) {
+        case 'None':
+            return true;
+        case 'Ref':
+            return true;
+        case 'Nullable':
+            return true;
+        case 'Guard':
+            CompilerError.invariant(b.kind === 'Guard', {
+                reason: 'Expected ref value',
+                loc: GeneratedSource,
+            });
+            return a.refId === b.refId;
+        case 'RefValue':
+            CompilerError.invariant(b.kind === 'RefValue', {
+                reason: 'Expected ref value',
+                loc: GeneratedSource,
+            });
+            return a.loc == b.loc;
+        case 'Structure': {
+            CompilerError.invariant(b.kind === 'Structure', {
+                reason: 'Expected structure',
+                loc: GeneratedSource,
+            });
+            const fnTypesEqual = (a.fn === null && b.fn === null) ||
+                (a.fn !== null &&
+                    b.fn !== null &&
+                    a.fn.readRefEffect === b.fn.readRefEffect &&
+                    tyEqual(a.fn.returnType, b.fn.returnType));
+            return (fnTypesEqual &&
+                (a.value === b.value ||
+                    (a.value !== null && b.value !== null && tyEqual(a.value, b.value))));
+        }
+    }
+}
+function joinRefAccessTypes(...types) {
+    function joinRefAccessRefTypes(a, b) {
+        if (a.kind === 'RefValue') {
+            if (b.kind === 'RefValue' && a.refId === b.refId) {
+                return a;
+            }
+            return { kind: 'RefValue' };
+        }
+        else if (b.kind === 'RefValue') {
+            return b;
+        }
+        else if (a.kind === 'Ref' || b.kind === 'Ref') {
+            if (a.kind === 'Ref' && b.kind === 'Ref' && a.refId === b.refId) {
+                return a;
+            }
+            return { kind: 'Ref', refId: nextRefId() };
+        }
+        else {
+            CompilerError.invariant(a.kind === 'Structure' && b.kind === 'Structure', {
+                reason: 'Expected structure',
+                loc: GeneratedSource,
+            });
+            const fn = a.fn === null
+                ? b.fn
+                : b.fn === null
+                    ? a.fn
+                    : {
+                        readRefEffect: a.fn.readRefEffect || b.fn.readRefEffect,
+                        returnType: joinRefAccessTypes(a.fn.returnType, b.fn.returnType),
+                    };
+            const value = a.value === null
+                ? b.value
+                : b.value === null
+                    ? a.value
+                    : joinRefAccessRefTypes(a.value, b.value);
+            return {
+                kind: 'Structure',
+                fn,
+                value,
+            };
+        }
+    }
+    return types.reduce((a, b) => {
+        if (a.kind === 'None') {
+            return b;
+        }
+        else if (b.kind === 'None') {
+            return a;
+        }
+        else if (a.kind === 'Guard') {
+            if (b.kind === 'Guard' && a.refId === b.refId) {
+                return a;
+            }
+            else if (b.kind === 'Nullable' || b.kind === 'Guard') {
+                return { kind: 'None' };
+            }
+            else {
+                return b;
+            }
+        }
+        else if (b.kind === 'Guard') {
+            if (a.kind === 'Nullable') {
+                return { kind: 'None' };
+            }
+            else {
+                return b;
+            }
+        }
+        else if (a.kind === 'Nullable') {
+            return b;
+        }
+        else if (b.kind === 'Nullable') {
+            return a;
+        }
+        else {
+            return joinRefAccessRefTypes(a, b);
+        }
+    }, { kind: 'None' });
+}
+function validateNoRefAccessInRenderImpl(fn, env, errors) {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    let returnValues = [];
+    let place;
+    for (const param of fn.params) {
+        if (param.kind === 'Identifier') {
+            place = param;
+        }
+        else {
+            place = param.place;
+        }
+        const type = refTypeOfType(place);
+        env.set(place.identifier.id, type);
+    }
+    const interpolatedAsJsx = new Set();
+    for (const block of fn.body.blocks.values()) {
+        for (const instr of block.instructions) {
+            const { value } = instr;
+            if (value.kind === 'JsxExpression' || value.kind === 'JsxFragment') {
+                if (value.children != null) {
+                    for (const child of value.children) {
+                        interpolatedAsJsx.add(child.identifier.id);
+                    }
+                }
+            }
+        }
+    }
+    for (let i = 0; (i == 0 || env.hasChanged()) && i < 10; i++) {
+        env.resetChanged();
+        returnValues = [];
+        const safeBlocks = [];
+        for (const [, block] of fn.body.blocks) {
+            retainWhere(safeBlocks, entry => entry.block !== block.id);
+            for (const phi of block.phis) {
+                env.set(phi.place.identifier.id, joinRefAccessTypes(...Array(...phi.operands.values()).map(operand => { var _a; return (_a = env.get(operand.identifier.id)) !== null && _a !== void 0 ? _a : { kind: 'None' }; })));
+            }
+            for (const instr of block.instructions) {
+                switch (instr.value.kind) {
+                    case 'JsxExpression':
+                    case 'JsxFragment': {
+                        for (const operand of eachInstructionValueOperand(instr.value)) {
+                            validateNoDirectRefValueAccess(errors, operand, env);
+                        }
+                        break;
+                    }
+                    case 'ComputedLoad':
+                    case 'PropertyLoad': {
+                        if (instr.value.kind === 'ComputedLoad') {
+                            validateNoDirectRefValueAccess(errors, instr.value.property, env);
+                        }
+                        const objType = env.get(instr.value.object.identifier.id);
+                        let lookupType = null;
+                        if ((objType === null || objType === void 0 ? void 0 : objType.kind) === 'Structure') {
+                            lookupType = objType.value;
+                        }
+                        else if ((objType === null || objType === void 0 ? void 0 : objType.kind) === 'Ref') {
+                            lookupType = {
+                                kind: 'RefValue',
+                                loc: instr.loc,
+                                refId: objType.refId,
+                            };
+                        }
+                        env.set(instr.lvalue.identifier.id, lookupType !== null && lookupType !== void 0 ? lookupType : refTypeOfType(instr.lvalue));
+                        break;
+                    }
+                    case 'TypeCastExpression': {
+                        env.set(instr.lvalue.identifier.id, (_a = env.get(instr.value.value.identifier.id)) !== null && _a !== void 0 ? _a : refTypeOfType(instr.lvalue));
+                        break;
+                    }
+                    case 'LoadContext':
+                    case 'LoadLocal': {
+                        env.set(instr.lvalue.identifier.id, (_b = env.get(instr.value.place.identifier.id)) !== null && _b !== void 0 ? _b : refTypeOfType(instr.lvalue));
+                        break;
+                    }
+                    case 'StoreContext':
+                    case 'StoreLocal': {
+                        env.set(instr.value.lvalue.place.identifier.id, (_c = env.get(instr.value.value.identifier.id)) !== null && _c !== void 0 ? _c : refTypeOfType(instr.value.lvalue.place));
+                        env.set(instr.lvalue.identifier.id, (_d = env.get(instr.value.value.identifier.id)) !== null && _d !== void 0 ? _d : refTypeOfType(instr.lvalue));
+                        break;
+                    }
+                    case 'Destructure': {
+                        const objType = env.get(instr.value.value.identifier.id);
+                        let lookupType = null;
+                        if ((objType === null || objType === void 0 ? void 0 : objType.kind) === 'Structure') {
+                            lookupType = objType.value;
+                        }
+                        env.set(instr.lvalue.identifier.id, lookupType !== null && lookupType !== void 0 ? lookupType : refTypeOfType(instr.lvalue));
+                        for (const lval of eachPatternOperand(instr.value.lvalue.pattern)) {
+                            env.set(lval.identifier.id, lookupType !== null && lookupType !== void 0 ? lookupType : refTypeOfType(lval));
+                        }
+                        break;
+                    }
+                    case 'ObjectMethod':
+                    case 'FunctionExpression': {
+                        let returnType = { kind: 'None' };
+                        let readRefEffect = false;
+                        const innerErrors = new CompilerError();
+                        const result = validateNoRefAccessInRenderImpl(instr.value.loweredFunc.func, env, innerErrors);
+                        if (!innerErrors.hasAnyErrors()) {
+                            returnType = result;
+                        }
+                        else {
+                            readRefEffect = true;
+                        }
+                        env.set(instr.lvalue.identifier.id, {
+                            kind: 'Structure',
+                            fn: {
+                                readRefEffect,
+                                returnType,
+                            },
+                            value: null,
+                        });
+                        break;
+                    }
+                    case 'MethodCall':
+                    case 'CallExpression': {
+                        const callee = instr.value.kind === 'CallExpression'
+                            ? instr.value.callee
+                            : instr.value.property;
+                        const hookKind = getHookKindForType(fn.env, callee.identifier.type);
+                        let returnType = { kind: 'None' };
+                        const fnType = env.get(callee.identifier.id);
+                        let didError = false;
+                        if ((fnType === null || fnType === void 0 ? void 0 : fnType.kind) === 'Structure' && fnType.fn !== null) {
+                            returnType = fnType.fn.returnType;
+                            if (fnType.fn.readRefEffect) {
+                                didError = true;
+                                errors.pushDiagnostic(CompilerDiagnostic.create({
+                                    category: ErrorCategory.Refs,
+                                    reason: 'Cannot access refs during render',
+                                    description: ERROR_DESCRIPTION,
+                                }).withDetails({
+                                    kind: 'error',
+                                    loc: callee.loc,
+                                    message: `This function accesses a ref value`,
+                                }));
+                            }
+                        }
+                        if (!didError) {
+                            const isRefLValue = isUseRefType(instr.lvalue.identifier);
+                            if (isRefLValue ||
+                                (hookKind != null &&
+                                    hookKind !== 'useState' &&
+                                    hookKind !== 'useReducer')) {
+                                for (const operand of eachInstructionValueOperand(instr.value)) {
+                                    validateNoDirectRefValueAccess(errors, operand, env);
+                                }
+                            }
+                            else if (interpolatedAsJsx.has(instr.lvalue.identifier.id)) {
+                                for (const operand of eachInstructionValueOperand(instr.value)) {
+                                    validateNoRefValueAccess(errors, env, operand);
+                                }
+                            }
+                            else if (hookKind == null && instr.effects != null) {
+                                const visitedEffects = new Set();
+                                for (const effect of instr.effects) {
+                                    let place = null;
+                                    let validation = 'none';
+                                    switch (effect.kind) {
+                                        case 'Freeze': {
+                                            place = effect.value;
+                                            validation = 'direct-ref';
+                                            break;
+                                        }
+                                        case 'Mutate':
+                                        case 'MutateTransitive':
+                                        case 'MutateConditionally':
+                                        case 'MutateTransitiveConditionally': {
+                                            place = effect.value;
+                                            validation = 'ref-passed';
+                                            break;
+                                        }
+                                        case 'Render': {
+                                            place = effect.place;
+                                            validation = 'ref-passed';
+                                            break;
+                                        }
+                                        case 'Capture':
+                                        case 'Alias':
+                                        case 'MaybeAlias':
+                                        case 'Assign':
+                                        case 'CreateFrom': {
+                                            place = effect.from;
+                                            validation = 'ref-passed';
+                                            break;
+                                        }
+                                        case 'ImmutableCapture': {
+                                            place = effect.from;
+                                            const isFrozen = instr.effects.some(e => e.kind === 'Freeze' &&
+                                                e.value.identifier.id === effect.from.identifier.id);
+                                            validation = isFrozen ? 'direct-ref' : 'ref-passed';
+                                            break;
+                                        }
+                                    }
+                                    if (place !== null && validation !== 'none') {
+                                        const key = `${place.identifier.id}:${validation}`;
+                                        if (!visitedEffects.has(key)) {
+                                            visitedEffects.add(key);
+                                            if (validation === 'direct-ref') {
+                                                validateNoDirectRefValueAccess(errors, place, env);
+                                            }
+                                            else {
+                                                validateNoRefPassedToFunction(errors, env, place, place.loc);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else {
+                                for (const operand of eachInstructionValueOperand(instr.value)) {
+                                    validateNoRefPassedToFunction(errors, env, operand, operand.loc);
+                                }
+                            }
+                        }
+                        env.set(instr.lvalue.identifier.id, returnType);
+                        break;
+                    }
+                    case 'ObjectExpression':
+                    case 'ArrayExpression': {
+                        const types = [];
+                        for (const operand of eachInstructionValueOperand(instr.value)) {
+                            validateNoDirectRefValueAccess(errors, operand, env);
+                            types.push((_e = env.get(operand.identifier.id)) !== null && _e !== void 0 ? _e : { kind: 'None' });
+                        }
+                        const value = joinRefAccessTypes(...types);
+                        if (value.kind === 'None' ||
+                            value.kind === 'Guard' ||
+                            value.kind === 'Nullable') {
+                            env.set(instr.lvalue.identifier.id, { kind: 'None' });
+                        }
+                        else {
+                            env.set(instr.lvalue.identifier.id, {
+                                kind: 'Structure',
+                                value,
+                                fn: null,
+                            });
+                        }
+                        break;
+                    }
+                    case 'PropertyDelete':
+                    case 'PropertyStore':
+                    case 'ComputedDelete':
+                    case 'ComputedStore': {
+                        const target = env.get(instr.value.object.identifier.id);
+                        let safe = null;
+                        if (instr.value.kind === 'PropertyStore' &&
+                            target != null &&
+                            target.kind === 'Ref') {
+                            safe = safeBlocks.find(entry => entry.ref === target.refId);
+                        }
+                        if (safe != null) {
+                            retainWhere(safeBlocks, entry => entry !== safe);
+                        }
+                        else {
+                            validateNoRefUpdate(errors, env, instr.value.object, instr.loc);
+                        }
+                        if (instr.value.kind === 'ComputedDelete' ||
+                            instr.value.kind === 'ComputedStore') {
+                            validateNoRefValueAccess(errors, env, instr.value.property);
+                        }
+                        if (instr.value.kind === 'ComputedStore' ||
+                            instr.value.kind === 'PropertyStore') {
+                            validateNoDirectRefValueAccess(errors, instr.value.value, env);
+                            const type = env.get(instr.value.value.identifier.id);
+                            if (type != null && type.kind === 'Structure') {
+                                let objectType = type;
+                                if (target != null) {
+                                    objectType = joinRefAccessTypes(objectType, target);
+                                }
+                                env.set(instr.value.object.identifier.id, objectType);
+                            }
+                        }
+                        break;
+                    }
+                    case 'StartMemoize':
+                    case 'FinishMemoize':
+                        break;
+                    case 'LoadGlobal': {
+                        if (instr.value.binding.name === 'undefined') {
+                            env.set(instr.lvalue.identifier.id, { kind: 'Nullable' });
+                        }
+                        break;
+                    }
+                    case 'Primitive': {
+                        if (instr.value.value == null) {
+                            env.set(instr.lvalue.identifier.id, { kind: 'Nullable' });
+                        }
+                        break;
+                    }
+                    case 'UnaryExpression': {
+                        if (instr.value.operator === '!') {
+                            const value = env.get(instr.value.value.identifier.id);
+                            const refId = (value === null || value === void 0 ? void 0 : value.kind) === 'RefValue' && value.refId != null
+                                ? value.refId
+                                : null;
+                            if (refId !== null) {
+                                env.set(instr.lvalue.identifier.id, { kind: 'Guard', refId });
+                                errors.pushDiagnostic(CompilerDiagnostic.create({
+                                    category: ErrorCategory.Refs,
+                                    reason: 'Cannot access refs during render',
+                                    description: ERROR_DESCRIPTION,
+                                })
+                                    .withDetails({
+                                    kind: 'error',
+                                    loc: instr.value.value.loc,
+                                    message: `Cannot access ref value during render`,
+                                })
+                                    .withDetails({
+                                    kind: 'hint',
+                                    message: 'To initialize a ref only once, check that the ref is null with the pattern `if (ref.current == null) { ref.current = ... }`',
+                                }));
+                                break;
+                            }
+                        }
+                        validateNoRefValueAccess(errors, env, instr.value.value);
+                        break;
+                    }
+                    case 'BinaryExpression': {
+                        const left = env.get(instr.value.left.identifier.id);
+                        const right = env.get(instr.value.right.identifier.id);
+                        let nullish = false;
+                        let refId = null;
+                        if ((left === null || left === void 0 ? void 0 : left.kind) === 'RefValue' && left.refId != null) {
+                            refId = left.refId;
+                        }
+                        else if ((right === null || right === void 0 ? void 0 : right.kind) === 'RefValue' && right.refId != null) {
+                            refId = right.refId;
+                        }
+                        if ((left === null || left === void 0 ? void 0 : left.kind) === 'Nullable') {
+                            nullish = true;
+                        }
+                        else if ((right === null || right === void 0 ? void 0 : right.kind) === 'Nullable') {
+                            nullish = true;
+                        }
+                        if (refId !== null && nullish) {
+                            env.set(instr.lvalue.identifier.id, { kind: 'Guard', refId });
+                        }
+                        else {
+                            for (const operand of eachInstructionValueOperand(instr.value)) {
+                                validateNoRefValueAccess(errors, env, operand);
+                            }
+                        }
+                        break;
+                    }
+                    default: {
+                        for (const operand of eachInstructionValueOperand(instr.value)) {
+                            validateNoRefValueAccess(errors, env, operand);
+                        }
+                        break;
+                    }
+                }
+                for (const operand of eachInstructionOperand(instr)) {
+                    guardCheck(errors, operand, env);
+                }
+                if (isUseRefType(instr.lvalue.identifier) &&
+                    ((_f = env.get(instr.lvalue.identifier.id)) === null || _f === void 0 ? void 0 : _f.kind) !== 'Ref') {
+                    env.set(instr.lvalue.identifier.id, joinRefAccessTypes((_g = env.get(instr.lvalue.identifier.id)) !== null && _g !== void 0 ? _g : { kind: 'None' }, { kind: 'Ref', refId: nextRefId() }));
+                }
+                if (isRefValueType(instr.lvalue.identifier) &&
+                    ((_h = env.get(instr.lvalue.identifier.id)) === null || _h === void 0 ? void 0 : _h.kind) !== 'RefValue') {
+                    env.set(instr.lvalue.identifier.id, joinRefAccessTypes((_j = env.get(instr.lvalue.identifier.id)) !== null && _j !== void 0 ? _j : { kind: 'None' }, { kind: 'RefValue', loc: instr.loc }));
+                }
+            }
+            if (block.terminal.kind === 'if') {
+                const test = env.get(block.terminal.test.identifier.id);
+                if ((test === null || test === void 0 ? void 0 : test.kind) === 'Guard' &&
+                    safeBlocks.find(entry => entry.ref === test.refId) == null) {
+                    safeBlocks.push({ block: block.terminal.fallthrough, ref: test.refId });
+                }
+            }
+            for (const operand of eachTerminalOperand(block.terminal)) {
+                if (block.terminal.kind !== 'return') {
+                    validateNoRefValueAccess(errors, env, operand);
+                    if (block.terminal.kind !== 'if') {
+                        guardCheck(errors, operand, env);
+                    }
+                }
+                else {
+                    validateNoDirectRefValueAccess(errors, operand, env);
+                    guardCheck(errors, operand, env);
+                    returnValues.push(env.get(operand.identifier.id));
+                }
+            }
+        }
+        if (errors.hasAnyErrors()) {
+            return { kind: 'None' };
+        }
+    }
+    CompilerError.invariant(!env.hasChanged(), {
+        reason: 'Ref type environment did not converge',
+        loc: GeneratedSource,
+    });
+    return joinRefAccessTypes(...returnValues.filter((env) => env !== undefined));
+}
+function destructure(type) {
+    if ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && type.value !== null) {
+        return destructure(type.value);
+    }
+    return type;
+}
+function guardCheck(errors, operand, env) {
+    var _a;
+    if (((_a = env.get(operand.identifier.id)) === null || _a === void 0 ? void 0 : _a.kind) === 'Guard') {
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            category: ErrorCategory.Refs,
+            reason: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetails({
+            kind: 'error',
+            loc: operand.loc,
+            message: `Cannot access ref value during render`,
+        }));
+    }
+}
+function validateNoRefValueAccess(errors, env, operand) {
+    var _a;
+    const type = destructure(env.get(operand.identifier.id));
+    if ((type === null || type === void 0 ? void 0 : type.kind) === 'RefValue' ||
+        ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && ((_a = type.fn) === null || _a === void 0 ? void 0 : _a.readRefEffect))) {
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            category: ErrorCategory.Refs,
+            reason: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetails({
+            kind: 'error',
+            loc: (type.kind === 'RefValue' && type.loc) || operand.loc,
+            message: `Cannot access ref value during render`,
+        }));
+    }
+}
+function validateNoRefPassedToFunction(errors, env, operand, loc) {
+    var _a;
+    const type = destructure(env.get(operand.identifier.id));
+    if ((type === null || type === void 0 ? void 0 : type.kind) === 'Ref' ||
+        (type === null || type === void 0 ? void 0 : type.kind) === 'RefValue' ||
+        ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && ((_a = type.fn) === null || _a === void 0 ? void 0 : _a.readRefEffect))) {
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            category: ErrorCategory.Refs,
+            reason: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetails({
+            kind: 'error',
+            loc: (type.kind === 'RefValue' && type.loc) || loc,
+            message: `Passing a ref to a function may read its value during render`,
+        }));
+    }
+}
+function validateNoRefUpdate(errors, env, operand, loc) {
+    const type = destructure(env.get(operand.identifier.id));
+    if ((type === null || type === void 0 ? void 0 : type.kind) === 'Ref' || (type === null || type === void 0 ? void 0 : type.kind) === 'RefValue') {
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            category: ErrorCategory.Refs,
+            reason: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetails({
+            kind: 'error',
+            loc: (type.kind === 'RefValue' && type.loc) || loc,
+            message: `Cannot update ref during render`,
+        }));
+    }
+}
+function validateNoDirectRefValueAccess(errors, operand, env) {
+    var _a;
+    const type = destructure(env.get(operand.identifier.id));
+    if ((type === null || type === void 0 ? void 0 : type.kind) === 'RefValue') {
+        errors.pushDiagnostic(CompilerDiagnostic.create({
+            category: ErrorCategory.Refs,
+            reason: 'Cannot access refs during render',
+            description: ERROR_DESCRIPTION,
+        }).withDetails({
+            kind: 'error',
+            loc: (_a = type.loc) !== null && _a !== void 0 ? _a : operand.loc,
+            message: `Cannot access ref value during render`,
+        }));
+    }
+}
+const ERROR_DESCRIPTION = 'React refs are values that are not needed for rendering. Refs should only be accessed ' +
+    'outside of render, such as in event handlers or effects. ' +
+    'Accessing a ref value (the `current` property) during render can cause your component ' +
+    'not to update as expected (https://react.dev/reference/react/useRef)';
+
+function validateNoSetStateInRender(fn) {
+    const unconditionalSetStateFunctions = new Set();
+    const errors = validateNoSetStateInRenderImpl(fn, unconditionalSetStateFunctions);
+    for (const detail of errors.details) {
+        fn.env.recordError(detail);
+    }
+}
+function validateNoSetStateInRenderImpl(fn, unconditionalSetStateFunctions) {
+    const unconditionalBlocks = computeUnconditionalBlocks(fn);
+    let activeManualMemoId = null;
+    const errors = new CompilerError();
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            switch (instr.value.kind) {
+                case 'LoadLocal': {
+                    if (unconditionalSetStateFunctions.has(instr.value.place.identifier.id)) {
+                        unconditionalSetStateFunctions.add(instr.lvalue.identifier.id);
+                    }
+                    break;
+                }
+                case 'StoreLocal': {
+                    if (unconditionalSetStateFunctions.has(instr.value.value.identifier.id)) {
+                        unconditionalSetStateFunctions.add(instr.value.lvalue.place.identifier.id);
+                        unconditionalSetStateFunctions.add(instr.lvalue.identifier.id);
+                    }
+                    break;
+                }
+                case 'ObjectMethod':
+                case 'FunctionExpression': {
+                    if ([...eachInstructionValueOperand(instr.value)].some(operand => isSetStateType(operand.identifier) ||
+                        unconditionalSetStateFunctions.has(operand.identifier.id)) &&
+                        validateNoSetStateInRenderImpl(instr.value.loweredFunc.func, unconditionalSetStateFunctions).hasAnyErrors()) {
+                        unconditionalSetStateFunctions.add(instr.lvalue.identifier.id);
+                    }
+                    break;
+                }
+                case 'StartMemoize': {
+                    CompilerError.invariant(activeManualMemoId === null, {
+                        reason: 'Unexpected nested StartMemoize instructions',
+                        loc: instr.value.loc,
+                    });
+                    activeManualMemoId = instr.value.manualMemoId;
+                    break;
+                }
+                case 'FinishMemoize': {
+                    CompilerError.invariant(activeManualMemoId === instr.value.manualMemoId, {
+                        reason: 'Expected FinishMemoize to align with previous StartMemoize instruction',
+                        loc: instr.value.loc,
+                    });
+                    activeManualMemoId = null;
+                    break;
+                }
+                case 'CallExpression': {
+                    const callee = instr.value.callee;
+                    if (isSetStateType(callee.identifier) ||
+                        unconditionalSetStateFunctions.has(callee.identifier.id)) {
+                        if (activeManualMemoId !== null) {
+                            errors.pushDiagnostic(CompilerDiagnostic.create({
+                                category: ErrorCategory.RenderSetState,
+                                reason: 'Calling setState from useMemo may trigger an infinite loop',
+                                description: 'Each time the memo callback is evaluated it will change state. This can cause a memoization dependency to change, running the memo function again and causing an infinite loop. Instead of setting state in useMemo(), prefer deriving the value during render. (https://react.dev/reference/react/useState)',
+                                suggestions: null,
+                            }).withDetails({
+                                kind: 'error',
+                                loc: callee.loc,
+                                message: 'Found setState() within useMemo()',
+                            }));
+                        }
+                        else if (unconditionalBlocks.has(block.id)) {
+                            const enableUseKeyedState = fn.env.config.enableUseKeyedState;
+                            if (enableUseKeyedState) {
+                                errors.pushDiagnostic(CompilerDiagnostic.create({
+                                    category: ErrorCategory.RenderSetState,
+                                    reason: 'Cannot call setState during render',
+                                    description: 'Calling setState during render may trigger an infinite loop.\n' +
+                                        '* To reset state when other state/props change, use `const [state, setState] = useKeyedState(initialState, key)` to reset `state` when `key` changes.\n' +
+                                        '* To derive data from other state/props, compute the derived data during render without using state',
+                                    suggestions: null,
+                                }).withDetails({
+                                    kind: 'error',
+                                    loc: callee.loc,
+                                    message: 'Found setState() in render',
+                                }));
+                            }
+                            else {
+                                errors.pushDiagnostic(CompilerDiagnostic.create({
+                                    category: ErrorCategory.RenderSetState,
+                                    reason: 'Cannot call setState during render',
+                                    description: 'Calling setState during render may trigger an infinite loop.\n' +
+                                        '* To reset state when other state/props change, store the previous value in state and update conditionally: https://react.dev/reference/react/useState#storing-information-from-previous-renders\n' +
+                                        '* To derive data from other state/props, compute the derived data during render without using state',
+                                    suggestions: null,
+                                }).withDetails({
+                                    kind: 'error',
+                                    loc: callee.loc,
+                                    message: 'Found setState() in render',
+                                }));
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    return errors;
+}
+
+function validatePreservedManualMemoization(fn) {
+    const state = {
+        env: fn.env,
+        manualMemoState: null,
+    };
+    visitReactiveFunction(fn, new Visitor(), state);
+}
+function prettyPrintScopeDependency(val) {
+    var _a;
+    let rootStr;
+    if (((_a = val.identifier.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named') {
+        rootStr = val.identifier.name.value;
+    }
+    else {
+        rootStr = '[unnamed]';
+    }
+    return `${rootStr}${val.path.map(v => `${v.optional ? '?.' : '.'}${v.property}`).join('')}`;
+}
+var CompareDependencyResult;
+(function (CompareDependencyResult) {
+    CompareDependencyResult[CompareDependencyResult["Ok"] = 0] = "Ok";
+    CompareDependencyResult[CompareDependencyResult["RootDifference"] = 1] = "RootDifference";
+    CompareDependencyResult[CompareDependencyResult["PathDifference"] = 2] = "PathDifference";
+    CompareDependencyResult[CompareDependencyResult["Subpath"] = 3] = "Subpath";
+    CompareDependencyResult[CompareDependencyResult["RefAccessDifference"] = 4] = "RefAccessDifference";
+})(CompareDependencyResult || (CompareDependencyResult = {}));
+function merge$1(a, b) {
+    return Math.max(a, b);
+}
+function getCompareDependencyResultDescription(result) {
+    switch (result) {
+        case CompareDependencyResult.Ok:
+            return 'Dependencies equal';
+        case CompareDependencyResult.RootDifference:
+        case CompareDependencyResult.PathDifference:
+            return 'Inferred different dependency than source';
+        case CompareDependencyResult.RefAccessDifference:
+            return 'Differences in ref.current access';
+        case CompareDependencyResult.Subpath:
+            return 'Inferred less specific property than source';
+    }
+}
+function compareDeps(inferred, source) {
+    const rootsEqual = (inferred.root.kind === 'Global' &&
+        source.root.kind === 'Global' &&
+        inferred.root.identifierName === source.root.identifierName) ||
+        (inferred.root.kind === 'NamedLocal' &&
+            source.root.kind === 'NamedLocal' &&
+            inferred.root.value.identifier.id === source.root.value.identifier.id);
+    if (!rootsEqual) {
+        return CompareDependencyResult.RootDifference;
+    }
+    let isSubpath = true;
+    for (let i = 0; i < Math.min(inferred.path.length, source.path.length); i++) {
+        if (inferred.path[i].property !== source.path[i].property) {
+            isSubpath = false;
+            break;
+        }
+        else if (inferred.path[i].optional !== source.path[i].optional) {
+            return CompareDependencyResult.PathDifference;
+        }
+    }
+    if (isSubpath &&
+        (source.path.length === inferred.path.length ||
+            (inferred.path.length >= source.path.length &&
+                !inferred.path.some(token => token.property === 'current')))) {
+        return CompareDependencyResult.Ok;
+    }
+    else {
+        if (isSubpath) {
+            if (source.path.some(token => token.property === 'current') ||
+                inferred.path.some(token => token.property === 'current')) {
+                return CompareDependencyResult.RefAccessDifference;
+            }
+            else {
+                return CompareDependencyResult.Subpath;
+            }
+        }
+        else {
+            return CompareDependencyResult.PathDifference;
+        }
+    }
+}
+function validateInferredDep(dep, temporaries, declsWithinMemoBlock, validDepsInMemoBlock, env, memoLocation) {
+    var _a;
+    let normalizedDep;
+    const maybeNormalizedRoot = temporaries.get(dep.identifier.id);
+    if (maybeNormalizedRoot != null) {
+        normalizedDep = {
+            root: maybeNormalizedRoot.root,
+            path: [...maybeNormalizedRoot.path, ...dep.path],
+            loc: maybeNormalizedRoot.loc,
+        };
+    }
+    else {
+        CompilerError.invariant(((_a = dep.identifier.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named', {
+            reason: 'ValidatePreservedManualMemoization: expected scope dependency to be named',
+            loc: GeneratedSource,
+        });
+        normalizedDep = {
+            root: {
+                kind: 'NamedLocal',
+                value: {
+                    kind: 'Identifier',
+                    identifier: dep.identifier,
+                    loc: GeneratedSource,
+                    effect: Effect.Read,
+                    reactive: false,
+                },
+                constant: false,
+            },
+            path: [...dep.path],
+            loc: GeneratedSource,
+        };
+    }
+    for (const decl of declsWithinMemoBlock) {
+        if (normalizedDep.root.kind === 'NamedLocal' &&
+            decl === normalizedDep.root.value.identifier.declarationId) {
+            return;
+        }
+    }
+    let errorDiagnostic = null;
+    for (const originalDep of validDepsInMemoBlock) {
+        const compareResult = compareDeps(normalizedDep, originalDep);
+        if (compareResult === CompareDependencyResult.Ok) {
+            return;
+        }
+        else {
+            errorDiagnostic = merge$1(errorDiagnostic !== null && errorDiagnostic !== void 0 ? errorDiagnostic : compareResult, compareResult);
+        }
+    }
+    env.recordError(CompilerDiagnostic.create({
+        category: ErrorCategory.PreserveManualMemo,
+        reason: 'Existing memoization could not be preserved',
+        description: [
+            'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. ',
+            'The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. ',
+            (dep.identifier.name != null && dep.identifier.name.kind === 'named')
+                ? `The inferred dependency was \`${prettyPrintScopeDependency(dep)}\`, but the source dependencies were [${validDepsInMemoBlock
+                    .map(dep => printManualMemoDependency$1(dep, true))
+                    .join(', ')}]. ${errorDiagnostic
+                    ? getCompareDependencyResultDescription(errorDiagnostic)
+                    : 'Inferred dependency not present in source'}`
+                : '',
+        ]
+            .join('')
+            .trim(),
+        suggestions: null,
+    }).withDetails({
+        kind: 'error',
+        loc: memoLocation,
+        message: 'Could not preserve existing manual memoization',
+    }));
+}
+class Visitor extends ReactiveFunctionVisitor {
+    constructor() {
+        super(...arguments);
+        this.scopes = new Set();
+        this.prunedScopes = new Set();
+        this.temporaries = new Map();
+    }
+    recordDepsInValue(value, state) {
+        var _a, _b;
+        switch (value.kind) {
+            case 'SequenceExpression': {
+                for (const instr of value.instructions) {
+                    this.visitInstruction(instr, state);
+                }
+                this.recordDepsInValue(value.value, state);
+                break;
+            }
+            case 'OptionalExpression': {
+                this.recordDepsInValue(value.value, state);
+                break;
+            }
+            case 'ConditionalExpression': {
+                this.recordDepsInValue(value.test, state);
+                this.recordDepsInValue(value.consequent, state);
+                this.recordDepsInValue(value.alternate, state);
+                break;
+            }
+            case 'LogicalExpression': {
+                this.recordDepsInValue(value.left, state);
+                this.recordDepsInValue(value.right, state);
+                break;
+            }
+            default: {
+                collectMaybeMemoDependencies(value, this.temporaries, false);
+                if (value.kind === 'StoreLocal' ||
+                    value.kind === 'StoreContext' ||
+                    value.kind === 'Destructure') {
+                    for (const storeTarget of eachInstructionValueLValue(value)) {
+                        (_a = state.manualMemoState) === null || _a === void 0 ? void 0 : _a.decls.add(storeTarget.identifier.declarationId);
+                        if (((_b = storeTarget.identifier.name) === null || _b === void 0 ? void 0 : _b.kind) === 'named') {
+                            this.temporaries.set(storeTarget.identifier.id, {
+                                root: {
+                                    kind: 'NamedLocal',
+                                    value: storeTarget,
+                                    constant: false,
+                                },
+                                path: [],
+                                loc: storeTarget.loc,
+                            });
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+    recordTemporaries(instr, state) {
+        var _a;
+        const temporaries = this.temporaries;
+        const { lvalue, value } = instr;
+        const lvalId = lvalue === null || lvalue === void 0 ? void 0 : lvalue.identifier.id;
+        if (lvalId != null && temporaries.has(lvalId)) {
+            return;
+        }
+        const isNamedLocal = ((_a = lvalue === null || lvalue === void 0 ? void 0 : lvalue.identifier.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named';
+        if (lvalue !== null && isNamedLocal && state.manualMemoState != null) {
+            state.manualMemoState.decls.add(lvalue.identifier.declarationId);
+        }
+        this.recordDepsInValue(value, state);
+        if (lvalue != null) {
+            temporaries.set(lvalue.identifier.id, {
+                root: {
+                    kind: 'NamedLocal',
+                    value: Object.assign({}, lvalue),
+                    constant: false,
+                },
+                path: [],
+                loc: lvalue.loc,
+            });
+        }
+    }
+    visitScope(scopeBlock, state) {
+        this.traverseScope(scopeBlock, state);
+        if (state.manualMemoState != null &&
+            state.manualMemoState.depsFromSource != null) {
+            for (const dep of scopeBlock.scope.dependencies) {
+                validateInferredDep(dep, this.temporaries, state.manualMemoState.decls, state.manualMemoState.depsFromSource, state.env, state.manualMemoState.loc);
+            }
+        }
+        this.scopes.add(scopeBlock.scope.id);
+        for (const id of scopeBlock.scope.merged) {
+            this.scopes.add(id);
+        }
+    }
+    visitPrunedScope(scopeBlock, state) {
+        this.traversePrunedScope(scopeBlock, state);
+        this.prunedScopes.add(scopeBlock.scope.id);
+    }
+    visitInstruction(instruction, state) {
+        var _a, _b;
+        this.recordTemporaries(instruction, state);
+        const value = instruction.value;
+        if (value.kind === 'StoreLocal' &&
+            value.lvalue.kind === 'Reassign' &&
+            state.manualMemoState != null) {
+            const ids = getOrInsertDefault(state.manualMemoState.reassignments, value.lvalue.place.identifier.declarationId, new Set());
+            ids.add(value.value.identifier);
+        }
+        if (value.kind === 'LoadLocal' &&
+            value.place.identifier.scope != null &&
+            instruction.lvalue != null &&
+            instruction.lvalue.identifier.scope == null &&
+            state.manualMemoState != null) {
+            const ids = getOrInsertDefault(state.manualMemoState.reassignments, instruction.lvalue.identifier.declarationId, new Set());
+            ids.add(value.place.identifier);
+        }
+        if (value.kind === 'StartMemoize') {
+            CompilerError.invariant(state.manualMemoState == null, {
+                reason: 'Unexpected nested StartMemoize instructions',
+                description: `Bad manual memoization ids: ${(_a = state.manualMemoState) === null || _a === void 0 ? void 0 : _a.manualMemoId}, ${value.manualMemoId}`,
+                loc: value.loc,
+            });
+            if (value.hasInvalidDeps === true) {
+                return;
+            }
+            let depsFromSource = null;
+            if (value.deps != null) {
+                depsFromSource = value.deps;
+            }
+            state.manualMemoState = {
+                loc: instruction.loc,
+                decls: new Set(),
+                depsFromSource,
+                manualMemoId: value.manualMemoId,
+                reassignments: new Map(),
+            };
+            for (const { identifier, loc } of eachInstructionValueOperand(value)) {
+                if (identifier.scope != null &&
+                    !this.scopes.has(identifier.scope.id) &&
+                    !this.prunedScopes.has(identifier.scope.id)) {
+                    state.env.recordError(CompilerDiagnostic.create({
+                        category: ErrorCategory.PreserveManualMemo,
+                        reason: 'Existing memoization could not be preserved',
+                        description: [
+                            'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. ',
+                            'This dependency may be mutated later, which could cause the value to change unexpectedly',
+                        ].join(''),
+                    }).withDetails({
+                        kind: 'error',
+                        loc,
+                        message: 'This dependency may be modified later',
+                    }));
+                }
+            }
+        }
+        if (value.kind === 'FinishMemoize') {
+            if (state.manualMemoState == null) {
+                return;
+            }
+            CompilerError.invariant(state.manualMemoState.manualMemoId === value.manualMemoId, {
+                reason: 'Unexpected mismatch between StartMemoize and FinishMemoize',
+                description: `Encountered StartMemoize id=${state.manualMemoState.manualMemoId} followed by FinishMemoize id=${value.manualMemoId}`,
+                loc: value.loc,
+            });
+            const reassignments = state.manualMemoState.reassignments;
+            state.manualMemoState = null;
+            if (!value.pruned) {
+                for (const { identifier, loc } of eachInstructionValueOperand(value)) {
+                    let decls;
+                    if (identifier.scope == null) {
+                        decls = (_b = reassignments.get(identifier.declarationId)) !== null && _b !== void 0 ? _b : [identifier];
+                    }
+                    else {
+                        decls = [identifier];
+                    }
+                    for (const identifier of decls) {
+                        if (isUnmemoized(identifier, this.scopes)) {
+                            state.env.recordError(CompilerDiagnostic.create({
+                                category: ErrorCategory.PreserveManualMemo,
+                                reason: 'Existing memoization could not be preserved',
+                                description: [
+                                    'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output',
+                                    '',
+                                ]
+                                    .join('')
+                                    .trim(),
+                            }).withDetails({
+                                kind: 'error',
+                                loc,
+                                message: 'Could not preserve existing memoization',
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+function isUnmemoized(operand, scopes) {
+    return operand.scope != null && !scopes.has(operand.scope.id);
+}
+
+const IMPORTANT_INSTRUMENTED_TYPES = new Set([
+    'ArrowFunctionExpression',
+    'AssignmentPattern',
+    'ObjectMethod',
+    'ExpressionStatement',
+    'BreakStatement',
+    'ContinueStatement',
+    'ReturnStatement',
+    'ThrowStatement',
+    'TryStatement',
+    'VariableDeclarator',
+    'IfStatement',
+    'ForStatement',
+    'ForInStatement',
+    'ForOfStatement',
+    'WhileStatement',
+    'DoWhileStatement',
+    'SwitchStatement',
+    'SwitchCase',
+    'WithStatement',
+    'FunctionDeclaration',
+    'FunctionExpression',
+    'LabeledStatement',
+    'ConditionalExpression',
+    'LogicalExpression',
+    'VariableDeclaration',
+    'Identifier',
+]);
+function isManualMemoization(node) {
+    if (libExports$1.isCallExpression(node)) {
+        const callee = node.callee;
+        if (libExports$1.isIdentifier(callee)) {
+            return callee.name === 'useMemo' || callee.name === 'useCallback';
+        }
+        if (libExports$1.isMemberExpression(callee) &&
+            libExports$1.isIdentifier(callee.property) &&
+            libExports$1.isIdentifier(callee.object)) {
+            return (callee.object.name === 'React' &&
+                (callee.property.name === 'useMemo' ||
+                    callee.property.name === 'useCallback'));
+        }
+    }
+    return false;
+}
+function locationKey(loc) {
+    return `${loc.start.line}:${loc.start.column}-${loc.end.line}:${loc.end.column}`;
+}
+function validateSourceLocations(func, generatedAst, env) {
+    const importantOriginalLocations = new Map();
+    func.traverse({
+        enter(path) {
+            const node = path.node;
+            if (!IMPORTANT_INSTRUMENTED_TYPES.has(node.type)) {
+                return;
+            }
+            if (isManualMemoization(node)) {
+                return;
+            }
+            if (libExports$1.isReturnStatement(node) && node.argument != null) {
+                const parentBody = path.parentPath;
+                const parentFunc = parentBody === null || parentBody === void 0 ? void 0 : parentBody.parentPath;
+                if ((parentBody === null || parentBody === void 0 ? void 0 : parentBody.isBlockStatement()) &&
+                    (parentFunc === null || parentFunc === void 0 ? void 0 : parentFunc.isArrowFunctionExpression()) &&
+                    parentBody.node.body.length === 1 &&
+                    parentBody.node.directives.length === 0) {
+                    return;
+                }
+            }
+            if (node.loc) {
+                const key = locationKey(node.loc);
+                const existing = importantOriginalLocations.get(key);
+                if (existing) {
+                    existing.nodeTypes.add(node.type);
+                }
+                else {
+                    importantOriginalLocations.set(key, {
+                        loc: node.loc,
+                        nodeTypes: new Set([node.type]),
+                    });
+                }
+            }
+        },
+    });
+    const generatedLocations = new Map();
+    function collectGeneratedLocations(node) {
+        if (node.loc) {
+            const key = locationKey(node.loc);
+            const nodeTypes = generatedLocations.get(key);
+            if (nodeTypes) {
+                nodeTypes.add(node.type);
+            }
+            else {
+                generatedLocations.set(key, new Set([node.type]));
+            }
+        }
+        const keys = libExports$1.VISITOR_KEYS[node.type];
+        if (!keys) {
+            return;
+        }
+        for (const key of keys) {
+            const value = node[key];
+            if (Array.isArray(value)) {
+                for (const item of value) {
+                    if (libExports$1.isNode(item)) {
+                        collectGeneratedLocations(item);
+                    }
+                }
+            }
+            else if (libExports$1.isNode(value)) {
+                collectGeneratedLocations(value);
+            }
+        }
+    }
+    collectGeneratedLocations(generatedAst.body);
+    for (const outlined of generatedAst.outlined) {
+        collectGeneratedLocations(outlined.fn.body);
+    }
+    const strictNodeTypes = new Set([
+        'VariableDeclaration',
+        'VariableDeclarator',
+        'Identifier',
+    ]);
+    const reportMissingLocation = (loc, nodeType) => {
+        env.recordError(CompilerDiagnostic.create({
+            category: ErrorCategory.Todo,
+            reason: 'Important source location missing in generated code',
+            description: `Source location for ${nodeType} is missing in the generated output. This can cause coverage instrumentation ` +
+                `to fail to track this code properly, resulting in inaccurate coverage reports.`,
+        }).withDetails({
+            kind: 'error',
+            loc,
+            message: null,
+        }));
+    };
+    const reportWrongNodeType = (loc, expectedType, actualTypes) => {
+        env.recordError(CompilerDiagnostic.create({
+            category: ErrorCategory.Todo,
+            reason: 'Important source location has wrong node type in generated code',
+            description: `Source location for ${expectedType} exists in the generated output but with wrong node type(s): ${Array.from(actualTypes).join(', ')}. ` +
+                `This can cause coverage instrumentation to fail to track this code properly, resulting in inaccurate coverage reports.`,
+        }).withDetails({
+            kind: 'error',
+            loc,
+            message: null,
+        }));
+    };
+    for (const [key, { loc, nodeTypes }] of importantOriginalLocations) {
+        const generatedNodeTypes = generatedLocations.get(key);
+        if (!generatedNodeTypes) {
+            reportMissingLocation(loc, Array.from(nodeTypes).join(', '));
+        }
+        else {
+            for (const nodeType of nodeTypes) {
+                if (strictNodeTypes.has(nodeType) &&
+                    !generatedNodeTypes.has(nodeType)) {
+                    const hasValidNodeType = Array.from(generatedNodeTypes).some(genType => nodeTypes.has(genType));
+                    if (hasValidNodeType) {
+                        reportMissingLocation(loc, nodeType);
+                    }
+                    else {
+                        reportWrongNodeType(loc, nodeType, generatedNodeTypes);
+                    }
+                }
+            }
+        }
+    }
+}
+
+function validateUseMemo(fn) {
+    const voidMemoErrors = new CompilerError();
+    const useMemos = new Set();
+    const react = new Set();
+    const functions = new Map();
+    const unusedUseMemos = new Map();
+    for (const [, block] of fn.body.blocks) {
+        for (const { lvalue, value } of block.instructions) {
+            if (unusedUseMemos.size !== 0) {
+                for (const operand of eachInstructionValueOperand(value)) {
+                    unusedUseMemos.delete(operand.identifier.id);
+                }
+            }
+            switch (value.kind) {
+                case 'LoadGlobal': {
+                    if (value.binding.name === 'useMemo') {
+                        useMemos.add(lvalue.identifier.id);
+                    }
+                    else if (value.binding.name === 'React') {
+                        react.add(lvalue.identifier.id);
+                    }
+                    break;
+                }
+                case 'PropertyLoad': {
+                    if (react.has(value.object.identifier.id)) {
+                        if (value.property === 'useMemo') {
+                            useMemos.add(lvalue.identifier.id);
+                        }
+                    }
+                    break;
+                }
+                case 'FunctionExpression': {
+                    functions.set(lvalue.identifier.id, value);
+                    break;
+                }
+                case 'MethodCall':
+                case 'CallExpression': {
+                    const callee = value.kind === 'CallExpression' ? value.callee : value.property;
+                    const isUseMemo = useMemos.has(callee.identifier.id);
+                    if (!isUseMemo || value.args.length === 0) {
+                        continue;
+                    }
+                    const [arg] = value.args;
+                    if (arg.kind !== 'Identifier') {
+                        continue;
+                    }
+                    const body = functions.get(arg.identifier.id);
+                    if (body === undefined) {
+                        continue;
+                    }
+                    if (body.loweredFunc.func.params.length > 0) {
+                        const firstParam = body.loweredFunc.func.params[0];
+                        const loc = firstParam.kind === 'Identifier'
+                            ? firstParam.loc
+                            : firstParam.place.loc;
+                        fn.env.recordError(CompilerDiagnostic.create({
+                            category: ErrorCategory.UseMemo,
+                            reason: 'useMemo() callbacks may not accept parameters',
+                            description: 'useMemo() callbacks are called by React to cache calculations across re-renders. They should not take parameters. Instead, directly reference the props, state, or local variables needed for the computation',
+                            suggestions: null,
+                        }).withDetails({
+                            kind: 'error',
+                            loc,
+                            message: 'Callbacks with parameters are not supported',
+                        }));
+                    }
+                    if (body.loweredFunc.func.async || body.loweredFunc.func.generator) {
+                        fn.env.recordError(CompilerDiagnostic.create({
+                            category: ErrorCategory.UseMemo,
+                            reason: 'useMemo() callbacks may not be async or generator functions',
+                            description: 'useMemo() callbacks are called once and must synchronously return a value',
+                            suggestions: null,
+                        }).withDetails({
+                            kind: 'error',
+                            loc: body.loc,
+                            message: 'Async and generator functions are not supported',
+                        }));
+                    }
+                    validateNoContextVariableAssignment(body.loweredFunc.func, fn.env);
+                    if (fn.env.config.validateNoVoidUseMemo) {
+                        if (!hasNonVoidReturn(body.loweredFunc.func)) {
+                            voidMemoErrors.pushDiagnostic(CompilerDiagnostic.create({
+                                category: ErrorCategory.VoidUseMemo,
+                                reason: 'useMemo() callbacks must return a value',
+                                description: `This useMemo() callback doesn't return a value. useMemo() is for computing and caching values, not for arbitrary side effects`,
+                                suggestions: null,
+                            }).withDetails({
+                                kind: 'error',
+                                loc: body.loc,
+                                message: 'useMemo() callbacks must return a value',
+                            }));
+                        }
+                        else {
+                            unusedUseMemos.set(lvalue.identifier.id, callee.loc);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        if (unusedUseMemos.size !== 0) {
+            for (const operand of eachTerminalOperand(block.terminal)) {
+                unusedUseMemos.delete(operand.identifier.id);
+            }
+        }
+    }
+    if (unusedUseMemos.size !== 0) {
+        for (const loc of unusedUseMemos.values()) {
+            voidMemoErrors.pushDiagnostic(CompilerDiagnostic.create({
+                category: ErrorCategory.VoidUseMemo,
+                reason: 'useMemo() result is unused',
+                description: `This useMemo() value is unused. useMemo() is for computing and caching values, not for arbitrary side effects`,
+                suggestions: null,
+            }).withDetails({
+                kind: 'error',
+                loc,
+                message: 'useMemo() result is unused',
+            }));
+        }
+    }
+    fn.env.logErrors(voidMemoErrors.asResult());
+}
+function validateNoContextVariableAssignment(fn, env) {
+    const context = new Set(fn.context.map(place => place.identifier.id));
+    for (const block of fn.body.blocks.values()) {
+        for (const instr of block.instructions) {
+            const value = instr.value;
+            switch (value.kind) {
+                case 'StoreContext': {
+                    if (context.has(value.lvalue.place.identifier.id)) {
+                        env.recordError(CompilerDiagnostic.create({
+                            category: ErrorCategory.UseMemo,
+                            reason: 'useMemo() callbacks may not reassign variables declared outside of the callback',
+                            description: 'useMemo() callbacks must be pure functions and cannot reassign variables defined outside of the callback function',
+                            suggestions: null,
+                        }).withDetails({
+                            kind: 'error',
+                            loc: value.lvalue.place.loc,
+                            message: 'Cannot reassign variable',
+                        }));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+function hasNonVoidReturn(func) {
+    for (const [, block] of func.body.blocks) {
+        if (block.terminal.kind === 'return') {
+            if (block.terminal.returnVariant === 'Explicit' ||
+                block.terminal.returnVariant === 'Implicit') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function validateLocalsNotReassignedAfterRender(fn) {
+    const contextVariables = new Set();
+    const reassignment = getContextReassignment(fn, contextVariables, false, false, fn.env);
+    if (reassignment !== null) {
+        const variable = reassignment.identifier.name != null &&
+            reassignment.identifier.name.kind === 'named'
+            ? `\`${reassignment.identifier.name.value}\``
+            : 'variable';
+        fn.env.recordError(CompilerDiagnostic.create({
+            category: ErrorCategory.Immutability,
+            reason: 'Cannot reassign variable after render completes',
+            description: `Reassigning ${variable} after render has completed can cause inconsistent behavior on subsequent renders. Consider using state instead`,
+        }).withDetails({
+            kind: 'error',
+            loc: reassignment.loc,
+            message: `Cannot reassign ${variable} after render completes`,
+        }));
+    }
+}
+function getContextReassignment(fn, contextVariables, isFunctionExpression, isAsync, env) {
+    const reassigningFunctions = new Map();
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            const { lvalue, value } = instr;
+            switch (value.kind) {
+                case 'FunctionExpression':
+                case 'ObjectMethod': {
+                    let reassignment = getContextReassignment(value.loweredFunc.func, contextVariables, true, isAsync || value.loweredFunc.func.async, env);
+                    if (reassignment === null) {
+                        for (const operand of eachInstructionValueOperand(value)) {
+                            const reassignmentFromOperand = reassigningFunctions.get(operand.identifier.id);
+                            if (reassignmentFromOperand !== undefined) {
+                                reassignment = reassignmentFromOperand;
+                                break;
+                            }
+                        }
+                    }
+                    if (reassignment !== null) {
+                        if (isAsync || value.loweredFunc.func.async) {
+                            const variable = reassignment.identifier.name !== null &&
+                                reassignment.identifier.name.kind === 'named'
+                                ? `\`${reassignment.identifier.name.value}\``
+                                : 'variable';
+                            env.recordError(CompilerDiagnostic.create({
+                                category: ErrorCategory.Immutability,
+                                reason: 'Cannot reassign variable in async function',
+                                description: 'Reassigning a variable in an async function can cause inconsistent behavior on subsequent renders. Consider using state instead',
+                            }).withDetails({
+                                kind: 'error',
+                                loc: reassignment.loc,
+                                message: `Cannot reassign ${variable}`,
+                            }));
+                            return null;
+                        }
+                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
+                    }
+                    break;
+                }
+                case 'StoreLocal': {
+                    const reassignment = reassigningFunctions.get(value.value.identifier.id);
+                    if (reassignment !== undefined) {
+                        reassigningFunctions.set(value.lvalue.place.identifier.id, reassignment);
+                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
+                    }
+                    break;
+                }
+                case 'LoadLocal': {
+                    const reassignment = reassigningFunctions.get(value.place.identifier.id);
+                    if (reassignment !== undefined) {
+                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
+                    }
+                    break;
+                }
+                case 'DeclareContext': {
+                    if (!isFunctionExpression) {
+                        contextVariables.add(value.lvalue.place.identifier.id);
+                    }
+                    break;
+                }
+                case 'StoreContext': {
+                    if (isFunctionExpression) {
+                        if (contextVariables.has(value.lvalue.place.identifier.id)) {
+                            return value.lvalue.place;
+                        }
+                    }
+                    else {
+                        contextVariables.add(value.lvalue.place.identifier.id);
+                    }
+                    const reassignment = reassigningFunctions.get(value.value.identifier.id);
+                    if (reassignment !== undefined) {
+                        reassigningFunctions.set(value.lvalue.place.identifier.id, reassignment);
+                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
+                    }
+                    break;
+                }
+                default: {
+                    let operands = eachInstructionValueOperand(value);
+                    if (value.kind === 'CallExpression') {
+                        const signature = getFunctionCallSignature(fn.env, value.callee.identifier.type);
+                        if (signature === null || signature === void 0 ? void 0 : signature.noAlias) {
+                            operands = [value.callee];
+                        }
+                    }
+                    else if (value.kind === 'MethodCall') {
+                        const signature = getFunctionCallSignature(fn.env, value.property.identifier.type);
+                        if (signature === null || signature === void 0 ? void 0 : signature.noAlias) {
+                            operands = [value.receiver, value.property];
+                        }
+                    }
+                    else if (value.kind === 'TaggedTemplateExpression') {
+                        const signature = getFunctionCallSignature(fn.env, value.tag.identifier.type);
+                        if (signature === null || signature === void 0 ? void 0 : signature.noAlias) {
+                            operands = [value.tag];
+                        }
+                    }
+                    for (const operand of operands) {
+                        CompilerError.invariant(operand.effect !== Effect.Unknown, {
+                            reason: `Expected effects to be inferred prior to ValidateLocalsNotReassignedAfterRender`,
+                            loc: operand.loc,
+                        });
+                        const reassignment = reassigningFunctions.get(operand.identifier.id);
+                        if (reassignment !== undefined) {
+                            if (operand.effect === Effect.Freeze) {
+                                return reassignment;
+                            }
+                            else {
+                                for (const lval of eachInstructionLValue(instr)) {
+                                    reassigningFunctions.set(lval.identifier.id, reassignment);
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        for (const operand of eachTerminalOperand(block.terminal)) {
+            const reassignment = reassigningFunctions.get(operand.identifier.id);
+            if (reassignment !== undefined) {
+                return reassignment;
+            }
+        }
+    }
+    return null;
+}
+
+function outlineFunctions(fn, fbtOperands) {
+    var _a;
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            const { value, lvalue } = instr;
+            if (value.kind === 'FunctionExpression' ||
+                value.kind === 'ObjectMethod') {
+                outlineFunctions(value.loweredFunc.func, fbtOperands);
+            }
+            if (value.kind === 'FunctionExpression' &&
+                value.loweredFunc.func.context.length === 0 &&
+                value.loweredFunc.func.id === null &&
+                !fbtOperands.has(lvalue.identifier.id)) {
+                const loweredFunc = value.loweredFunc.func;
+                const id = fn.env.generateGloballyUniqueIdentifierName((_a = loweredFunc.id) !== null && _a !== void 0 ? _a : loweredFunc.nameHint);
+                loweredFunc.id = id.value;
+                fn.env.outlineFunction(loweredFunc, null);
+                instr.value = {
+                    kind: 'LoadGlobal',
+                    binding: {
+                        kind: 'Global',
+                        name: id.value,
+                    },
+                    loc: value.loc,
+                };
+            }
+        }
+    }
+}
+
+function validateNoSetStateInEffects(fn, env) {
+    const setStateFunctions = new Map();
+    const errors = new CompilerError();
+    for (const [, block] of fn.body.blocks) {
+        for (const instr of block.instructions) {
+            switch (instr.value.kind) {
+                case 'LoadLocal': {
+                    if (setStateFunctions.has(instr.value.place.identifier.id)) {
+                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.place);
+                    }
+                    break;
+                }
+                case 'StoreLocal': {
+                    if (setStateFunctions.has(instr.value.value.identifier.id)) {
+                        setStateFunctions.set(instr.value.lvalue.place.identifier.id, instr.value.value);
+                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.value);
+                    }
+                    break;
+                }
+                case 'FunctionExpression': {
+                    if ([...eachInstructionValueOperand(instr.value)].some(operand => isSetStateType(operand.identifier) ||
+                        setStateFunctions.has(operand.identifier.id))) {
+                        const callee = getSetStateCall(instr.value.loweredFunc.func, setStateFunctions, env);
+                        if (callee !== null) {
+                            setStateFunctions.set(instr.lvalue.identifier.id, callee);
+                        }
+                    }
+                    break;
+                }
+                case 'MethodCall':
+                case 'CallExpression': {
+                    const callee = instr.value.kind === 'MethodCall'
+                        ? instr.value.property
+                        : instr.value.callee;
+                    if (isUseEffectEventType(callee.identifier)) {
+                        const arg = instr.value.args[0];
+                        if (arg !== undefined && arg.kind === 'Identifier') {
+                            const setState = setStateFunctions.get(arg.identifier.id);
+                            if (setState !== undefined) {
+                                setStateFunctions.set(instr.lvalue.identifier.id, setState);
+                            }
+                        }
+                    }
+                    else if (isUseEffectHookType(callee.identifier) ||
+                        isUseLayoutEffectHookType(callee.identifier) ||
+                        isUseInsertionEffectHookType(callee.identifier)) {
+                        const arg = instr.value.args[0];
+                        if (arg !== undefined && arg.kind === 'Identifier') {
+                            const setState = setStateFunctions.get(arg.identifier.id);
+                            if (setState !== undefined) {
+                                const enableVerbose = env.config.enableVerboseNoSetStateInEffect;
+                                if (enableVerbose) {
+                                    errors.pushDiagnostic(CompilerDiagnostic.create({
+                                        category: ErrorCategory.EffectSetState,
+                                        reason: 'Calling setState synchronously within an effect can trigger cascading renders',
+                                        description: 'Effects are intended to synchronize state between React and external systems. ' +
+                                            'Calling setState synchronously causes cascading renders that hurt performance.\n\n' +
+                                            'This pattern may indicate one of several issues:\n\n' +
+                                            '**1. Non-local derived data**: If the value being set could be computed from props/state ' +
+                                            'but requires data from a parent component, consider restructuring state ownership so the ' +
+                                            'derivation can happen during render in the component that owns the relevant state.\n\n' +
+                                            "**2. Derived event pattern**: If you're detecting when a prop changes (e.g., `isPlaying` " +
+                                            'transitioning from false to true), this often indicates the parent should provide an event ' +
+                                            'callback (like `onPlay`) instead of just the current state. Request access to the original event.\n\n' +
+                                            "**3. Force update / external sync**: If you're forcing a re-render to sync with an external " +
+                                            'data source (mutable values outside React), use `useSyncExternalStore` to properly subscribe ' +
+                                            'to external state changes.\n\n' +
+                                            'See: https://react.dev/learn/you-might-not-need-an-effect',
+                                        suggestions: null,
+                                    }).withDetails({
+                                        kind: 'error',
+                                        loc: setState.loc,
+                                        message: 'Avoid calling setState() directly within an effect',
+                                    }));
+                                }
+                                else {
+                                    errors.pushDiagnostic(CompilerDiagnostic.create({
+                                        category: ErrorCategory.EffectSetState,
+                                        reason: 'Calling setState synchronously within an effect can trigger cascading renders',
+                                        description: 'Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. ' +
+                                            'In general, the body of an effect should do one or both of the following:\n' +
+                                            '* Update external systems with the latest state from React.\n' +
+                                            '* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\n' +
+                                            'Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. ' +
+                                            '(https://react.dev/learn/you-might-not-need-an-effect)',
+                                        suggestions: null,
+                                    }).withDetails({
+                                        kind: 'error',
+                                        loc: setState.loc,
+                                        message: 'Avoid calling setState() directly within an effect',
+                                    }));
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    return errors.asResult();
+}
+function getSetStateCall(fn, setStateFunctions, env) {
+    const enableAllowSetStateFromRefsInEffects = env.config.enableAllowSetStateFromRefsInEffects;
+    const refDerivedValues = new Set();
+    const isDerivedFromRef = (place) => {
+        return (refDerivedValues.has(place.identifier.id) ||
+            isUseRefType(place.identifier) ||
+            isRefValueType(place.identifier));
+    };
+    const isRefControlledBlock = enableAllowSetStateFromRefsInEffects
+        ? createControlDominators(fn, place => isDerivedFromRef(place))
+        : () => false;
+    for (const [, block] of fn.body.blocks) {
+        if (enableAllowSetStateFromRefsInEffects) {
+            for (const phi of block.phis) {
+                if (isDerivedFromRef(phi.place)) {
+                    continue;
+                }
+                let isPhiDerivedFromRef = false;
+                for (const [, operand] of phi.operands) {
+                    if (isDerivedFromRef(operand)) {
+                        isPhiDerivedFromRef = true;
+                        break;
+                    }
+                }
+                if (isPhiDerivedFromRef) {
+                    refDerivedValues.add(phi.place.identifier.id);
+                }
+                else {
+                    for (const [pred] of phi.operands) {
+                        if (isRefControlledBlock(pred)) {
+                            refDerivedValues.add(phi.place.identifier.id);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        for (const instr of block.instructions) {
+            if (enableAllowSetStateFromRefsInEffects) {
+                const hasRefOperand = Iterable_some(eachInstructionValueOperand(instr.value), isDerivedFromRef);
+                if (hasRefOperand) {
+                    for (const lvalue of eachInstructionLValue(instr)) {
+                        refDerivedValues.add(lvalue.identifier.id);
+                    }
+                    for (const operand of eachInstructionValueOperand(instr.value)) {
+                        switch (operand.effect) {
+                            case Effect.Capture:
+                            case Effect.Store:
+                            case Effect.ConditionallyMutate:
+                            case Effect.ConditionallyMutateIterator:
+                            case Effect.Mutate: {
+                                if (isMutable(instr, operand)) {
+                                    refDerivedValues.add(operand.identifier.id);
+                                }
+                                break;
+                            }
+                            case Effect.Freeze:
+                            case Effect.Read: {
+                                break;
+                            }
+                            case Effect.Unknown: {
+                                CompilerError.invariant(false, {
+                                    reason: 'Unexpected unknown effect',
+                                    loc: operand.loc,
+                                });
+                            }
+                            default: {
+                                assertExhaustive$1(operand.effect, `Unexpected effect kind \`${operand.effect}\``);
+                            }
+                        }
+                    }
+                }
+                if (instr.value.kind === 'PropertyLoad' &&
+                    instr.value.property === 'current' &&
+                    (isUseRefType(instr.value.object.identifier) ||
+                        isRefValueType(instr.value.object.identifier))) {
+                    refDerivedValues.add(instr.lvalue.identifier.id);
+                }
+            }
+            switch (instr.value.kind) {
+                case 'LoadLocal': {
+                    if (setStateFunctions.has(instr.value.place.identifier.id)) {
+                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.place);
+                    }
+                    break;
+                }
+                case 'StoreLocal': {
+                    if (setStateFunctions.has(instr.value.value.identifier.id)) {
+                        setStateFunctions.set(instr.value.lvalue.place.identifier.id, instr.value.value);
+                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.value);
+                    }
+                    break;
+                }
+                case 'CallExpression': {
+                    const callee = instr.value.callee;
+                    if (isSetStateType(callee.identifier) ||
+                        setStateFunctions.has(callee.identifier.id)) {
+                        if (enableAllowSetStateFromRefsInEffects) {
+                            const arg = instr.value.args.at(0);
+                            if (arg !== undefined &&
+                                arg.kind === 'Identifier' &&
+                                refDerivedValues.has(arg.identifier.id)) {
+                                return null;
+                            }
+                            else if (isRefControlledBlock(block.id)) {
+                                continue;
+                            }
+                        }
+                        return callee;
+                    }
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function validateNoJSXInTryStatement(fn) {
+    const activeTryBlocks = [];
+    const errors = new CompilerError();
+    for (const [, block] of fn.body.blocks) {
+        retainWhere(activeTryBlocks, id => id !== block.id);
+        if (activeTryBlocks.length !== 0) {
+            for (const instr of block.instructions) {
+                const { value } = instr;
+                switch (value.kind) {
+                    case 'JsxExpression':
+                    case 'JsxFragment': {
+                        errors.pushDiagnostic(CompilerDiagnostic.create({
+                            category: ErrorCategory.ErrorBoundaries,
+                            reason: 'Avoid constructing JSX within try/catch',
+                            description: `React does not immediately render components when JSX is rendered, so any errors from this component will not be caught by the try/catch. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary)`,
+                        }).withDetails({
+                            kind: 'error',
+                            loc: value.loc,
+                            message: 'Avoid constructing JSX within try/catch',
+                        }));
+                        break;
+                    }
+                }
+            }
+        }
+        if (block.terminal.kind === 'try') {
+            activeTryBlocks.push(block.terminal.handler);
+        }
+    }
+    return errors.asResult();
+}
+
 function collectHoistablePropertyLoads(fn, temporaries, hoistableFromOptionals) {
     const registry = new PropertyPathRegistry();
     const knownImmutableIdentifiers = new Set();
@@ -44027,28 +46629,8 @@ function collectHoistablePropertyLoads(fn, temporaries, hoistableFromOptionals) 
         hoistableFromOptionals,
         registry,
         nestedFnImmutableContext: null,
-        assumedInvokedFns: fn.env.config.enableTreatFunctionDepsAsConditional
-            ? new Set()
-            : getAssumedInvokedFunctions(fn),
+        assumedInvokedFns: getAssumedInvokedFunctions(fn),
     });
-}
-function collectHoistablePropertyLoadsInInnerFn(fnInstr, temporaries, hoistableFromOptionals) {
-    const fn = fnInstr.value.loweredFunc.func;
-    const initialContext = {
-        temporaries,
-        knownImmutableIdentifiers: new Set(),
-        hoistableFromOptionals,
-        registry: new PropertyPathRegistry(),
-        nestedFnImmutableContext: null,
-        assumedInvokedFns: fn.env.config.enableTreatFunctionDepsAsConditional
-            ? new Set()
-            : getAssumedInvokedFunctions(fn),
-    };
-    const nestedFnImmutableContext = new Set(fn.context
-        .filter(place => isImmutableAtInstr(place.identifier, fnInstr.id, initialContext))
-        .map(place => place.identifier.id));
-    initialContext.nestedFnImmutableContext = nestedFnImmutableContext;
-    return collectHoistablePropertyLoadsImpl(fn, initialContext);
 }
 function collectHoistablePropertyLoadsImpl(fn, context) {
     const nodes = collectNonNullsInBlocks(fn, context);
@@ -44418,6 +47000,197 @@ function getAssumedInvokedFunctions(fn, temporaries = new Map()) {
     return hoistableFunctions;
 }
 
+var _a, _ReactiveScopeDependencyTreeHIR_hoistableObjects, _ReactiveScopeDependencyTreeHIR_deps, _ReactiveScopeDependencyTreeHIR_getOrCreateRoot, _ReactiveScopeDependencyTreeHIR_debugImpl;
+class ReactiveScopeDependencyTreeHIR {
+    constructor(hoistableObjects) {
+        var _b;
+        _ReactiveScopeDependencyTreeHIR_hoistableObjects.set(this, new Map());
+        _ReactiveScopeDependencyTreeHIR_deps.set(this, new Map());
+        for (const { path, identifier, reactive, loc } of hoistableObjects) {
+            let currNode = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, reactive, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_hoistableObjects, "f"), path.length > 0 && path[0].optional ? 'Optional' : 'NonNull', loc);
+            for (let i = 0; i < path.length; i++) {
+                const prevAccessType = (_b = currNode.properties.get(path[i].property)) === null || _b === void 0 ? void 0 : _b.accessType;
+                const accessType = i + 1 < path.length && path[i + 1].optional ? 'Optional' : 'NonNull';
+                CompilerError.invariant(prevAccessType == null || prevAccessType === accessType, {
+                    reason: 'Conflicting access types',
+                    loc: GeneratedSource,
+                });
+                let nextNode = currNode.properties.get(path[i].property);
+                if (nextNode == null) {
+                    nextNode = {
+                        properties: new Map(),
+                        accessType,
+                        loc: path[i].loc,
+                    };
+                    currNode.properties.set(path[i].property, nextNode);
+                }
+                currNode = nextNode;
+            }
+        }
+    }
+    addDependency(dep) {
+        const { identifier, reactive, path, loc } = dep;
+        let depCursor = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, reactive, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f"), PropertyAccessType.UnconditionalAccess, loc);
+        let hoistableCursor = __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_hoistableObjects, "f").get(identifier);
+        for (const entry of path) {
+            let nextHoistableCursor;
+            let nextDepCursor;
+            if (entry.optional) {
+                if (hoistableCursor != null) {
+                    nextHoistableCursor = hoistableCursor === null || hoistableCursor === void 0 ? void 0 : hoistableCursor.properties.get(entry.property);
+                }
+                let accessType;
+                if (hoistableCursor != null &&
+                    hoistableCursor.accessType === 'NonNull') {
+                    accessType = PropertyAccessType.UnconditionalAccess;
+                }
+                else {
+                    accessType = PropertyAccessType.OptionalAccess;
+                }
+                nextDepCursor = makeOrMergeProperty(depCursor, entry.property, accessType, entry.loc);
+            }
+            else if (hoistableCursor != null &&
+                hoistableCursor.accessType === 'NonNull') {
+                nextHoistableCursor = hoistableCursor.properties.get(entry.property);
+                nextDepCursor = makeOrMergeProperty(depCursor, entry.property, PropertyAccessType.UnconditionalAccess, entry.loc);
+            }
+            else {
+                break;
+            }
+            depCursor = nextDepCursor;
+            hoistableCursor = nextHoistableCursor;
+        }
+        depCursor.accessType = merge(depCursor.accessType, PropertyAccessType.OptionalDependency);
+    }
+    deriveMinimalDependencies() {
+        const results = new Set();
+        for (const [rootId, rootNode] of __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f").entries()) {
+            collectMinimalDependenciesInSubtree(rootNode, rootNode.reactive, rootId, [], results);
+        }
+        return results;
+    }
+    printDeps(includeAccesses) {
+        let res = [];
+        for (const [rootId, rootNode] of __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f").entries()) {
+            const rootResults = printSubtree(rootNode, includeAccesses).map(result => `${printIdentifier(rootId)}.${result}`);
+            res.push(rootResults);
+        }
+        return res.flat().join('\n');
+    }
+    static debug(roots) {
+        const buf = [`tree() [`];
+        for (const [rootId, rootNode] of roots) {
+            buf.push(`${printIdentifier(rootId)} (${rootNode.accessType}):`);
+            __classPrivateFieldGet(this, _a, "m", _ReactiveScopeDependencyTreeHIR_debugImpl).call(this, buf, rootNode, 1);
+        }
+        buf.push(']');
+        return buf.length > 2 ? buf.join('\n') : buf.join('');
+    }
+}
+_a = ReactiveScopeDependencyTreeHIR, _ReactiveScopeDependencyTreeHIR_hoistableObjects = new WeakMap(), _ReactiveScopeDependencyTreeHIR_deps = new WeakMap(), _ReactiveScopeDependencyTreeHIR_getOrCreateRoot = function _ReactiveScopeDependencyTreeHIR_getOrCreateRoot(identifier, reactive, roots, defaultAccessType, loc) {
+    let rootNode = roots.get(identifier);
+    if (rootNode === undefined) {
+        rootNode = {
+            properties: new Map(),
+            reactive,
+            accessType: defaultAccessType,
+            loc,
+        };
+        roots.set(identifier, rootNode);
+    }
+    else {
+        CompilerError.invariant(reactive === rootNode.reactive, {
+            reason: '[DeriveMinimalDependenciesHIR] Conflicting reactive root flag',
+            description: `Identifier ${printIdentifier(identifier)}`,
+            loc: GeneratedSource,
+        });
+    }
+    return rootNode;
+}, _ReactiveScopeDependencyTreeHIR_debugImpl = function _ReactiveScopeDependencyTreeHIR_debugImpl(buf, node, depth = 0) {
+    for (const [property, childNode] of node.properties) {
+        buf.push(`${'  '.repeat(depth)}.${property} (${childNode.accessType}):`);
+        __classPrivateFieldGet(this, _a, "m", _ReactiveScopeDependencyTreeHIR_debugImpl).call(this, buf, childNode, depth + 1);
+    }
+};
+var PropertyAccessType;
+(function (PropertyAccessType) {
+    PropertyAccessType["OptionalAccess"] = "OptionalAccess";
+    PropertyAccessType["UnconditionalAccess"] = "UnconditionalAccess";
+    PropertyAccessType["OptionalDependency"] = "OptionalDependency";
+    PropertyAccessType["UnconditionalDependency"] = "UnconditionalDependency";
+})(PropertyAccessType || (PropertyAccessType = {}));
+function isOptional(access) {
+    return (access === PropertyAccessType.OptionalAccess ||
+        access === PropertyAccessType.OptionalDependency);
+}
+function isDependency(access) {
+    return (access === PropertyAccessType.OptionalDependency ||
+        access === PropertyAccessType.UnconditionalDependency);
+}
+function merge(access1, access2) {
+    const resultIsUnconditional = !(isOptional(access1) && isOptional(access2));
+    const resultIsDependency = isDependency(access1) || isDependency(access2);
+    if (resultIsUnconditional) {
+        if (resultIsDependency) {
+            return PropertyAccessType.UnconditionalDependency;
+        }
+        else {
+            return PropertyAccessType.UnconditionalAccess;
+        }
+    }
+    else {
+        if (resultIsDependency) {
+            return PropertyAccessType.OptionalDependency;
+        }
+        else {
+            return PropertyAccessType.OptionalAccess;
+        }
+    }
+}
+function collectMinimalDependenciesInSubtree(node, reactive, rootIdentifier, path, results) {
+    if (isDependency(node.accessType)) {
+        results.add({ identifier: rootIdentifier, reactive, path, loc: node.loc });
+    }
+    else {
+        for (const [childName, childNode] of node.properties) {
+            collectMinimalDependenciesInSubtree(childNode, reactive, rootIdentifier, [
+                ...path,
+                {
+                    property: childName,
+                    optional: isOptional(childNode.accessType),
+                    loc: childNode.loc,
+                },
+            ], results);
+        }
+    }
+}
+function printSubtree(node, includeAccesses) {
+    const results = [];
+    for (const [propertyName, propertyNode] of node.properties) {
+        if (includeAccesses || isDependency(propertyNode.accessType)) {
+            results.push(`${propertyName} (${propertyNode.accessType})`);
+        }
+        const propertyResults = printSubtree(propertyNode, includeAccesses);
+        results.push(...propertyResults.map(result => `${propertyName}.${result}`));
+    }
+    return results;
+}
+function makeOrMergeProperty(node, property, accessType, loc) {
+    let child = node.properties.get(property);
+    if (child == null) {
+        child = {
+            properties: new Map(),
+            accessType,
+            loc,
+        };
+        node.properties.set(property, child);
+    }
+    else {
+        child.accessType = merge(child.accessType, accessType);
+    }
+    return child;
+}
+
 function collectOptionalChainSidemap(fn) {
     const context = {
         currFn: fn,
@@ -44534,10 +47307,7 @@ function traverseOptionalBlock(optional, context, outerAlternate) {
     else if (maybeTest.terminal.kind === 'optional') {
         const testBlock = context.blocks.get(maybeTest.terminal.fallthrough);
         if (testBlock.terminal.kind !== 'branch') {
-            CompilerError.throwTodo({
-                reason: `Unexpected terminal kind \`${testBlock.terminal.kind}\` for optional fallthrough block`,
-                loc: maybeTest.terminal.loc,
-            });
+            return null;
         }
         const innerOptional = traverseOptionalBlock(maybeTest, context, testBlock.terminal.alternate);
         if (innerOptional == null) {
@@ -44591,201 +47361,10 @@ function traverseOptionalBlock(optional, context, outerAlternate) {
     return matchConsequentResult.consequentId;
 }
 
-var _a, _ReactiveScopeDependencyTreeHIR_hoistableObjects, _ReactiveScopeDependencyTreeHIR_deps, _ReactiveScopeDependencyTreeHIR_getOrCreateRoot, _ReactiveScopeDependencyTreeHIR_debugImpl;
-class ReactiveScopeDependencyTreeHIR {
-    constructor(hoistableObjects) {
-        var _b;
-        _ReactiveScopeDependencyTreeHIR_hoistableObjects.set(this, new Map());
-        _ReactiveScopeDependencyTreeHIR_deps.set(this, new Map());
-        for (const { path, identifier, reactive, loc } of hoistableObjects) {
-            let currNode = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, reactive, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_hoistableObjects, "f"), path.length > 0 && path[0].optional ? 'Optional' : 'NonNull', loc);
-            for (let i = 0; i < path.length; i++) {
-                const prevAccessType = (_b = currNode.properties.get(path[i].property)) === null || _b === void 0 ? void 0 : _b.accessType;
-                const accessType = i + 1 < path.length && path[i + 1].optional ? 'Optional' : 'NonNull';
-                CompilerError.invariant(prevAccessType == null || prevAccessType === accessType, {
-                    reason: 'Conflicting access types',
-                    loc: GeneratedSource,
-                });
-                let nextNode = currNode.properties.get(path[i].property);
-                if (nextNode == null) {
-                    nextNode = {
-                        properties: new Map(),
-                        accessType,
-                        loc: path[i].loc,
-                    };
-                    currNode.properties.set(path[i].property, nextNode);
-                }
-                currNode = nextNode;
-            }
-        }
-    }
-    addDependency(dep) {
-        const { identifier, reactive, path, loc } = dep;
-        let depCursor = __classPrivateFieldGet(_a, _a, "m", _ReactiveScopeDependencyTreeHIR_getOrCreateRoot).call(_a, identifier, reactive, __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f"), PropertyAccessType.UnconditionalAccess, loc);
-        let hoistableCursor = __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_hoistableObjects, "f").get(identifier);
-        for (const entry of path) {
-            let nextHoistableCursor;
-            let nextDepCursor;
-            if (entry.optional) {
-                if (hoistableCursor != null) {
-                    nextHoistableCursor = hoistableCursor === null || hoistableCursor === void 0 ? void 0 : hoistableCursor.properties.get(entry.property);
-                }
-                let accessType;
-                if (hoistableCursor != null &&
-                    hoistableCursor.accessType === 'NonNull') {
-                    accessType = PropertyAccessType.UnconditionalAccess;
-                }
-                else {
-                    accessType = PropertyAccessType.OptionalAccess;
-                }
-                nextDepCursor = makeOrMergeProperty(depCursor, entry.property, accessType, entry.loc);
-            }
-            else if (hoistableCursor != null &&
-                hoistableCursor.accessType === 'NonNull') {
-                nextHoistableCursor = hoistableCursor.properties.get(entry.property);
-                nextDepCursor = makeOrMergeProperty(depCursor, entry.property, PropertyAccessType.UnconditionalAccess, entry.loc);
-            }
-            else {
-                break;
-            }
-            depCursor = nextDepCursor;
-            hoistableCursor = nextHoistableCursor;
-        }
-        depCursor.accessType = merge$1(depCursor.accessType, PropertyAccessType.OptionalDependency);
-    }
-    deriveMinimalDependencies() {
-        const results = new Set();
-        for (const [rootId, rootNode] of __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f").entries()) {
-            collectMinimalDependenciesInSubtree(rootNode, rootNode.reactive, rootId, [], results);
-        }
-        return results;
-    }
-    printDeps(includeAccesses) {
-        let res = [];
-        for (const [rootId, rootNode] of __classPrivateFieldGet(this, _ReactiveScopeDependencyTreeHIR_deps, "f").entries()) {
-            const rootResults = printSubtree(rootNode, includeAccesses).map(result => `${printIdentifier(rootId)}.${result}`);
-            res.push(rootResults);
-        }
-        return res.flat().join('\n');
-    }
-    static debug(roots) {
-        const buf = [`tree() [`];
-        for (const [rootId, rootNode] of roots) {
-            buf.push(`${printIdentifier(rootId)} (${rootNode.accessType}):`);
-            __classPrivateFieldGet(this, _a, "m", _ReactiveScopeDependencyTreeHIR_debugImpl).call(this, buf, rootNode, 1);
-        }
-        buf.push(']');
-        return buf.length > 2 ? buf.join('\n') : buf.join('');
-    }
-}
-_a = ReactiveScopeDependencyTreeHIR, _ReactiveScopeDependencyTreeHIR_hoistableObjects = new WeakMap(), _ReactiveScopeDependencyTreeHIR_deps = new WeakMap(), _ReactiveScopeDependencyTreeHIR_getOrCreateRoot = function _ReactiveScopeDependencyTreeHIR_getOrCreateRoot(identifier, reactive, roots, defaultAccessType, loc) {
-    let rootNode = roots.get(identifier);
-    if (rootNode === undefined) {
-        rootNode = {
-            properties: new Map(),
-            reactive,
-            accessType: defaultAccessType,
-            loc,
-        };
-        roots.set(identifier, rootNode);
-    }
-    else {
-        CompilerError.invariant(reactive === rootNode.reactive, {
-            reason: '[DeriveMinimalDependenciesHIR] Conflicting reactive root flag',
-            description: `Identifier ${printIdentifier(identifier)}`,
-            loc: GeneratedSource,
-        });
-    }
-    return rootNode;
-}, _ReactiveScopeDependencyTreeHIR_debugImpl = function _ReactiveScopeDependencyTreeHIR_debugImpl(buf, node, depth = 0) {
-    for (const [property, childNode] of node.properties) {
-        buf.push(`${'  '.repeat(depth)}.${property} (${childNode.accessType}):`);
-        __classPrivateFieldGet(this, _a, "m", _ReactiveScopeDependencyTreeHIR_debugImpl).call(this, buf, childNode, depth + 1);
-    }
-};
-var PropertyAccessType;
-(function (PropertyAccessType) {
-    PropertyAccessType["OptionalAccess"] = "OptionalAccess";
-    PropertyAccessType["UnconditionalAccess"] = "UnconditionalAccess";
-    PropertyAccessType["OptionalDependency"] = "OptionalDependency";
-    PropertyAccessType["UnconditionalDependency"] = "UnconditionalDependency";
-})(PropertyAccessType || (PropertyAccessType = {}));
-function isOptional(access) {
-    return (access === PropertyAccessType.OptionalAccess ||
-        access === PropertyAccessType.OptionalDependency);
-}
-function isDependency(access) {
-    return (access === PropertyAccessType.OptionalDependency ||
-        access === PropertyAccessType.UnconditionalDependency);
-}
-function merge$1(access1, access2) {
-    const resultIsUnconditional = !(isOptional(access1) && isOptional(access2));
-    const resultIsDependency = isDependency(access1) || isDependency(access2);
-    if (resultIsUnconditional) {
-        if (resultIsDependency) {
-            return PropertyAccessType.UnconditionalDependency;
-        }
-        else {
-            return PropertyAccessType.UnconditionalAccess;
-        }
-    }
-    else {
-        if (resultIsDependency) {
-            return PropertyAccessType.OptionalDependency;
-        }
-        else {
-            return PropertyAccessType.OptionalAccess;
-        }
-    }
-}
-function collectMinimalDependenciesInSubtree(node, reactive, rootIdentifier, path, results) {
-    if (isDependency(node.accessType)) {
-        results.add({ identifier: rootIdentifier, reactive, path, loc: node.loc });
-    }
-    else {
-        for (const [childName, childNode] of node.properties) {
-            collectMinimalDependenciesInSubtree(childNode, reactive, rootIdentifier, [
-                ...path,
-                {
-                    property: childName,
-                    optional: isOptional(childNode.accessType),
-                    loc: childNode.loc,
-                },
-            ], results);
-        }
-    }
-}
-function printSubtree(node, includeAccesses) {
-    const results = [];
-    for (const [propertyName, propertyNode] of node.properties) {
-        if (includeAccesses || isDependency(propertyNode.accessType)) {
-            results.push(`${propertyName} (${propertyNode.accessType})`);
-        }
-        const propertyResults = printSubtree(propertyNode, includeAccesses);
-        results.push(...propertyResults.map(result => `${propertyName}.${result}`));
-    }
-    return results;
-}
-function makeOrMergeProperty(node, property, accessType, loc) {
-    let child = node.properties.get(property);
-    if (child == null) {
-        child = {
-            properties: new Map(),
-            accessType,
-            loc,
-        };
-        node.properties.set(property, child);
-    }
-    else {
-        child.accessType = merge$1(child.accessType, accessType);
-    }
-    return child;
-}
-
 var _DependencyCollectionContext_instances, _DependencyCollectionContext_declarations, _DependencyCollectionContext_reassignments, _DependencyCollectionContext_scopes, _DependencyCollectionContext_dependencies, _DependencyCollectionContext_temporaries, _DependencyCollectionContext_temporariesUsedOutsideScope, _DependencyCollectionContext_processedInstrsInOptional, _DependencyCollectionContext_innerFnContext, _DependencyCollectionContext_checkValidDependency, _DependencyCollectionContext_isScopeActive;
 function propagateScopeDependenciesHIR(fn) {
     const usedOutsideDeclaringScope = findTemporariesUsedOutsideDeclaringScope(fn);
-    const temporaries = collectTemporariesSidemap$1(fn, usedOutsideDeclaringScope);
+    const temporaries = collectTemporariesSidemap(fn, usedOutsideDeclaringScope);
     const { temporariesReadInOptional, processedInstrsInOptional, hoistableObjects, } = collectOptionalChainSidemap(fn);
     const hoistablePropertyLoads = keyByScopeId(fn, collectHoistablePropertyLoads(fn, temporaries, hoistableObjects));
     const scopeDeps = collectDependencies$1(fn, usedOutsideDeclaringScope, new Map([...temporaries, ...temporariesReadInOptional]), processedInstrsInOptional);
@@ -44856,7 +47435,7 @@ function findTemporariesUsedOutsideDeclaringScope(fn) {
     }
     return usedOutsideDeclaringScope;
 }
-function collectTemporariesSidemap$1(fn, usedOutsideDeclaringScope) {
+function collectTemporariesSidemap(fn, usedOutsideDeclaringScope) {
     const temporaries = new Map();
     collectTemporariesSidemapImpl(fn, usedOutsideDeclaringScope, temporaries, null);
     return temporaries;
@@ -45197,4590 +47776,6 @@ function collectDependencies$1(fn, usedOutsideDeclaringScope, temporaries, proce
     };
     handleFunction(fn);
     return context.deps;
-}
-
-function buildDependencyInstructions(dep, env) {
-    const builder = new HIRBuilder(env, {
-        entryBlockKind: 'value',
-    });
-    let dependencyValue;
-    if (dep.path.every(path => !path.optional)) {
-        dependencyValue = writeNonOptionalDependency(dep, env, builder);
-    }
-    else {
-        dependencyValue = writeOptionalDependency(dep, builder, null);
-    }
-    const exitBlockId = builder.terminate({
-        kind: 'unsupported',
-        loc: GeneratedSource,
-        id: makeInstructionId(0),
-    }, null);
-    return {
-        place: {
-            kind: 'Identifier',
-            identifier: dependencyValue,
-            effect: Effect.Freeze,
-            reactive: dep.reactive,
-            loc: GeneratedSource,
-        },
-        value: builder.build(),
-        exitBlockId,
-    };
-}
-function writeNonOptionalDependency(dep, env, builder) {
-    const loc = dep.identifier.loc;
-    let curr = makeTemporaryIdentifier(env.nextIdentifierId, loc);
-    builder.push({
-        lvalue: {
-            identifier: curr,
-            kind: 'Identifier',
-            effect: Effect.Mutate,
-            reactive: dep.reactive,
-            loc,
-        },
-        value: {
-            kind: 'LoadLocal',
-            place: {
-                identifier: dep.identifier,
-                kind: 'Identifier',
-                effect: Effect.Freeze,
-                reactive: dep.reactive,
-                loc,
-            },
-            loc,
-        },
-        id: makeInstructionId(1),
-        loc: loc,
-        effects: null,
-    });
-    for (const path of dep.path) {
-        const next = makeTemporaryIdentifier(env.nextIdentifierId, loc);
-        builder.push({
-            lvalue: {
-                identifier: next,
-                kind: 'Identifier',
-                effect: Effect.Mutate,
-                reactive: dep.reactive,
-                loc,
-            },
-            value: {
-                kind: 'PropertyLoad',
-                object: {
-                    identifier: curr,
-                    kind: 'Identifier',
-                    effect: Effect.Freeze,
-                    reactive: dep.reactive,
-                    loc,
-                },
-                property: path.property,
-                loc,
-            },
-            id: makeInstructionId(1),
-            loc: loc,
-            effects: null,
-        });
-        curr = next;
-    }
-    return curr;
-}
-function writeOptionalDependency(dep, builder, parentAlternate) {
-    const env = builder.environment;
-    const dependencyValue = {
-        kind: 'Identifier',
-        identifier: makeTemporaryIdentifier(env.nextIdentifierId, GeneratedSource),
-        effect: Effect.Mutate,
-        reactive: dep.reactive,
-        loc: GeneratedSource,
-    };
-    const continuationBlock = builder.reserve(builder.currentBlockKind());
-    let alternate;
-    if (parentAlternate != null) {
-        alternate = parentAlternate;
-    }
-    else {
-        alternate = builder.enter('value', () => {
-            const temp = lowerValueToTemporary(builder, {
-                kind: 'Primitive',
-                value: undefined,
-                loc: GeneratedSource,
-            });
-            lowerValueToTemporary(builder, {
-                kind: 'StoreLocal',
-                lvalue: { kind: InstructionKind.Const, place: Object.assign({}, dependencyValue) },
-                value: Object.assign({}, temp),
-                type: null,
-                loc: GeneratedSource,
-            });
-            return {
-                kind: 'goto',
-                variant: GotoVariant.Break,
-                block: continuationBlock.id,
-                id: makeInstructionId(0),
-                loc: GeneratedSource,
-            };
-        });
-    }
-    const consequent = builder.reserve('value');
-    let testIdentifier = null;
-    const testBlock = builder.enter('value', () => {
-        const testDependency = Object.assign(Object.assign({}, dep), { path: dep.path.slice(0, dep.path.length - 1) });
-        const firstOptional = dep.path.findIndex(path => path.optional);
-        CompilerError.invariant(firstOptional !== -1, {
-            reason: '[ScopeDependencyUtils] Internal invariant broken: expected optional path',
-            loc: dep.identifier.loc,
-        });
-        if (firstOptional === dep.path.length - 1) {
-            testIdentifier = writeNonOptionalDependency(testDependency, env, builder);
-        }
-        else {
-            testIdentifier = writeOptionalDependency(testDependency, builder, alternate);
-        }
-        return {
-            kind: 'branch',
-            test: {
-                identifier: testIdentifier,
-                effect: Effect.Freeze,
-                kind: 'Identifier',
-                loc: GeneratedSource,
-                reactive: dep.reactive,
-            },
-            consequent: consequent.id,
-            alternate,
-            id: makeInstructionId(0),
-            loc: GeneratedSource,
-            fallthrough: continuationBlock.id,
-        };
-    });
-    builder.enterReserved(consequent, () => {
-        CompilerError.invariant(testIdentifier !== null, {
-            reason: 'Satisfy type checker',
-            loc: GeneratedSource,
-        });
-        lowerValueToTemporary(builder, {
-            kind: 'StoreLocal',
-            lvalue: { kind: InstructionKind.Const, place: Object.assign({}, dependencyValue) },
-            value: lowerValueToTemporary(builder, {
-                kind: 'PropertyLoad',
-                object: {
-                    identifier: testIdentifier,
-                    kind: 'Identifier',
-                    effect: Effect.Freeze,
-                    reactive: dep.reactive,
-                    loc: GeneratedSource,
-                },
-                property: dep.path.at(-1).property,
-                loc: GeneratedSource,
-            }),
-            type: null,
-            loc: GeneratedSource,
-        });
-        return {
-            kind: 'goto',
-            variant: GotoVariant.Break,
-            block: continuationBlock.id,
-            id: makeInstructionId(0),
-            loc: GeneratedSource,
-        };
-    });
-    builder.terminateWithContinuation({
-        kind: 'optional',
-        optional: dep.path.at(-1).optional,
-        test: testBlock,
-        fallthrough: continuationBlock.id,
-        id: makeInstructionId(0),
-        loc: GeneratedSource,
-    }, continuationBlock);
-    return dependencyValue.identifier;
-}
-
-function inferEffectDependencies(fn) {
-    var _a, _b;
-    const fnExpressions = new Map();
-    const autodepFnConfigs = new Map();
-    for (const effectTarget of fn.env.config.inferEffectDependencies) {
-        const moduleTargets = getOrInsertWith(autodepFnConfigs, effectTarget.function.source, () => new Map());
-        moduleTargets.set(effectTarget.function.importSpecifierName, effectTarget.autodepsIndex);
-    }
-    const autodepFnLoads = new Map();
-    const autodepModuleLoads = new Map();
-    const scopeInfos = new Map();
-    const loadGlobals = new Set();
-    const reactiveIds = inferReactiveIdentifiers(fn);
-    const rewriteBlocks = [];
-    for (const [, block] of fn.body.blocks) {
-        if (block.terminal.kind === 'scope') {
-            const scopeBlock = fn.body.blocks.get(block.terminal.block);
-            if (scopeBlock.instructions.length === 1 &&
-                scopeBlock.terminal.kind === 'goto' &&
-                scopeBlock.terminal.block === block.terminal.fallthrough) {
-                scopeInfos.set(block.terminal.scope.id, block.terminal.scope.dependencies);
-            }
-        }
-        const rewriteInstrs = [];
-        for (const instr of block.instructions) {
-            const { value, lvalue } = instr;
-            if (value.kind === 'FunctionExpression') {
-                fnExpressions.set(lvalue.identifier.id, instr);
-            }
-            else if (value.kind === 'PropertyLoad') {
-                if (typeof value.property === 'string' &&
-                    autodepModuleLoads.has(value.object.identifier.id)) {
-                    const moduleTargets = autodepModuleLoads.get(value.object.identifier.id);
-                    const propertyName = value.property;
-                    const numRequiredArgs = moduleTargets.get(propertyName);
-                    if (numRequiredArgs != null) {
-                        autodepFnLoads.set(lvalue.identifier.id, numRequiredArgs);
-                    }
-                }
-            }
-            else if (value.kind === 'LoadGlobal') {
-                loadGlobals.add(lvalue.identifier.id);
-                if (value.binding.kind === 'ImportNamespace') {
-                    const moduleTargets = autodepFnConfigs.get(value.binding.module);
-                    if (moduleTargets != null) {
-                        autodepModuleLoads.set(lvalue.identifier.id, moduleTargets);
-                    }
-                }
-                if (value.binding.kind === 'ImportSpecifier' ||
-                    value.binding.kind === 'ImportDefault') {
-                    const moduleTargets = autodepFnConfigs.get(value.binding.module);
-                    if (moduleTargets != null) {
-                        const importSpecifierName = value.binding.kind === 'ImportSpecifier'
-                            ? value.binding.imported
-                            : DEFAULT_EXPORT;
-                        const numRequiredArgs = moduleTargets.get(importSpecifierName);
-                        if (numRequiredArgs != null) {
-                            autodepFnLoads.set(lvalue.identifier.id, numRequiredArgs);
-                        }
-                    }
-                }
-            }
-            else if (value.kind === 'CallExpression' ||
-                value.kind === 'MethodCall') {
-                const callee = value.kind === 'CallExpression' ? value.callee : value.property;
-                const autodepsArgIndex = value.args.findIndex(arg => arg.kind === 'Identifier' &&
-                    arg.identifier.type.kind === 'Object' &&
-                    arg.identifier.type.shapeId === BuiltInAutodepsId);
-                const autodepsArgExpectedIndex = autodepFnLoads.get(callee.identifier.id);
-                if (value.args.length > 0 &&
-                    autodepsArgExpectedIndex != null &&
-                    autodepsArgIndex === autodepsArgExpectedIndex &&
-                    autodepFnLoads.has(callee.identifier.id) &&
-                    value.args[0].kind === 'Identifier') {
-                    const effectDeps = [];
-                    const deps = {
-                        kind: 'ArrayExpression',
-                        elements: effectDeps,
-                        loc: GeneratedSource,
-                    };
-                    const depsPlace = createTemporaryPlace(fn.env, GeneratedSource);
-                    depsPlace.effect = Effect.Read;
-                    const fnExpr = fnExpressions.get(value.args[0].identifier.id);
-                    if (fnExpr != null) {
-                        const scopeInfo = fnExpr.lvalue.identifier.scope != null
-                            ? scopeInfos.get(fnExpr.lvalue.identifier.scope.id)
-                            : null;
-                        let minimalDeps;
-                        if (scopeInfo != null) {
-                            minimalDeps = new Set(scopeInfo);
-                        }
-                        else {
-                            minimalDeps = inferMinimalDependencies(fnExpr);
-                        }
-                        const usedDeps = [];
-                        for (const maybeDep of minimalDeps) {
-                            if (((isUseRefType(maybeDep.identifier) ||
-                                isSetStateType(maybeDep.identifier)) &&
-                                !reactiveIds.has(maybeDep.identifier.id)) ||
-                                isFireFunctionType(maybeDep.identifier) ||
-                                isEffectEventFunctionType(maybeDep.identifier)) {
-                                continue;
-                            }
-                            const dep = truncateDepAtCurrent(maybeDep);
-                            const { place, value, exitBlockId } = buildDependencyInstructions(dep, fn.env);
-                            rewriteInstrs.push({
-                                kind: 'block',
-                                location: instr.id,
-                                value,
-                                exitBlockId: exitBlockId,
-                            });
-                            effectDeps.push(place);
-                            usedDeps.push(dep);
-                        }
-                        const decorations = [];
-                        for (const loc of collectDepUsages(usedDeps, fnExpr.value)) {
-                            if (typeof loc === 'symbol') {
-                                continue;
-                            }
-                            decorations.push(loc);
-                        }
-                        if (typeof value.loc !== 'symbol') {
-                            (_a = fn.env.logger) === null || _a === void 0 ? void 0 : _a.logEvent(fn.env.filename, {
-                                kind: 'AutoDepsDecorations',
-                                fnLoc: value.loc,
-                                decorations,
-                            });
-                        }
-                        rewriteInstrs.push({
-                            kind: 'instr',
-                            location: instr.id,
-                            value: {
-                                id: makeInstructionId(0),
-                                loc: GeneratedSource,
-                                lvalue: Object.assign(Object.assign({}, depsPlace), { effect: Effect.Mutate }),
-                                value: deps,
-                                effects: null,
-                            },
-                        });
-                        value.args[autodepsArgIndex] = Object.assign(Object.assign({}, depsPlace), { effect: Effect.Freeze });
-                        fn.env.inferredEffectLocations.add(callee.loc);
-                    }
-                    else if (loadGlobals.has(value.args[0].identifier.id)) {
-                        rewriteInstrs.push({
-                            kind: 'instr',
-                            location: instr.id,
-                            value: {
-                                id: makeInstructionId(0),
-                                loc: GeneratedSource,
-                                lvalue: Object.assign(Object.assign({}, depsPlace), { effect: Effect.Mutate }),
-                                value: deps,
-                                effects: null,
-                            },
-                        });
-                        value.args[autodepsArgIndex] = Object.assign(Object.assign({}, depsPlace), { effect: Effect.Freeze });
-                        fn.env.inferredEffectLocations.add(callee.loc);
-                    }
-                }
-                else if (value.args.length >= 2 &&
-                    value.args.length - 1 === autodepFnLoads.get(callee.identifier.id) &&
-                    value.args[0] != null &&
-                    value.args[0].kind === 'Identifier') {
-                    const penultimateArg = value.args[value.args.length - 2];
-                    const depArrayArg = value.args[value.args.length - 1];
-                    if (depArrayArg.kind !== 'Spread' &&
-                        penultimateArg.kind !== 'Spread' &&
-                        typeof depArrayArg.loc !== 'symbol' &&
-                        typeof penultimateArg.loc !== 'symbol' &&
-                        typeof value.loc !== 'symbol') {
-                        (_b = fn.env.logger) === null || _b === void 0 ? void 0 : _b.logEvent(fn.env.filename, {
-                            kind: 'AutoDepsEligible',
-                            fnLoc: value.loc,
-                            depArrayLoc: Object.assign(Object.assign({}, depArrayArg.loc), { start: penultimateArg.loc.end, end: depArrayArg.loc.end }),
-                        });
-                    }
-                }
-            }
-        }
-        rewriteSplices(block, rewriteInstrs, rewriteBlocks);
-    }
-    if (rewriteBlocks.length > 0) {
-        for (const block of rewriteBlocks) {
-            fn.body.blocks.set(block.id, block);
-        }
-        reversePostorderBlocks(fn.body);
-        markPredecessors(fn.body);
-        markInstructionIds(fn.body);
-        fixScopeAndIdentifierRanges(fn.body);
-        deadCodeElimination(fn);
-        fn.env.hasInferredEffect = true;
-    }
-}
-function truncateDepAtCurrent(dep) {
-    const idx = dep.path.findIndex(path => path.property === 'current');
-    if (idx === -1) {
-        return dep;
-    }
-    else {
-        return Object.assign(Object.assign({}, dep), { path: dep.path.slice(0, idx) });
-    }
-}
-function rewriteSplices(originalBlock, splices, rewriteBlocks) {
-    if (splices.length === 0) {
-        return;
-    }
-    const originalInstrs = originalBlock.instructions;
-    let currBlock = Object.assign(Object.assign({}, originalBlock), { instructions: [] });
-    rewriteBlocks.push(currBlock);
-    let cursor = 0;
-    for (const rewrite of splices) {
-        while (originalInstrs[cursor].id < rewrite.location) {
-            CompilerError.invariant(originalInstrs[cursor].id < originalInstrs[cursor + 1].id, {
-                reason: '[InferEffectDependencies] Internal invariant broken: expected block instructions to be sorted',
-                loc: originalInstrs[cursor].loc,
-            });
-            currBlock.instructions.push(originalInstrs[cursor]);
-            cursor++;
-        }
-        CompilerError.invariant(originalInstrs[cursor].id === rewrite.location, {
-            reason: '[InferEffectDependencies] Internal invariant broken: splice location not found',
-            loc: originalInstrs[cursor].loc,
-        });
-        if (rewrite.kind === 'instr') {
-            currBlock.instructions.push(rewrite.value);
-        }
-        else if (rewrite.kind === 'block') {
-            const { entry, blocks } = rewrite.value;
-            const entryBlock = blocks.get(entry);
-            currBlock.instructions.push(...entryBlock.instructions);
-            if (blocks.size > 1) {
-                CompilerError.invariant(terminalFallthrough(entryBlock.terminal) === rewrite.exitBlockId, {
-                    reason: '[InferEffectDependencies] Internal invariant broken: expected entry block to have a fallthrough',
-                    loc: entryBlock.terminal.loc,
-                });
-                const originalTerminal = currBlock.terminal;
-                currBlock.terminal = entryBlock.terminal;
-                for (const [id, block] of blocks) {
-                    if (id === entry) {
-                        continue;
-                    }
-                    if (id === rewrite.exitBlockId) {
-                        block.terminal = originalTerminal;
-                        currBlock = block;
-                    }
-                    rewriteBlocks.push(block);
-                }
-            }
-        }
-    }
-    currBlock.instructions.push(...originalInstrs.slice(cursor));
-}
-function inferReactiveIdentifiers(fn) {
-    const reactiveIds = new Set();
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            for (const place of eachInstructionOperand(instr)) {
-                if (place.reactive) {
-                    reactiveIds.add(place.identifier.id);
-                }
-            }
-        }
-        for (const place of eachTerminalOperand(block.terminal)) {
-            if (place.reactive) {
-                reactiveIds.add(place.identifier.id);
-            }
-        }
-    }
-    return reactiveIds;
-}
-function collectDepUsages(deps, fnExpr) {
-    const identifiers = new Map();
-    const loadedDeps = new Set();
-    const sourceLocations = [];
-    for (const dep of deps) {
-        identifiers.set(dep.identifier.id, dep);
-    }
-    for (const [, block] of fnExpr.loweredFunc.func.body.blocks) {
-        for (const instr of block.instructions) {
-            if (instr.value.kind === 'LoadLocal' &&
-                identifiers.has(instr.value.place.identifier.id)) {
-                loadedDeps.add(instr.lvalue.identifier.id);
-            }
-            for (const place of eachInstructionOperand(instr)) {
-                if (loadedDeps.has(place.identifier.id)) {
-                    sourceLocations.push(place.identifier.loc);
-                }
-            }
-        }
-    }
-    return sourceLocations;
-}
-function inferMinimalDependencies(fnInstr) {
-    const fn = fnInstr.value.loweredFunc.func;
-    const temporaries = collectTemporariesSidemap$1(fn, new Set());
-    const { hoistableObjects, processedInstrsInOptional, temporariesReadInOptional, } = collectOptionalChainSidemap(fn);
-    const hoistablePropertyLoads = collectHoistablePropertyLoadsInInnerFn(fnInstr, temporaries, hoistableObjects);
-    const hoistableToFnEntry = hoistablePropertyLoads.get(fn.body.entry);
-    CompilerError.invariant(hoistableToFnEntry != null, {
-        reason: '[InferEffectDependencies] Internal invariant broken: missing entry block',
-        loc: fnInstr.loc,
-    });
-    const dependencies = inferDependencies(fnInstr, new Map([...temporaries, ...temporariesReadInOptional]), processedInstrsInOptional);
-    const tree = new ReactiveScopeDependencyTreeHIR([...hoistableToFnEntry.assumedNonNullObjects].map(o => o.fullPath));
-    for (const dep of dependencies) {
-        tree.addDependency(Object.assign({}, dep));
-    }
-    return tree.deriveMinimalDependencies();
-}
-function inferDependencies(fnInstr, temporaries, processedInstrsInOptional) {
-    const fn = fnInstr.value.loweredFunc.func;
-    const context = new DependencyCollectionContext(new Set(), temporaries, processedInstrsInOptional);
-    for (const dep of fn.context) {
-        context.declare(dep.identifier, {
-            id: makeInstructionId(0),
-            scope: empty(),
-        });
-    }
-    const placeholderScope = {
-        id: makeScopeId(0),
-        range: {
-            start: fnInstr.id,
-            end: makeInstructionId(fnInstr.id + 1),
-        },
-        dependencies: new Set(),
-        reassignments: new Set(),
-        declarations: new Map(),
-        earlyReturnValue: null,
-        merged: new Set(),
-        loc: GeneratedSource,
-    };
-    context.enterScope(placeholderScope);
-    inferDependenciesInFn(fn, context, temporaries);
-    context.exitScope(placeholderScope, false);
-    const resultUnfiltered = context.deps.get(placeholderScope);
-    CompilerError.invariant(resultUnfiltered != null, {
-        reason: '[InferEffectDependencies] Internal invariant broken: missing scope dependencies',
-        loc: fn.loc,
-    });
-    const fnContext = new Set(fn.context.map(dep => dep.identifier.id));
-    const result = new Set();
-    for (const dep of resultUnfiltered) {
-        if (fnContext.has(dep.identifier.id)) {
-            result.add(dep);
-        }
-    }
-    return result;
-}
-function inferDependenciesInFn(fn, context, temporaries) {
-    for (const [, block] of fn.body.blocks) {
-        for (const phi of block.phis) {
-            for (const operand of phi.operands) {
-                const maybeOptionalChain = temporaries.get(operand[1].identifier.id);
-                if (maybeOptionalChain) {
-                    context.visitDependency(maybeOptionalChain);
-                }
-            }
-        }
-        for (const instr of block.instructions) {
-            if (instr.value.kind === 'FunctionExpression' ||
-                instr.value.kind === 'ObjectMethod') {
-                context.declare(instr.lvalue.identifier, {
-                    id: instr.id,
-                    scope: context.currentScope,
-                });
-                const innerFn = instr.value.loweredFunc.func;
-                context.enterInnerFn(instr, () => {
-                    inferDependenciesInFn(innerFn, context, temporaries);
-                });
-            }
-            else {
-                handleInstruction(instr, context);
-            }
-        }
-    }
-}
-
-function instructionReordering(fn) {
-    var _a;
-    const shared = new Map();
-    const references = findReferencedRangeOfTemporaries(fn);
-    for (const [, block] of fn.body.blocks) {
-        reorderBlock(fn.env, block, shared, references);
-    }
-    CompilerError.invariant(shared.size === 0, {
-        reason: `InstructionReordering: expected all reorderable nodes to have been emitted`,
-        loc: (_a = [...shared.values()]
-            .map(node => { var _a; return (_a = node.instruction) === null || _a === void 0 ? void 0 : _a.loc; })
-            .filter(loc => loc != null)[0]) !== null && _a !== void 0 ? _a : GeneratedSource,
-    });
-    markInstructionIds(fn.body);
-}
-var ReferenceKind;
-(function (ReferenceKind) {
-    ReferenceKind[ReferenceKind["Read"] = 0] = "Read";
-    ReferenceKind[ReferenceKind["Write"] = 1] = "Write";
-})(ReferenceKind || (ReferenceKind = {}));
-function findReferencedRangeOfTemporaries(fn) {
-    const singleUseIdentifiers = new Map();
-    const lastAssignments = new Map();
-    function reference(instr, place, kind) {
-        var _a;
-        if (place.identifier.name !== null &&
-            place.identifier.name.kind === 'named') {
-            if (kind === ReferenceKind.Write) {
-                const name = place.identifier.name.value;
-                const previous = lastAssignments.get(name);
-                if (previous === undefined) {
-                    lastAssignments.set(name, instr);
-                }
-                else {
-                    lastAssignments.set(name, makeInstructionId(Math.max(previous, instr)));
-                }
-            }
-            return;
-        }
-        else if (kind === ReferenceKind.Read) {
-            const previousCount = (_a = singleUseIdentifiers.get(place.identifier.id)) !== null && _a !== void 0 ? _a : 0;
-            singleUseIdentifiers.set(place.identifier.id, previousCount + 1);
-        }
-    }
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            for (const operand of eachInstructionValueLValue(instr.value)) {
-                reference(instr.id, operand, ReferenceKind.Read);
-            }
-            for (const lvalue of eachInstructionLValue(instr)) {
-                reference(instr.id, lvalue, ReferenceKind.Write);
-            }
-        }
-        for (const operand of eachTerminalOperand(block.terminal)) {
-            reference(block.terminal.id, operand, ReferenceKind.Read);
-        }
-    }
-    return {
-        singleUseIdentifiers: new Set([...singleUseIdentifiers]
-            .filter(([, count]) => count === 1)
-            .map(([id]) => id)),
-        lastAssignments,
-    };
-}
-function reorderBlock(env, block, shared, references) {
-    var _a, _b;
-    const locals = new Map();
-    const named = new Map();
-    let previous = null;
-    for (const instr of block.instructions) {
-        const { lvalue, value } = instr;
-        const reorderability = getReorderability(instr, references);
-        const node = getOrInsertWith(locals, lvalue.identifier.id, () => ({
-            instruction: instr,
-            dependencies: new Set(),
-            reorderability,
-            depth: null,
-        }));
-        if (reorderability === Reorderability.Nonreorderable) {
-            if (previous !== null) {
-                node.dependencies.add(previous);
-            }
-            previous = lvalue.identifier.id;
-        }
-        for (const operand of eachInstructionValueOperand(value)) {
-            const { name, id } = operand.identifier;
-            if (name !== null && name.kind === 'named') {
-                const previous = named.get(name.value);
-                if (previous !== undefined) {
-                    node.dependencies.add(previous);
-                }
-                named.set(name.value, lvalue.identifier.id);
-            }
-            else if (locals.has(id) || shared.has(id)) {
-                node.dependencies.add(id);
-            }
-        }
-        for (const lvalueOperand of eachInstructionValueLValue(value)) {
-            const lvalueNode = getOrInsertWith(locals, lvalueOperand.identifier.id, () => ({
-                instruction: null,
-                dependencies: new Set(),
-                depth: null,
-            }));
-            lvalueNode.dependencies.add(lvalue.identifier.id);
-            const name = lvalueOperand.identifier.name;
-            if (name !== null && name.kind === 'named') {
-                const previous = named.get(name.value);
-                if (previous !== undefined) {
-                    node.dependencies.add(previous);
-                }
-                named.set(name.value, lvalue.identifier.id);
-            }
-        }
-    }
-    const nextInstructions = [];
-    if (isExpressionBlockKind(block.kind)) {
-        if (previous !== null) {
-            emit(env, locals, shared, nextInstructions, previous);
-        }
-        if (block.instructions.length !== 0) {
-            emit(env, locals, shared, nextInstructions, block.instructions.at(-1).lvalue.identifier.id);
-        }
-        for (const operand of eachTerminalOperand(block.terminal)) {
-            emit(env, locals, shared, nextInstructions, operand.identifier.id);
-        }
-        for (const [id, node] of locals) {
-            if (node.instruction == null) {
-                continue;
-            }
-            CompilerError.invariant(node.reorderability === Reorderability.Reorderable, {
-                reason: `Expected all remaining instructions to be reorderable`,
-                description: node.instruction != null
-                    ? `Instruction [${node.instruction.id}] was not emitted yet but is not reorderable`
-                    : `Lvalue $${id} was not emitted yet but is not reorderable`,
-                loc: (_b = (_a = node.instruction) === null || _a === void 0 ? void 0 : _a.loc) !== null && _b !== void 0 ? _b : block.terminal.loc,
-            });
-            shared.set(id, node);
-        }
-    }
-    else {
-        for (const operand of eachTerminalOperand(block.terminal)) {
-            emit(env, locals, shared, nextInstructions, operand.identifier.id);
-        }
-        for (const id of Array.from(locals.keys()).reverse()) {
-            const node = locals.get(id);
-            if (node === undefined) {
-                continue;
-            }
-            if (node.reorderability === Reorderability.Reorderable) {
-                shared.set(id, node);
-            }
-            else {
-                emit(env, locals, shared, nextInstructions, id);
-            }
-        }
-    }
-    block.instructions = nextInstructions;
-}
-function getDepth(env, nodes, id) {
-    const node = nodes.get(id);
-    if (node == null) {
-        return 0;
-    }
-    if (node.depth != null) {
-        return node.depth;
-    }
-    node.depth = 0;
-    let depth = node.reorderability === Reorderability.Reorderable ? 1 : 10;
-    for (const dep of node.dependencies) {
-        depth += getDepth(env, nodes, dep);
-    }
-    node.depth = depth;
-    return depth;
-}
-function emit(env, locals, shared, instructions, id) {
-    var _a;
-    const node = (_a = locals.get(id)) !== null && _a !== void 0 ? _a : shared.get(id);
-    if (node == null) {
-        return;
-    }
-    locals.delete(id);
-    shared.delete(id);
-    const deps = [...node.dependencies];
-    deps.sort((a, b) => {
-        const aDepth = getDepth(env, locals, a);
-        const bDepth = getDepth(env, locals, b);
-        return bDepth - aDepth;
-    });
-    for (const dep of deps) {
-        emit(env, locals, shared, instructions, dep);
-    }
-    if (node.instruction !== null) {
-        instructions.push(node.instruction);
-    }
-}
-var Reorderability;
-(function (Reorderability) {
-    Reorderability[Reorderability["Reorderable"] = 0] = "Reorderable";
-    Reorderability[Reorderability["Nonreorderable"] = 1] = "Nonreorderable";
-})(Reorderability || (Reorderability = {}));
-function getReorderability(instr, references) {
-    switch (instr.value.kind) {
-        case 'JsxExpression':
-        case 'JsxFragment':
-        case 'JSXText':
-        case 'LoadGlobal':
-        case 'Primitive':
-        case 'TemplateLiteral':
-        case 'BinaryExpression':
-        case 'UnaryExpression': {
-            return Reorderability.Reorderable;
-        }
-        case 'LoadLocal': {
-            const name = instr.value.place.identifier.name;
-            if (name !== null && name.kind === 'named') {
-                const lastAssignment = references.lastAssignments.get(name.value);
-                if (lastAssignment !== undefined &&
-                    lastAssignment < instr.id &&
-                    references.singleUseIdentifiers.has(instr.lvalue.identifier.id)) {
-                    return Reorderability.Reorderable;
-                }
-            }
-            return Reorderability.Nonreorderable;
-        }
-        default: {
-            return Reorderability.Nonreorderable;
-        }
-    }
-}
-
-function alignMethodCallScopes(fn) {
-    const scopeMapping = new Map();
-    const mergedScopes = new DisjointSet();
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            const { lvalue, value } = instr;
-            if (value.kind === 'MethodCall') {
-                const lvalueScope = lvalue.identifier.scope;
-                const propertyScope = value.property.identifier.scope;
-                if (lvalueScope !== null) {
-                    if (propertyScope !== null) {
-                        mergedScopes.union([lvalueScope, propertyScope]);
-                    }
-                    else {
-                        scopeMapping.set(value.property.identifier.id, lvalueScope);
-                    }
-                }
-                else if (propertyScope !== null) {
-                    scopeMapping.set(value.property.identifier.id, null);
-                }
-            }
-            else if (value.kind === 'FunctionExpression' ||
-                value.kind === 'ObjectMethod') {
-                alignMethodCallScopes(value.loweredFunc.func);
-            }
-        }
-    }
-    mergedScopes.forEach((scope, root) => {
-        if (scope === root) {
-            return;
-        }
-        root.range.start = makeInstructionId(Math.min(scope.range.start, root.range.start));
-        root.range.end = makeInstructionId(Math.max(scope.range.end, root.range.end));
-    });
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            const mappedScope = scopeMapping.get(instr.lvalue.identifier.id);
-            if (mappedScope !== undefined) {
-                instr.lvalue.identifier.scope = mappedScope;
-            }
-            else if (instr.lvalue.identifier.scope !== null) {
-                const mergedScope = mergedScopes.find(instr.lvalue.identifier.scope);
-                if (mergedScope != null) {
-                    instr.lvalue.identifier.scope = mergedScope;
-                }
-            }
-        }
-    }
-}
-
-function alignReactiveScopesToBlockScopesHIR(fn) {
-    var _a, _b, _c, _d, _e, _f, _g;
-    const activeBlockFallthroughRanges = [];
-    const activeScopes = new Set();
-    const seen = new Set();
-    const valueBlockNodes = new Map();
-    const placeScopes = new Map();
-    function recordPlace(id, place, node) {
-        if (place.identifier.scope !== null) {
-            placeScopes.set(place, place.identifier.scope);
-        }
-        const scope = getPlaceScope(id, place);
-        if (scope == null) {
-            return;
-        }
-        activeScopes.add(scope);
-        node === null || node === void 0 ? void 0 : node.children.push({ kind: 'scope', scope, id });
-        if (seen.has(scope)) {
-            return;
-        }
-        seen.add(scope);
-        if (node != null && node.valueRange !== null) {
-            scope.range.start = makeInstructionId(Math.min(node.valueRange.start, scope.range.start));
-            scope.range.end = makeInstructionId(Math.max(node.valueRange.end, scope.range.end));
-        }
-    }
-    for (const [, block] of fn.body.blocks) {
-        const startingId = (_b = (_a = block.instructions[0]) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : block.terminal.id;
-        retainWhere_Set(activeScopes, scope => scope.range.end > startingId);
-        const top = activeBlockFallthroughRanges.at(-1);
-        if ((top === null || top === void 0 ? void 0 : top.fallthrough) === block.id) {
-            activeBlockFallthroughRanges.pop();
-            for (const scope of activeScopes) {
-                scope.range.start = makeInstructionId(Math.min(scope.range.start, top.range.start));
-            }
-        }
-        const { instructions, terminal } = block;
-        const node = (_c = valueBlockNodes.get(block.id)) !== null && _c !== void 0 ? _c : null;
-        for (const instr of instructions) {
-            for (const lvalue of eachInstructionLValue(instr)) {
-                recordPlace(instr.id, lvalue, node);
-            }
-            for (const operand of eachInstructionValueOperand(instr.value)) {
-                recordPlace(instr.id, operand, node);
-            }
-        }
-        for (const operand of eachTerminalOperand(terminal)) {
-            recordPlace(terminal.id, operand, node);
-        }
-        const fallthrough = terminalFallthrough(terminal);
-        if (fallthrough !== null && terminal.kind !== 'branch') {
-            const fallthroughBlock = fn.body.blocks.get(fallthrough);
-            const nextId = (_e = (_d = fallthroughBlock.instructions[0]) === null || _d === void 0 ? void 0 : _d.id) !== null && _e !== void 0 ? _e : fallthroughBlock.terminal.id;
-            for (const scope of activeScopes) {
-                if (scope.range.end > terminal.id) {
-                    scope.range.end = makeInstructionId(Math.max(scope.range.end, nextId));
-                }
-            }
-            activeBlockFallthroughRanges.push({
-                fallthrough,
-                range: {
-                    start: terminal.id,
-                    end: nextId,
-                },
-            });
-            CompilerError.invariant(!valueBlockNodes.has(fallthrough), {
-                reason: 'Expect hir blocks to have unique fallthroughs',
-                loc: terminal.loc,
-            });
-            if (node != null) {
-                valueBlockNodes.set(fallthrough, node);
-            }
-        }
-        else if (terminal.kind === 'goto') {
-            const start = activeBlockFallthroughRanges.find(range => range.fallthrough === terminal.block);
-            if (start != null && start !== activeBlockFallthroughRanges.at(-1)) {
-                const fallthroughBlock = fn.body.blocks.get(start.fallthrough);
-                const firstId = (_g = (_f = fallthroughBlock.instructions[0]) === null || _f === void 0 ? void 0 : _f.id) !== null && _g !== void 0 ? _g : fallthroughBlock.terminal.id;
-                for (const scope of activeScopes) {
-                    if (scope.range.end <= terminal.id) {
-                        continue;
-                    }
-                    scope.range.start = makeInstructionId(Math.min(start.range.start, scope.range.start));
-                    scope.range.end = makeInstructionId(Math.max(firstId, scope.range.end));
-                }
-            }
-        }
-        mapTerminalSuccessors(terminal, successor => {
-            var _a, _b;
-            if (valueBlockNodes.has(successor)) {
-                return successor;
-            }
-            const successorBlock = fn.body.blocks.get(successor);
-            if (successorBlock.kind === 'block' || successorBlock.kind === 'catch') ;
-            else if (node == null ||
-                terminal.kind === 'ternary' ||
-                terminal.kind === 'logical' ||
-                terminal.kind === 'optional') {
-                let valueRange;
-                if (node == null) {
-                    CompilerError.invariant(fallthrough !== null, {
-                        reason: `Expected a fallthrough for value block`,
-                        loc: terminal.loc,
-                    });
-                    const fallthroughBlock = fn.body.blocks.get(fallthrough);
-                    const nextId = (_b = (_a = fallthroughBlock.instructions[0]) === null || _a === void 0 ? void 0 : _a.id) !== null && _b !== void 0 ? _b : fallthroughBlock.terminal.id;
-                    valueRange = {
-                        start: terminal.id,
-                        end: nextId,
-                    };
-                }
-                else {
-                    valueRange = node.valueRange;
-                }
-                const childNode = {
-                    kind: 'node',
-                    id: terminal.id,
-                    children: [],
-                    valueRange,
-                };
-                node === null || node === void 0 ? void 0 : node.children.push(childNode);
-                valueBlockNodes.set(successor, childNode);
-            }
-            else {
-                valueBlockNodes.set(successor, node);
-            }
-            return successor;
-        });
-    }
-}
-
-function flattenReactiveLoopsHIR(fn) {
-    const activeLoops = Array();
-    for (const [, block] of fn.body.blocks) {
-        retainWhere(activeLoops, id => id !== block.id);
-        const { terminal } = block;
-        switch (terminal.kind) {
-            case 'do-while':
-            case 'for':
-            case 'for-in':
-            case 'for-of':
-            case 'while': {
-                activeLoops.push(terminal.fallthrough);
-                break;
-            }
-            case 'scope': {
-                if (activeLoops.length !== 0) {
-                    block.terminal = {
-                        kind: 'pruned-scope',
-                        block: terminal.block,
-                        fallthrough: terminal.fallthrough,
-                        id: terminal.id,
-                        loc: terminal.loc,
-                        scope: terminal.scope,
-                    };
-                }
-                break;
-            }
-            case 'branch':
-            case 'goto':
-            case 'if':
-            case 'label':
-            case 'logical':
-            case 'maybe-throw':
-            case 'optional':
-            case 'pruned-scope':
-            case 'return':
-            case 'sequence':
-            case 'switch':
-            case 'ternary':
-            case 'throw':
-            case 'try':
-            case 'unreachable':
-            case 'unsupported': {
-                break;
-            }
-            default: {
-                assertExhaustive$1(terminal, `Unexpected terminal kind \`${terminal.kind}\``);
-            }
-        }
-    }
-}
-
-function flattenScopesWithHooksOrUseHIR(fn) {
-    const activeScopes = [];
-    const prune = [];
-    for (const [, block] of fn.body.blocks) {
-        retainWhere(activeScopes, current => current.fallthrough !== block.id);
-        for (const instr of block.instructions) {
-            const { value } = instr;
-            switch (value.kind) {
-                case 'MethodCall':
-                case 'CallExpression': {
-                    const callee = value.kind === 'MethodCall' ? value.property : value.callee;
-                    if (getHookKind(fn.env, callee.identifier) != null ||
-                        isUseOperator(callee.identifier)) {
-                        prune.push(...activeScopes.map(entry => entry.block));
-                        activeScopes.length = 0;
-                    }
-                }
-            }
-        }
-        if (block.terminal.kind === 'scope') {
-            activeScopes.push({
-                block: block.id,
-                fallthrough: block.terminal.fallthrough,
-            });
-        }
-    }
-    for (const id of prune) {
-        const block = fn.body.blocks.get(id);
-        const terminal = block.terminal;
-        CompilerError.invariant(terminal.kind === 'scope', {
-            reason: `Expected block to have a scope terminal`,
-            description: `Expected block bb${block.id} to end in a scope terminal`,
-            loc: terminal.loc,
-        });
-        const body = fn.body.blocks.get(terminal.block);
-        if (body.instructions.length === 1 &&
-            body.terminal.kind === 'goto' &&
-            body.terminal.block === terminal.fallthrough) {
-            block.terminal = {
-                kind: 'label',
-                block: terminal.block,
-                fallthrough: terminal.fallthrough,
-                id: terminal.id,
-                loc: terminal.loc,
-            };
-            continue;
-        }
-        block.terminal = {
-            kind: 'pruned-scope',
-            block: terminal.block,
-            fallthrough: terminal.fallthrough,
-            id: terminal.id,
-            loc: terminal.loc,
-            scope: terminal.scope,
-        };
-    }
-}
-
-function pruneAlwaysInvalidatingScopes(fn) {
-    visitReactiveFunction(fn, new Transform(), false);
-}
-class Transform extends ReactiveFunctionTransform {
-    constructor() {
-        super(...arguments);
-        this.alwaysInvalidatingValues = new Set();
-        this.unmemoizedValues = new Set();
-    }
-    transformInstruction(instruction, withinScope) {
-        this.visitInstruction(instruction, withinScope);
-        const { lvalue, value } = instruction;
-        switch (value.kind) {
-            case 'ArrayExpression':
-            case 'ObjectExpression':
-            case 'JsxExpression':
-            case 'JsxFragment':
-            case 'NewExpression': {
-                if (lvalue !== null) {
-                    this.alwaysInvalidatingValues.add(lvalue.identifier);
-                    if (!withinScope) {
-                        this.unmemoizedValues.add(lvalue.identifier);
-                    }
-                }
-                break;
-            }
-            case 'StoreLocal': {
-                if (this.alwaysInvalidatingValues.has(value.value.identifier)) {
-                    this.alwaysInvalidatingValues.add(value.lvalue.place.identifier);
-                }
-                if (this.unmemoizedValues.has(value.value.identifier)) {
-                    this.unmemoizedValues.add(value.lvalue.place.identifier);
-                }
-                break;
-            }
-            case 'LoadLocal': {
-                if (lvalue !== null &&
-                    this.alwaysInvalidatingValues.has(value.place.identifier)) {
-                    this.alwaysInvalidatingValues.add(lvalue.identifier);
-                }
-                if (lvalue !== null &&
-                    this.unmemoizedValues.has(value.place.identifier)) {
-                    this.unmemoizedValues.add(lvalue.identifier);
-                }
-                break;
-            }
-        }
-        return { kind: 'keep' };
-    }
-    transformScope(scopeBlock, _withinScope) {
-        this.visitScope(scopeBlock, true);
-        for (const dep of scopeBlock.scope.dependencies) {
-            if (this.unmemoizedValues.has(dep.identifier)) {
-                for (const [_, decl] of scopeBlock.scope.declarations) {
-                    if (this.alwaysInvalidatingValues.has(decl.identifier)) {
-                        this.unmemoizedValues.add(decl.identifier);
-                    }
-                }
-                for (const identifier of scopeBlock.scope.reassignments) {
-                    if (this.alwaysInvalidatingValues.has(identifier)) {
-                        this.unmemoizedValues.add(identifier);
-                    }
-                }
-                return {
-                    kind: 'replace',
-                    value: {
-                        kind: 'pruned-scope',
-                        scope: scopeBlock.scope,
-                        instructions: scopeBlock.instructions,
-                    },
-                };
-            }
-        }
-        return { kind: 'keep' };
-    }
-}
-
-let Visitor$2 = class Visitor extends ReactiveFunctionVisitor {
-    constructor(env, aliases, paths) {
-        super();
-        this.map = new Map();
-        this.aliases = aliases;
-        this.paths = paths;
-        this.env = env;
-    }
-    join(values) {
-        function join2(l, r) {
-            if (l === 'Update' || r === 'Update') {
-                return 'Update';
-            }
-            else if (l === 'Create' || r === 'Create') {
-                return 'Create';
-            }
-            else if (l === 'Unknown' || r === 'Unknown') {
-                return 'Unknown';
-            }
-            assertExhaustive$1(r, `Unhandled variable kind ${r}`);
-        }
-        return values.reduce(join2, 'Unknown');
-    }
-    isCreateOnlyHook(id) {
-        return isUseStateType(id) || isUseRefType(id);
-    }
-    visitPlace(_, place, state) {
-        var _a;
-        this.map.set(place.identifier.id, this.join([state, (_a = this.map.get(place.identifier.id)) !== null && _a !== void 0 ? _a : 'Unknown']));
-    }
-    visitBlock(block, state) {
-        super.visitBlock([...block].reverse(), state);
-    }
-    visitInstruction(instruction) {
-        const state = this.join([...eachInstructionLValue(instruction)].map(operand => { var _a; return (_a = this.map.get(operand.identifier.id)) !== null && _a !== void 0 ? _a : 'Unknown'; }));
-        const visitCallOrMethodNonArgs = () => {
-            switch (instruction.value.kind) {
-                case 'CallExpression': {
-                    this.visitPlace(instruction.id, instruction.value.callee, state);
-                    break;
-                }
-                case 'MethodCall': {
-                    this.visitPlace(instruction.id, instruction.value.property, state);
-                    this.visitPlace(instruction.id, instruction.value.receiver, state);
-                    break;
-                }
-            }
-        };
-        const isHook = () => {
-            let callee = null;
-            switch (instruction.value.kind) {
-                case 'CallExpression': {
-                    callee = instruction.value.callee.identifier;
-                    break;
-                }
-                case 'MethodCall': {
-                    callee = instruction.value.property.identifier;
-                    break;
-                }
-            }
-            return callee != null && getHookKind(this.env, callee) != null;
-        };
-        switch (instruction.value.kind) {
-            case 'CallExpression':
-            case 'MethodCall': {
-                if (instruction.lvalue &&
-                    this.isCreateOnlyHook(instruction.lvalue.identifier)) {
-                    [...eachCallArgument(instruction.value.args)].forEach(operand => this.visitPlace(instruction.id, operand, 'Create'));
-                    visitCallOrMethodNonArgs();
-                }
-                else {
-                    this.traverseInstruction(instruction, isHook() ? 'Update' : state);
-                }
-                break;
-            }
-            default: {
-                this.traverseInstruction(instruction, state);
-            }
-        }
-    }
-    visitScope(scope) {
-        const state = this.join([
-            ...scope.scope.declarations.keys(),
-            ...[...scope.scope.reassignments.values()].map(ident => ident.id),
-        ].map(id => { var _a; return (_a = this.map.get(id)) !== null && _a !== void 0 ? _a : 'Unknown'; }));
-        super.visitScope(scope, state);
-        [...scope.scope.dependencies].forEach(ident => {
-            var _a;
-            let target = (_a = this.aliases.find(ident.identifier.id)) !== null && _a !== void 0 ? _a : ident.identifier.id;
-            ident.path.forEach(token => {
-                var _a;
-                target && (target = (_a = this.paths.get(target)) === null || _a === void 0 ? void 0 : _a.get(token.property));
-            });
-            if (target && this.map.get(target) === 'Create') {
-                scope.scope.dependencies.delete(ident);
-            }
-        });
-    }
-    visitTerminal(stmt, state) {
-        CompilerError.invariant(state !== 'Create', {
-            reason: "Visiting a terminal statement with state 'Create'",
-            loc: stmt.terminal.loc,
-        });
-        super.visitTerminal(stmt, state);
-    }
-    visitReactiveFunctionValue(_id, _dependencies, fn, state) {
-        visitReactiveFunction(fn, this, state);
-    }
-};
-function pruneInitializationDependencies(fn) {
-    const [aliases, paths] = getAliases(fn);
-    visitReactiveFunction(fn, new Visitor$2(fn.env, aliases, paths), 'Update');
-}
-function update(map, key, path, value) {
-    var _a;
-    const inner = (_a = map.get(key)) !== null && _a !== void 0 ? _a : new Map();
-    inner.set(path, value);
-    map.set(key, inner);
-}
-class AliasVisitor extends ReactiveFunctionVisitor {
-    constructor() {
-        super(...arguments);
-        this.scopeIdentifiers = new DisjointSet();
-        this.scopePaths = new Map();
-    }
-    visitInstruction(instr) {
-        if (instr.value.kind === 'StoreLocal' ||
-            instr.value.kind === 'StoreContext') {
-            this.scopeIdentifiers.union([
-                instr.value.lvalue.place.identifier.id,
-                instr.value.value.identifier.id,
-            ]);
-        }
-        else if (instr.value.kind === 'LoadLocal' ||
-            instr.value.kind === 'LoadContext') {
-            instr.lvalue &&
-                this.scopeIdentifiers.union([
-                    instr.lvalue.identifier.id,
-                    instr.value.place.identifier.id,
-                ]);
-        }
-        else if (instr.value.kind === 'PropertyLoad') {
-            instr.lvalue &&
-                update(this.scopePaths, instr.value.object.identifier.id, instr.value.property, instr.lvalue.identifier.id);
-        }
-        else if (instr.value.kind === 'PropertyStore') {
-            update(this.scopePaths, instr.value.object.identifier.id, instr.value.property, instr.value.value.identifier.id);
-        }
-    }
-}
-function getAliases(fn) {
-    var _a, _b;
-    const visitor = new AliasVisitor();
-    visitReactiveFunction(fn, visitor, null);
-    let disjoint = visitor.scopeIdentifiers;
-    let scopePaths = new Map();
-    for (const [key, value] of visitor.scopePaths) {
-        for (const [path, id] of value) {
-            update(scopePaths, (_a = disjoint.find(key)) !== null && _a !== void 0 ? _a : key, path, (_b = disjoint.find(id)) !== null && _b !== void 0 ? _b : id);
-        }
-    }
-    return [disjoint, scopePaths];
-}
-
-function isPrimitiveBinaryOp(op) {
-    switch (op) {
-        case '+':
-        case '-':
-        case '/':
-        case '%':
-        case '*':
-        case '**':
-        case '&':
-        case '|':
-        case '>>':
-        case '<<':
-        case '^':
-        case '>':
-        case '<':
-        case '>=':
-        case '<=':
-        case '|>':
-            return true;
-        default:
-            return false;
-    }
-}
-function inferTypes(func) {
-    const unifier = new Unifier(func.env);
-    for (const e of generate(func)) {
-        unifier.unify(e.left, e.right);
-    }
-    apply(func, unifier);
-}
-function apply(func, unifier) {
-    for (const [_, block] of func.body.blocks) {
-        for (const phi of block.phis) {
-            phi.place.identifier.type = unifier.get(phi.place.identifier.type);
-        }
-        for (const instr of block.instructions) {
-            for (const operand of eachInstructionLValue(instr)) {
-                operand.identifier.type = unifier.get(operand.identifier.type);
-            }
-            for (const place of eachInstructionOperand(instr)) {
-                place.identifier.type = unifier.get(place.identifier.type);
-            }
-            const { lvalue, value } = instr;
-            lvalue.identifier.type = unifier.get(lvalue.identifier.type);
-            if (value.kind === 'FunctionExpression' ||
-                value.kind === 'ObjectMethod') {
-                apply(value.loweredFunc.func, unifier);
-            }
-        }
-    }
-    const returns = func.returns.identifier;
-    returns.type = unifier.get(returns.type);
-}
-function equation(left, right) {
-    return {
-        left,
-        right,
-    };
-}
-function* generate(func) {
-    if (func.fnType === 'Component') {
-        const [props, ref] = func.params;
-        if (props && props.kind === 'Identifier') {
-            yield equation(props.identifier.type, {
-                kind: 'Object',
-                shapeId: BuiltInPropsId,
-            });
-        }
-        if (ref && ref.kind === 'Identifier') {
-            yield equation(ref.identifier.type, {
-                kind: 'Object',
-                shapeId: BuiltInUseRefId,
-            });
-        }
-    }
-    const names = new Map();
-    const returnTypes = [];
-    for (const [_, block] of func.body.blocks) {
-        for (const phi of block.phis) {
-            yield equation(phi.place.identifier.type, {
-                kind: 'Phi',
-                operands: [...phi.operands.values()].map(id => id.identifier.type),
-            });
-        }
-        for (const instr of block.instructions) {
-            yield* generateInstructionTypes(func.env, names, instr);
-        }
-        const terminal = block.terminal;
-        if (terminal.kind === 'return') {
-            returnTypes.push(terminal.value.identifier.type);
-        }
-    }
-    if (returnTypes.length > 1) {
-        yield equation(func.returns.identifier.type, {
-            kind: 'Phi',
-            operands: returnTypes,
-        });
-    }
-    else if (returnTypes.length === 1) {
-        yield equation(func.returns.identifier.type, returnTypes[0]);
-    }
-}
-function setName(names, id, name) {
-    var _a;
-    if (((_a = name.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named') {
-        names.set(id, name.name.value);
-    }
-}
-function getName(names, id) {
-    var _a;
-    return (_a = names.get(id)) !== null && _a !== void 0 ? _a : '';
-}
-function* generateInstructionTypes(env, names, instr) {
-    const { lvalue, value } = instr;
-    const left = lvalue.identifier.type;
-    switch (value.kind) {
-        case 'TemplateLiteral':
-        case 'JSXText':
-        case 'Primitive': {
-            yield equation(left, { kind: 'Primitive' });
-            break;
-        }
-        case 'UnaryExpression': {
-            yield equation(left, { kind: 'Primitive' });
-            break;
-        }
-        case 'LoadLocal': {
-            setName(names, lvalue.identifier.id, value.place.identifier);
-            yield equation(left, value.place.identifier.type);
-            break;
-        }
-        case 'DeclareContext':
-        case 'LoadContext': {
-            break;
-        }
-        case 'StoreContext': {
-            if (value.lvalue.kind === InstructionKind.Const) {
-                yield equation(value.lvalue.place.identifier.type, value.value.identifier.type);
-            }
-            break;
-        }
-        case 'StoreLocal': {
-            if (env.config.enableUseTypeAnnotations) {
-                yield equation(value.lvalue.place.identifier.type, value.value.identifier.type);
-                const valueType = value.type === null ? makeType() : lowerType(value.type);
-                yield equation(valueType, value.lvalue.place.identifier.type);
-                yield equation(left, valueType);
-            }
-            else {
-                yield equation(left, value.value.identifier.type);
-                yield equation(value.lvalue.place.identifier.type, value.value.identifier.type);
-            }
-            break;
-        }
-        case 'StoreGlobal': {
-            yield equation(left, value.value.identifier.type);
-            break;
-        }
-        case 'BinaryExpression': {
-            if (isPrimitiveBinaryOp(value.operator)) {
-                yield equation(value.left.identifier.type, { kind: 'Primitive' });
-                yield equation(value.right.identifier.type, { kind: 'Primitive' });
-            }
-            yield equation(left, { kind: 'Primitive' });
-            break;
-        }
-        case 'PostfixUpdate':
-        case 'PrefixUpdate': {
-            yield equation(value.value.identifier.type, { kind: 'Primitive' });
-            yield equation(value.lvalue.identifier.type, { kind: 'Primitive' });
-            yield equation(left, { kind: 'Primitive' });
-            break;
-        }
-        case 'LoadGlobal': {
-            const globalType = env.getGlobalDeclaration(value.binding, value.loc);
-            if (globalType) {
-                yield equation(left, globalType);
-            }
-            break;
-        }
-        case 'CallExpression': {
-            const returnType = makeType();
-            let shapeId = null;
-            if (env.config.enableTreatSetIdentifiersAsStateSetters) {
-                const name = getName(names, value.callee.identifier.id);
-                if (name.startsWith('set')) {
-                    shapeId = BuiltInSetStateId;
-                }
-            }
-            yield equation(value.callee.identifier.type, {
-                kind: 'Function',
-                shapeId,
-                return: returnType,
-                isConstructor: false,
-            });
-            yield equation(left, returnType);
-            break;
-        }
-        case 'TaggedTemplateExpression': {
-            const returnType = makeType();
-            yield equation(value.tag.identifier.type, {
-                kind: 'Function',
-                shapeId: null,
-                return: returnType,
-                isConstructor: false,
-            });
-            yield equation(left, returnType);
-            break;
-        }
-        case 'ObjectExpression': {
-            for (const property of value.properties) {
-                if (property.kind === 'ObjectProperty' &&
-                    property.key.kind === 'computed') {
-                    yield equation(property.key.name.identifier.type, {
-                        kind: 'Primitive',
-                    });
-                }
-            }
-            yield equation(left, { kind: 'Object', shapeId: BuiltInObjectId });
-            break;
-        }
-        case 'ArrayExpression': {
-            yield equation(left, { kind: 'Object', shapeId: BuiltInArrayId });
-            break;
-        }
-        case 'PropertyLoad': {
-            yield equation(left, {
-                kind: 'Property',
-                objectType: value.object.identifier.type,
-                objectName: getName(names, value.object.identifier.id),
-                propertyName: {
-                    kind: 'literal',
-                    value: value.property,
-                },
-            });
-            break;
-        }
-        case 'ComputedLoad': {
-            yield equation(left, {
-                kind: 'Property',
-                objectType: value.object.identifier.type,
-                objectName: getName(names, value.object.identifier.id),
-                propertyName: {
-                    kind: 'computed',
-                    value: value.property.identifier.type,
-                },
-            });
-            break;
-        }
-        case 'MethodCall': {
-            const returnType = makeType();
-            yield equation(value.property.identifier.type, {
-                kind: 'Function',
-                return: returnType,
-                shapeId: null,
-                isConstructor: false,
-            });
-            yield equation(left, returnType);
-            break;
-        }
-        case 'Destructure': {
-            const pattern = value.lvalue.pattern;
-            if (pattern.kind === 'ArrayPattern') {
-                for (let i = 0; i < pattern.items.length; i++) {
-                    const item = pattern.items[i];
-                    if (item.kind === 'Identifier') {
-                        const propertyName = String(i);
-                        yield equation(item.identifier.type, {
-                            kind: 'Property',
-                            objectType: value.value.identifier.type,
-                            objectName: getName(names, value.value.identifier.id),
-                            propertyName: {
-                                kind: 'literal',
-                                value: makePropertyLiteral(propertyName),
-                            },
-                        });
-                    }
-                    else if (item.kind === 'Spread') {
-                        yield equation(item.place.identifier.type, {
-                            kind: 'Object',
-                            shapeId: BuiltInArrayId,
-                        });
-                    }
-                    else {
-                        continue;
-                    }
-                }
-            }
-            else {
-                for (const property of pattern.properties) {
-                    if (property.kind === 'ObjectProperty') {
-                        if (property.key.kind === 'identifier' ||
-                            property.key.kind === 'string') {
-                            yield equation(property.place.identifier.type, {
-                                kind: 'Property',
-                                objectType: value.value.identifier.type,
-                                objectName: getName(names, value.value.identifier.id),
-                                propertyName: {
-                                    kind: 'literal',
-                                    value: makePropertyLiteral(property.key.name),
-                                },
-                            });
-                        }
-                    }
-                }
-            }
-            break;
-        }
-        case 'TypeCastExpression': {
-            if (env.config.enableUseTypeAnnotations) {
-                yield equation(value.type, value.value.identifier.type);
-                yield equation(left, value.type);
-            }
-            else {
-                yield equation(left, value.value.identifier.type);
-            }
-            break;
-        }
-        case 'PropertyDelete':
-        case 'ComputedDelete': {
-            yield equation(left, { kind: 'Primitive' });
-            break;
-        }
-        case 'FunctionExpression': {
-            yield* generate(value.loweredFunc.func);
-            yield equation(left, {
-                kind: 'Function',
-                shapeId: BuiltInFunctionId,
-                return: value.loweredFunc.func.returns.identifier.type,
-                isConstructor: false,
-            });
-            break;
-        }
-        case 'NextPropertyOf': {
-            yield equation(left, { kind: 'Primitive' });
-            break;
-        }
-        case 'ObjectMethod': {
-            yield* generate(value.loweredFunc.func);
-            yield equation(left, { kind: 'ObjectMethod' });
-            break;
-        }
-        case 'JsxExpression':
-        case 'JsxFragment': {
-            if (env.config.enableTreatRefLikeIdentifiersAsRefs) {
-                if (value.kind === 'JsxExpression') {
-                    for (const prop of value.props) {
-                        if (prop.kind === 'JsxAttribute' && prop.name === 'ref') {
-                            yield equation(prop.place.identifier.type, {
-                                kind: 'Object',
-                                shapeId: BuiltInUseRefId,
-                            });
-                        }
-                    }
-                }
-            }
-            if (env.config.enableInferEventHandlers) {
-                if (value.kind === 'JsxExpression' &&
-                    value.tag.kind === 'BuiltinTag' &&
-                    !value.tag.name.includes('-')) {
-                    for (const prop of value.props) {
-                        if (prop.kind === 'JsxAttribute' &&
-                            prop.name.startsWith('on') &&
-                            prop.name.length > 2 &&
-                            prop.name[2] === prop.name[2].toUpperCase()) {
-                            yield equation(prop.place.identifier.type, {
-                                kind: 'Function',
-                                shapeId: BuiltInEventHandlerId,
-                                return: makeType(),
-                                isConstructor: false,
-                            });
-                        }
-                    }
-                }
-            }
-            yield equation(left, { kind: 'Object', shapeId: BuiltInJsxId });
-            break;
-        }
-        case 'NewExpression': {
-            const returnType = makeType();
-            yield equation(value.callee.identifier.type, {
-                kind: 'Function',
-                return: returnType,
-                shapeId: null,
-                isConstructor: true,
-            });
-            yield equation(left, returnType);
-            break;
-        }
-        case 'PropertyStore': {
-            yield equation(makeType(), {
-                kind: 'Property',
-                objectType: value.object.identifier.type,
-                objectName: getName(names, value.object.identifier.id),
-                propertyName: {
-                    kind: 'literal',
-                    value: value.property,
-                },
-            });
-            break;
-        }
-        case 'DeclareLocal':
-        case 'RegExpLiteral':
-        case 'MetaProperty':
-        case 'ComputedStore':
-        case 'Await':
-        case 'GetIterator':
-        case 'IteratorNext':
-        case 'UnsupportedNode':
-        case 'Debugger':
-        case 'FinishMemoize':
-        case 'StartMemoize': {
-            break;
-        }
-        default:
-            assertExhaustive$1(value, `Unhandled instruction value kind: ${value.kind}`);
-    }
-}
-class Unifier {
-    constructor(env) {
-        this.substitutions = new Map();
-        this.env = env;
-    }
-    unify(tA, tB) {
-        if (tB.kind === 'Property') {
-            if (this.env.config.enableTreatRefLikeIdentifiersAsRefs &&
-                isRefLikeName(tB)) {
-                this.unify(tB.objectType, {
-                    kind: 'Object',
-                    shapeId: BuiltInUseRefId,
-                });
-                this.unify(tA, {
-                    kind: 'Object',
-                    shapeId: BuiltInRefValueId,
-                });
-                return;
-            }
-            const objectType = this.get(tB.objectType);
-            const propertyType = tB.propertyName.kind === 'literal'
-                ? this.env.getPropertyType(objectType, tB.propertyName.value)
-                : this.env.getFallthroughPropertyType(objectType, tB.propertyName.value);
-            if (propertyType !== null) {
-                this.unify(tA, propertyType);
-            }
-            return;
-        }
-        if (typeEquals(tA, tB)) {
-            return;
-        }
-        if (tA.kind === 'Type') {
-            this.bindVariableTo(tA, tB);
-            return;
-        }
-        if (tB.kind === 'Type') {
-            this.bindVariableTo(tB, tA);
-            return;
-        }
-        if (tB.kind === 'Function' &&
-            tA.kind === 'Function' &&
-            tA.isConstructor === tB.isConstructor) {
-            this.unify(tA.return, tB.return);
-            return;
-        }
-    }
-    bindVariableTo(v, type) {
-        if (type.kind === 'Poly') {
-            return;
-        }
-        if (this.substitutions.has(v.id)) {
-            this.unify(this.substitutions.get(v.id), type);
-            return;
-        }
-        if (type.kind === 'Type' && this.substitutions.has(type.id)) {
-            this.unify(v, this.substitutions.get(type.id));
-            return;
-        }
-        if (type.kind === 'Phi') {
-            CompilerError.invariant(type.operands.length > 0, {
-                reason: 'there should be at least one operand',
-                loc: GeneratedSource,
-            });
-            let candidateType = null;
-            for (const operand of type.operands) {
-                const resolved = this.get(operand);
-                if (candidateType === null) {
-                    candidateType = resolved;
-                }
-                else if (!typeEquals(resolved, candidateType)) {
-                    const unionType = tryUnionTypes(resolved, candidateType);
-                    if (unionType === null) {
-                        candidateType = null;
-                        break;
-                    }
-                    else {
-                        candidateType = unionType;
-                    }
-                }
-            }
-            if (candidateType !== null) {
-                this.unify(v, candidateType);
-                return;
-            }
-        }
-        if (this.occursCheck(v, type)) {
-            const resolvedType = this.tryResolveType(v, type);
-            if (resolvedType !== null) {
-                this.substitutions.set(v.id, resolvedType);
-                return;
-            }
-            throw new Error('cycle detected');
-        }
-        this.substitutions.set(v.id, type);
-    }
-    tryResolveType(v, type) {
-        switch (type.kind) {
-            case 'Phi': {
-                const operands = [];
-                for (const operand of type.operands) {
-                    if (operand.kind === 'Type' && operand.id === v.id) {
-                        continue;
-                    }
-                    const resolved = this.tryResolveType(v, operand);
-                    if (resolved === null) {
-                        return null;
-                    }
-                    operands.push(resolved);
-                }
-                return { kind: 'Phi', operands };
-            }
-            case 'Type': {
-                const substitution = this.get(type);
-                if (substitution !== type) {
-                    const resolved = this.tryResolveType(v, substitution);
-                    if (resolved !== null) {
-                        this.substitutions.set(type.id, resolved);
-                    }
-                    return resolved;
-                }
-                return type;
-            }
-            case 'Property': {
-                const objectType = this.tryResolveType(v, this.get(type.objectType));
-                if (objectType === null) {
-                    return null;
-                }
-                return {
-                    kind: 'Property',
-                    objectName: type.objectName,
-                    objectType,
-                    propertyName: type.propertyName,
-                };
-            }
-            case 'Function': {
-                const returnType = this.tryResolveType(v, this.get(type.return));
-                if (returnType === null) {
-                    return null;
-                }
-                return {
-                    kind: 'Function',
-                    return: returnType,
-                    shapeId: type.shapeId,
-                    isConstructor: type.isConstructor,
-                };
-            }
-            case 'ObjectMethod':
-            case 'Object':
-            case 'Primitive':
-            case 'Poly': {
-                return type;
-            }
-            default: {
-                assertExhaustive$1(type, `Unexpected type kind '${type.kind}'`);
-            }
-        }
-    }
-    occursCheck(v, type) {
-        if (typeEquals(v, type))
-            return true;
-        if (type.kind === 'Type' && this.substitutions.has(type.id)) {
-            return this.occursCheck(v, this.substitutions.get(type.id));
-        }
-        if (type.kind === 'Phi') {
-            return type.operands.some(o => this.occursCheck(v, o));
-        }
-        if (type.kind === 'Function') {
-            return this.occursCheck(v, type.return);
-        }
-        return false;
-    }
-    get(type) {
-        if (type.kind === 'Type') {
-            if (this.substitutions.has(type.id)) {
-                return this.get(this.substitutions.get(type.id));
-            }
-        }
-        if (type.kind === 'Phi') {
-            return { kind: 'Phi', operands: type.operands.map(o => this.get(o)) };
-        }
-        if (type.kind === 'Function') {
-            return {
-                kind: 'Function',
-                isConstructor: type.isConstructor,
-                shapeId: type.shapeId,
-                return: this.get(type.return),
-            };
-        }
-        return type;
-    }
-}
-const RefLikeNameRE = /^(?:[a-zA-Z$_][a-zA-Z$_0-9]*)Ref$|^ref$/;
-function isRefLikeName(t) {
-    return (t.propertyName.kind === 'literal' &&
-        RefLikeNameRE.test(t.objectName) &&
-        t.propertyName.value === 'current');
-}
-function tryUnionTypes(ty1, ty2) {
-    let readonlyType;
-    let otherType;
-    if (ty1.kind === 'Object' && ty1.shapeId === BuiltInMixedReadonlyId) {
-        readonlyType = ty1;
-        otherType = ty2;
-    }
-    else if (ty2.kind === 'Object' && ty2.shapeId === BuiltInMixedReadonlyId) {
-        readonlyType = ty2;
-        otherType = ty1;
-    }
-    else {
-        return null;
-    }
-    if (otherType.kind === 'Primitive') {
-        return readonlyType;
-    }
-    else if (otherType.kind === 'Object' &&
-        otherType.shapeId === BuiltInArrayId) {
-        return otherType;
-    }
-    return null;
-}
-
-function validateContextVariableLValues(fn) {
-    const identifierKinds = new Map();
-    validateContextVariableLValuesImpl(fn, identifierKinds);
-}
-function validateContextVariableLValuesImpl(fn, identifierKinds) {
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            const { value } = instr;
-            switch (value.kind) {
-                case 'DeclareContext':
-                case 'StoreContext': {
-                    visit(identifierKinds, value.lvalue.place, 'context');
-                    break;
-                }
-                case 'LoadContext': {
-                    visit(identifierKinds, value.place, 'context');
-                    break;
-                }
-                case 'StoreLocal':
-                case 'DeclareLocal': {
-                    visit(identifierKinds, value.lvalue.place, 'local');
-                    break;
-                }
-                case 'LoadLocal': {
-                    visit(identifierKinds, value.place, 'local');
-                    break;
-                }
-                case 'PostfixUpdate':
-                case 'PrefixUpdate': {
-                    visit(identifierKinds, value.lvalue, 'local');
-                    break;
-                }
-                case 'Destructure': {
-                    for (const lvalue of eachPatternOperand(value.lvalue.pattern)) {
-                        visit(identifierKinds, lvalue, 'destructure');
-                    }
-                    break;
-                }
-                case 'ObjectMethod':
-                case 'FunctionExpression': {
-                    validateContextVariableLValuesImpl(value.loweredFunc.func, identifierKinds);
-                    break;
-                }
-                default: {
-                    for (const _ of eachInstructionValueLValue(value)) {
-                        CompilerError.throwTodo({
-                            reason: 'ValidateContextVariableLValues: unhandled instruction variant',
-                            loc: value.loc,
-                            description: `Handle '${value.kind} lvalues`,
-                            suggestions: null,
-                        });
-                    }
-                }
-            }
-        }
-    }
-}
-function visit(identifiers, place, kind) {
-    const prev = identifiers.get(place.identifier.id);
-    if (prev !== undefined) {
-        const wasContext = prev.kind === 'context';
-        const isContext = kind === 'context';
-        if (wasContext !== isContext) {
-            if (prev.kind === 'destructure' || kind === 'destructure') {
-                CompilerError.throwTodo({
-                    reason: `Support destructuring of context variables`,
-                    loc: kind === 'destructure' ? place.loc : prev.place.loc,
-                    description: null,
-                    suggestions: null,
-                });
-            }
-            CompilerError.invariant(false, {
-                reason: 'Expected all references to a variable to be consistently local or context references',
-                description: `Identifier ${printPlace(place)} is referenced as a ${kind} variable, but was previously referenced as a ${prev.kind} variable`,
-                message: `this is ${prev.kind}`,
-                loc: place.loc,
-            });
-        }
-    }
-    identifiers.set(place.identifier.id, { place, kind });
-}
-
-function computeUnconditionalBlocks(fn) {
-    const unconditionalBlocks = new Set();
-    const dominators = computePostDominatorTree(fn, {
-        includeThrowsAsExitNode: false,
-    });
-    const exit = dominators.exit;
-    let current = fn.body.entry;
-    while (current !== null && current !== exit) {
-        CompilerError.invariant(!unconditionalBlocks.has(current), {
-            reason: 'Internal error: non-terminating loop in ComputeUnconditionalBlocks',
-            loc: GeneratedSource,
-        });
-        unconditionalBlocks.add(current);
-        current = dominators.get(current);
-    }
-    return unconditionalBlocks;
-}
-
-var Kind;
-(function (Kind) {
-    Kind["Error"] = "Error";
-    Kind["KnownHook"] = "KnownHook";
-    Kind["PotentialHook"] = "PotentialHook";
-    Kind["Global"] = "Global";
-    Kind["Local"] = "Local";
-})(Kind || (Kind = {}));
-function joinKinds(a, b) {
-    if (a === Kind.Error || b === Kind.Error) {
-        return Kind.Error;
-    }
-    else if (a === Kind.KnownHook || b === Kind.KnownHook) {
-        return Kind.KnownHook;
-    }
-    else if (a === Kind.PotentialHook || b === Kind.PotentialHook) {
-        return Kind.PotentialHook;
-    }
-    else if (a === Kind.Global || b === Kind.Global) {
-        return Kind.Global;
-    }
-    else {
-        return Kind.Local;
-    }
-}
-function validateHooksUsage(fn) {
-    const unconditionalBlocks = computeUnconditionalBlocks(fn);
-    const errors = new CompilerError();
-    const errorsByPlace = new Map();
-    function recordError(loc, errorDetail) {
-        if (typeof loc === 'symbol') {
-            errors.pushErrorDetail(errorDetail);
-        }
-        else {
-            errorsByPlace.set(loc, errorDetail);
-        }
-    }
-    function recordConditionalHookError(place) {
-        setKind(place, Kind.Error);
-        const reason = 'Hooks must always be called in a consistent order, and may not be called conditionally. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)';
-        const previousError = typeof place.loc !== 'symbol' ? errorsByPlace.get(place.loc) : undefined;
-        if (previousError === undefined || previousError.reason !== reason) {
-            recordError(place.loc, new CompilerErrorDetail({
-                category: ErrorCategory.Hooks,
-                description: null,
-                reason,
-                loc: place.loc,
-                suggestions: null,
-            }));
-        }
-    }
-    function recordInvalidHookUsageError(place) {
-        const previousError = typeof place.loc !== 'symbol' ? errorsByPlace.get(place.loc) : undefined;
-        if (previousError === undefined) {
-            recordError(place.loc, new CompilerErrorDetail({
-                category: ErrorCategory.Hooks,
-                description: null,
-                reason: 'Hooks may not be referenced as normal values, they must be called. See https://react.dev/reference/rules/react-calls-components-and-hooks#never-pass-around-hooks-as-regular-values',
-                loc: place.loc,
-                suggestions: null,
-            }));
-        }
-    }
-    function recordDynamicHookUsageError(place) {
-        const previousError = typeof place.loc !== 'symbol' ? errorsByPlace.get(place.loc) : undefined;
-        if (previousError === undefined) {
-            recordError(place.loc, new CompilerErrorDetail({
-                category: ErrorCategory.Hooks,
-                description: null,
-                reason: 'Hooks must be the same function on every render, but this value may change over time to a different function. See https://react.dev/reference/rules/react-calls-components-and-hooks#dont-dynamically-use-hooks',
-                loc: place.loc,
-                suggestions: null,
-            }));
-        }
-    }
-    const valueKinds = new Map();
-    function getKindForPlace(place) {
-        const knownKind = valueKinds.get(place.identifier.id);
-        if (place.identifier.name !== null &&
-            isHookName$2(place.identifier.name.value)) {
-            return joinKinds(knownKind !== null && knownKind !== void 0 ? knownKind : Kind.Local, Kind.PotentialHook);
-        }
-        else {
-            return knownKind !== null && knownKind !== void 0 ? knownKind : Kind.Local;
-        }
-    }
-    function visitPlace(place) {
-        const kind = valueKinds.get(place.identifier.id);
-        if (kind === Kind.KnownHook) {
-            recordInvalidHookUsageError(place);
-        }
-    }
-    function setKind(place, kind) {
-        valueKinds.set(place.identifier.id, kind);
-    }
-    for (const param of fn.params) {
-        const place = param.kind === 'Identifier' ? param : param.place;
-        const kind = getKindForPlace(place);
-        setKind(place, kind);
-    }
-    for (const [, block] of fn.body.blocks) {
-        for (const phi of block.phis) {
-            let kind = phi.place.identifier.name !== null &&
-                isHookName$2(phi.place.identifier.name.value)
-                ? Kind.PotentialHook
-                : Kind.Local;
-            for (const [, operand] of phi.operands) {
-                const operandKind = valueKinds.get(operand.identifier.id);
-                if (operandKind !== undefined) {
-                    kind = joinKinds(kind, operandKind);
-                }
-            }
-            valueKinds.set(phi.place.identifier.id, kind);
-        }
-        for (const instr of block.instructions) {
-            switch (instr.value.kind) {
-                case 'LoadGlobal': {
-                    if (getHookKind(fn.env, instr.lvalue.identifier) != null) {
-                        setKind(instr.lvalue, Kind.KnownHook);
-                    }
-                    else {
-                        setKind(instr.lvalue, Kind.Global);
-                    }
-                    break;
-                }
-                case 'LoadContext':
-                case 'LoadLocal': {
-                    visitPlace(instr.value.place);
-                    const kind = getKindForPlace(instr.value.place);
-                    setKind(instr.lvalue, kind);
-                    break;
-                }
-                case 'StoreLocal':
-                case 'StoreContext': {
-                    visitPlace(instr.value.value);
-                    const kind = joinKinds(getKindForPlace(instr.value.value), getKindForPlace(instr.value.lvalue.place));
-                    setKind(instr.value.lvalue.place, kind);
-                    setKind(instr.lvalue, kind);
-                    break;
-                }
-                case 'ComputedLoad': {
-                    visitPlace(instr.value.object);
-                    const kind = getKindForPlace(instr.value.object);
-                    setKind(instr.lvalue, joinKinds(getKindForPlace(instr.lvalue), kind));
-                    break;
-                }
-                case 'PropertyLoad': {
-                    const objectKind = getKindForPlace(instr.value.object);
-                    const isHookProperty = typeof instr.value.property === 'string' &&
-                        isHookName$2(instr.value.property);
-                    let kind;
-                    switch (objectKind) {
-                        case Kind.Error: {
-                            kind = Kind.Error;
-                            break;
-                        }
-                        case Kind.KnownHook: {
-                            kind = isHookProperty ? Kind.KnownHook : Kind.Local;
-                            break;
-                        }
-                        case Kind.PotentialHook: {
-                            kind = Kind.PotentialHook;
-                            break;
-                        }
-                        case Kind.Global: {
-                            kind = isHookProperty ? Kind.KnownHook : Kind.Global;
-                            break;
-                        }
-                        case Kind.Local: {
-                            kind = isHookProperty ? Kind.PotentialHook : Kind.Local;
-                            break;
-                        }
-                        default: {
-                            assertExhaustive$1(objectKind, `Unexpected kind \`${objectKind}\``);
-                        }
-                    }
-                    setKind(instr.lvalue, kind);
-                    break;
-                }
-                case 'CallExpression': {
-                    const calleeKind = getKindForPlace(instr.value.callee);
-                    const isHookCallee = calleeKind === Kind.KnownHook || calleeKind === Kind.PotentialHook;
-                    if (isHookCallee && !unconditionalBlocks.has(block.id)) {
-                        recordConditionalHookError(instr.value.callee);
-                    }
-                    else if (calleeKind === Kind.PotentialHook) {
-                        recordDynamicHookUsageError(instr.value.callee);
-                    }
-                    for (const operand of eachInstructionOperand(instr)) {
-                        if (operand === instr.value.callee) {
-                            continue;
-                        }
-                        visitPlace(operand);
-                    }
-                    break;
-                }
-                case 'MethodCall': {
-                    const calleeKind = getKindForPlace(instr.value.property);
-                    const isHookCallee = calleeKind === Kind.KnownHook || calleeKind === Kind.PotentialHook;
-                    if (isHookCallee && !unconditionalBlocks.has(block.id)) {
-                        recordConditionalHookError(instr.value.property);
-                    }
-                    else if (calleeKind === Kind.PotentialHook) {
-                        recordDynamicHookUsageError(instr.value.property);
-                    }
-                    for (const operand of eachInstructionOperand(instr)) {
-                        if (operand === instr.value.property) {
-                            continue;
-                        }
-                        visitPlace(operand);
-                    }
-                    break;
-                }
-                case 'Destructure': {
-                    visitPlace(instr.value.value);
-                    const objectKind = getKindForPlace(instr.value.value);
-                    for (const lvalue of eachInstructionLValue(instr)) {
-                        const isHookProperty = lvalue.identifier.name !== null &&
-                            isHookName$2(lvalue.identifier.name.value);
-                        let kind;
-                        switch (objectKind) {
-                            case Kind.Error: {
-                                kind = Kind.Error;
-                                break;
-                            }
-                            case Kind.KnownHook: {
-                                kind = Kind.KnownHook;
-                                break;
-                            }
-                            case Kind.PotentialHook: {
-                                kind = Kind.PotentialHook;
-                                break;
-                            }
-                            case Kind.Global: {
-                                kind = isHookProperty ? Kind.KnownHook : Kind.Global;
-                                break;
-                            }
-                            case Kind.Local: {
-                                kind = isHookProperty ? Kind.PotentialHook : Kind.Local;
-                                break;
-                            }
-                            default: {
-                                assertExhaustive$1(objectKind, `Unexpected kind \`${objectKind}\``);
-                            }
-                        }
-                        setKind(lvalue, kind);
-                    }
-                    break;
-                }
-                case 'ObjectMethod':
-                case 'FunctionExpression': {
-                    visitFunctionExpression(errors, instr.value.loweredFunc.func);
-                    break;
-                }
-                default: {
-                    for (const operand of eachInstructionOperand(instr)) {
-                        visitPlace(operand);
-                    }
-                    for (const lvalue of eachInstructionLValue(instr)) {
-                        const kind = getKindForPlace(lvalue);
-                        setKind(lvalue, kind);
-                    }
-                }
-            }
-        }
-        for (const operand of eachTerminalOperand(block.terminal)) {
-            visitPlace(operand);
-        }
-    }
-    for (const [, error] of errorsByPlace) {
-        errors.pushErrorDetail(error);
-    }
-    return errors.asResult();
-}
-function visitFunctionExpression(errors, fn) {
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            switch (instr.value.kind) {
-                case 'ObjectMethod':
-                case 'FunctionExpression': {
-                    visitFunctionExpression(errors, instr.value.loweredFunc.func);
-                    break;
-                }
-                case 'MethodCall':
-                case 'CallExpression': {
-                    const callee = instr.value.kind === 'CallExpression'
-                        ? instr.value.callee
-                        : instr.value.property;
-                    const hookKind = getHookKind(fn.env, callee.identifier);
-                    if (hookKind != null) {
-                        errors.pushErrorDetail(new CompilerErrorDetail({
-                            category: ErrorCategory.Hooks,
-                            reason: 'Hooks must be called at the top level in the body of a function component or custom hook, and may not be called within function expressions. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)',
-                            loc: callee.loc,
-                            description: `Cannot call ${hookKind === 'Custom' ? 'hook' : hookKind} within a function expression`,
-                            suggestions: null,
-                        }));
-                    }
-                    break;
-                }
-            }
-        }
-    }
-}
-
-function validateMemoizedEffectDependencies(fn) {
-    const errors = new CompilerError();
-    visitReactiveFunction(fn, new Visitor$1(), errors);
-    return errors.asResult();
-}
-let Visitor$1 = class Visitor extends ReactiveFunctionVisitor {
-    constructor() {
-        super(...arguments);
-        this.scopes = new Set();
-    }
-    visitScope(scopeBlock, state) {
-        this.traverseScope(scopeBlock, state);
-        let areDependenciesMemoized = true;
-        for (const dep of scopeBlock.scope.dependencies) {
-            if (isUnmemoized$1(dep.identifier, this.scopes)) {
-                areDependenciesMemoized = false;
-                break;
-            }
-        }
-        if (areDependenciesMemoized) {
-            this.scopes.add(scopeBlock.scope.id);
-            for (const id of scopeBlock.scope.merged) {
-                this.scopes.add(id);
-            }
-        }
-    }
-    visitInstruction(instruction, state) {
-        this.traverseInstruction(instruction, state);
-        if (instruction.value.kind === 'CallExpression' &&
-            isEffectHook(instruction.value.callee.identifier) &&
-            instruction.value.args.length >= 2) {
-            const deps = instruction.value.args[1];
-            if (deps.kind === 'Identifier' &&
-                (isMutable(instruction, deps) ||
-                    isUnmemoized$1(deps.identifier, this.scopes))) {
-                state.push({
-                    category: ErrorCategory.EffectDependencies,
-                    reason: 'React Compiler has skipped optimizing this component because the effect dependencies could not be memoized. Unmemoized effect dependencies can trigger an infinite loop or other unexpected behavior',
-                    description: null,
-                    loc: typeof instruction.loc !== 'symbol' ? instruction.loc : null,
-                    suggestions: null,
-                });
-            }
-        }
-    }
-};
-function isUnmemoized$1(operand, scopes) {
-    return operand.scope != null && !scopes.has(operand.scope.id);
-}
-function isEffectHook(identifier) {
-    return (isUseEffectHookType(identifier) ||
-        isUseLayoutEffectHookType(identifier) ||
-        isUseInsertionEffectHookType(identifier));
-}
-
-function validateNoCapitalizedCalls(fn) {
-    var _a;
-    const envConfig = fn.env.config;
-    const ALLOW_LIST = new Set([
-        ...DEFAULT_GLOBALS.keys(),
-        ...((_a = envConfig.validateNoCapitalizedCalls) !== null && _a !== void 0 ? _a : []),
-    ]);
-    const hookPattern = envConfig.hookPattern != null ? new RegExp(envConfig.hookPattern) : null;
-    const isAllowed = (name) => {
-        return (ALLOW_LIST.has(name) || (hookPattern != null && hookPattern.test(name)));
-    };
-    const errors = new CompilerError();
-    const capitalLoadGlobals = new Map();
-    const capitalizedProperties = new Map();
-    const reason = 'Capitalized functions are reserved for components, which must be invoked with JSX. If this is a component, render it with JSX. Otherwise, ensure that it has no hook calls and rename it to begin with a lowercase letter. Alternatively, if you know for a fact that this function is not a component, you can allowlist it via the compiler config';
-    for (const [, block] of fn.body.blocks) {
-        for (const { lvalue, value } of block.instructions) {
-            switch (value.kind) {
-                case 'LoadGlobal': {
-                    if (value.binding.name != '' &&
-                        /^[A-Z]/.test(value.binding.name) &&
-                        !(value.binding.name.toUpperCase() === value.binding.name) &&
-                        !isAllowed(value.binding.name)) {
-                        capitalLoadGlobals.set(lvalue.identifier.id, value.binding.name);
-                    }
-                    break;
-                }
-                case 'CallExpression': {
-                    const calleeIdentifier = value.callee.identifier.id;
-                    const calleeName = capitalLoadGlobals.get(calleeIdentifier);
-                    if (calleeName != null) {
-                        CompilerError.throwInvalidReact({
-                            category: ErrorCategory.CapitalizedCalls,
-                            reason,
-                            description: `${calleeName} may be a component`,
-                            loc: value.loc,
-                            suggestions: null,
-                        });
-                    }
-                    break;
-                }
-                case 'PropertyLoad': {
-                    if (typeof value.property === 'string' &&
-                        /^[A-Z]/.test(value.property)) {
-                        capitalizedProperties.set(lvalue.identifier.id, value.property);
-                    }
-                    break;
-                }
-                case 'MethodCall': {
-                    const propertyIdentifier = value.property.identifier.id;
-                    const propertyName = capitalizedProperties.get(propertyIdentifier);
-                    if (propertyName != null) {
-                        errors.push({
-                            category: ErrorCategory.CapitalizedCalls,
-                            reason,
-                            description: `${propertyName} may be a component`,
-                            loc: value.loc,
-                            suggestions: null,
-                        });
-                    }
-                    break;
-                }
-            }
-        }
-    }
-    return errors.asResult();
-}
-
-var _Env_changed, _Env_data, _Env_temporaries;
-function makeRefId(id) {
-    CompilerError.invariant(id >= 0 && Number.isInteger(id), {
-        reason: 'Expected identifier id to be a non-negative integer',
-        loc: GeneratedSource,
-    });
-    return id;
-}
-let _refId = 0;
-function nextRefId() {
-    return makeRefId(_refId++);
-}
-class Env {
-    constructor() {
-        _Env_changed.set(this, false);
-        _Env_data.set(this, new Map());
-        _Env_temporaries.set(this, new Map());
-    }
-    lookup(place) {
-        var _a;
-        return (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(place.identifier.id)) !== null && _a !== void 0 ? _a : place;
-    }
-    define(place, value) {
-        __classPrivateFieldGet(this, _Env_temporaries, "f").set(place.identifier.id, value);
-    }
-    resetChanged() {
-        __classPrivateFieldSet(this, _Env_changed, false, "f");
-    }
-    hasChanged() {
-        return __classPrivateFieldGet(this, _Env_changed, "f");
-    }
-    get(key) {
-        var _a, _b;
-        const operandId = (_b = (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(key)) === null || _a === void 0 ? void 0 : _a.identifier.id) !== null && _b !== void 0 ? _b : key;
-        return __classPrivateFieldGet(this, _Env_data, "f").get(operandId);
-    }
-    set(key, value) {
-        var _a, _b;
-        const operandId = (_b = (_a = __classPrivateFieldGet(this, _Env_temporaries, "f").get(key)) === null || _a === void 0 ? void 0 : _a.identifier.id) !== null && _b !== void 0 ? _b : key;
-        const cur = __classPrivateFieldGet(this, _Env_data, "f").get(operandId);
-        const widenedValue = joinRefAccessTypes(value, cur !== null && cur !== void 0 ? cur : { kind: 'None' });
-        if (!(cur == null && widenedValue.kind === 'None') &&
-            (cur == null || !tyEqual(cur, widenedValue))) {
-            __classPrivateFieldSet(this, _Env_changed, true, "f");
-        }
-        __classPrivateFieldGet(this, _Env_data, "f").set(operandId, widenedValue);
-        return this;
-    }
-}
-_Env_changed = new WeakMap(), _Env_data = new WeakMap(), _Env_temporaries = new WeakMap();
-function validateNoRefAccessInRender(fn) {
-    const env = new Env();
-    collectTemporariesSidemap(fn, env);
-    return validateNoRefAccessInRenderImpl(fn, env).map(_ => undefined);
-}
-function collectTemporariesSidemap(fn, env) {
-    for (const block of fn.body.blocks.values()) {
-        for (const instr of block.instructions) {
-            const { lvalue, value } = instr;
-            switch (value.kind) {
-                case 'LoadLocal': {
-                    const temp = env.lookup(value.place);
-                    if (temp != null) {
-                        env.define(lvalue, temp);
-                    }
-                    break;
-                }
-                case 'StoreLocal': {
-                    const temp = env.lookup(value.value);
-                    if (temp != null) {
-                        env.define(lvalue, temp);
-                        env.define(value.lvalue.place, temp);
-                    }
-                    break;
-                }
-                case 'PropertyLoad': {
-                    if (isUseRefType(value.object.identifier) &&
-                        value.property === 'current') {
-                        continue;
-                    }
-                    const temp = env.lookup(value.object);
-                    if (temp != null) {
-                        env.define(lvalue, temp);
-                    }
-                    break;
-                }
-            }
-        }
-    }
-}
-function refTypeOfType(place) {
-    if (isRefValueType(place.identifier)) {
-        return { kind: 'RefValue' };
-    }
-    else if (isUseRefType(place.identifier)) {
-        return { kind: 'Ref', refId: nextRefId() };
-    }
-    else {
-        return { kind: 'None' };
-    }
-}
-function isEventHandlerType(identifier) {
-    const type = identifier.type;
-    return type.kind === 'Function' && type.shapeId === BuiltInEventHandlerId;
-}
-function tyEqual(a, b) {
-    if (a.kind !== b.kind) {
-        return false;
-    }
-    switch (a.kind) {
-        case 'None':
-            return true;
-        case 'Ref':
-            return true;
-        case 'Nullable':
-            return true;
-        case 'Guard':
-            CompilerError.invariant(b.kind === 'Guard', {
-                reason: 'Expected ref value',
-                loc: GeneratedSource,
-            });
-            return a.refId === b.refId;
-        case 'RefValue':
-            CompilerError.invariant(b.kind === 'RefValue', {
-                reason: 'Expected ref value',
-                loc: GeneratedSource,
-            });
-            return a.loc == b.loc;
-        case 'Structure': {
-            CompilerError.invariant(b.kind === 'Structure', {
-                reason: 'Expected structure',
-                loc: GeneratedSource,
-            });
-            const fnTypesEqual = (a.fn === null && b.fn === null) ||
-                (a.fn !== null &&
-                    b.fn !== null &&
-                    a.fn.readRefEffect === b.fn.readRefEffect &&
-                    tyEqual(a.fn.returnType, b.fn.returnType));
-            return (fnTypesEqual &&
-                (a.value === b.value ||
-                    (a.value !== null && b.value !== null && tyEqual(a.value, b.value))));
-        }
-    }
-}
-function joinRefAccessTypes(...types) {
-    function joinRefAccessRefTypes(a, b) {
-        if (a.kind === 'RefValue') {
-            if (b.kind === 'RefValue' && a.refId === b.refId) {
-                return a;
-            }
-            return { kind: 'RefValue' };
-        }
-        else if (b.kind === 'RefValue') {
-            return b;
-        }
-        else if (a.kind === 'Ref' || b.kind === 'Ref') {
-            if (a.kind === 'Ref' && b.kind === 'Ref' && a.refId === b.refId) {
-                return a;
-            }
-            return { kind: 'Ref', refId: nextRefId() };
-        }
-        else {
-            CompilerError.invariant(a.kind === 'Structure' && b.kind === 'Structure', {
-                reason: 'Expected structure',
-                loc: GeneratedSource,
-            });
-            const fn = a.fn === null
-                ? b.fn
-                : b.fn === null
-                    ? a.fn
-                    : {
-                        readRefEffect: a.fn.readRefEffect || b.fn.readRefEffect,
-                        returnType: joinRefAccessTypes(a.fn.returnType, b.fn.returnType),
-                    };
-            const value = a.value === null
-                ? b.value
-                : b.value === null
-                    ? a.value
-                    : joinRefAccessRefTypes(a.value, b.value);
-            return {
-                kind: 'Structure',
-                fn,
-                value,
-            };
-        }
-    }
-    return types.reduce((a, b) => {
-        if (a.kind === 'None') {
-            return b;
-        }
-        else if (b.kind === 'None') {
-            return a;
-        }
-        else if (a.kind === 'Guard') {
-            if (b.kind === 'Guard' && a.refId === b.refId) {
-                return a;
-            }
-            else if (b.kind === 'Nullable' || b.kind === 'Guard') {
-                return { kind: 'None' };
-            }
-            else {
-                return b;
-            }
-        }
-        else if (b.kind === 'Guard') {
-            if (a.kind === 'Nullable') {
-                return { kind: 'None' };
-            }
-            else {
-                return b;
-            }
-        }
-        else if (a.kind === 'Nullable') {
-            return b;
-        }
-        else if (b.kind === 'Nullable') {
-            return a;
-        }
-        else {
-            return joinRefAccessRefTypes(a, b);
-        }
-    }, { kind: 'None' });
-}
-function validateNoRefAccessInRenderImpl(fn, env) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
-    let returnValues = [];
-    let place;
-    for (const param of fn.params) {
-        if (param.kind === 'Identifier') {
-            place = param;
-        }
-        else {
-            place = param.place;
-        }
-        const type = refTypeOfType(place);
-        env.set(place.identifier.id, type);
-    }
-    const interpolatedAsJsx = new Set();
-    for (const block of fn.body.blocks.values()) {
-        for (const instr of block.instructions) {
-            const { value } = instr;
-            if (value.kind === 'JsxExpression' || value.kind === 'JsxFragment') {
-                if (value.children != null) {
-                    for (const child of value.children) {
-                        interpolatedAsJsx.add(child.identifier.id);
-                    }
-                }
-            }
-        }
-    }
-    for (let i = 0; (i == 0 || env.hasChanged()) && i < 10; i++) {
-        env.resetChanged();
-        returnValues = [];
-        const safeBlocks = [];
-        const errors = new CompilerError();
-        for (const [, block] of fn.body.blocks) {
-            retainWhere(safeBlocks, entry => entry.block !== block.id);
-            for (const phi of block.phis) {
-                env.set(phi.place.identifier.id, joinRefAccessTypes(...Array(...phi.operands.values()).map(operand => { var _a; return (_a = env.get(operand.identifier.id)) !== null && _a !== void 0 ? _a : { kind: 'None' }; })));
-            }
-            for (const instr of block.instructions) {
-                switch (instr.value.kind) {
-                    case 'JsxExpression':
-                    case 'JsxFragment': {
-                        for (const operand of eachInstructionValueOperand(instr.value)) {
-                            validateNoDirectRefValueAccess(errors, operand, env);
-                        }
-                        break;
-                    }
-                    case 'ComputedLoad':
-                    case 'PropertyLoad': {
-                        if (instr.value.kind === 'ComputedLoad') {
-                            validateNoDirectRefValueAccess(errors, instr.value.property, env);
-                        }
-                        const objType = env.get(instr.value.object.identifier.id);
-                        let lookupType = null;
-                        if ((objType === null || objType === void 0 ? void 0 : objType.kind) === 'Structure') {
-                            lookupType = objType.value;
-                        }
-                        else if ((objType === null || objType === void 0 ? void 0 : objType.kind) === 'Ref') {
-                            lookupType = {
-                                kind: 'RefValue',
-                                loc: instr.loc,
-                                refId: objType.refId,
-                            };
-                        }
-                        env.set(instr.lvalue.identifier.id, lookupType !== null && lookupType !== void 0 ? lookupType : refTypeOfType(instr.lvalue));
-                        break;
-                    }
-                    case 'TypeCastExpression': {
-                        env.set(instr.lvalue.identifier.id, (_a = env.get(instr.value.value.identifier.id)) !== null && _a !== void 0 ? _a : refTypeOfType(instr.lvalue));
-                        break;
-                    }
-                    case 'LoadContext':
-                    case 'LoadLocal': {
-                        env.set(instr.lvalue.identifier.id, (_b = env.get(instr.value.place.identifier.id)) !== null && _b !== void 0 ? _b : refTypeOfType(instr.lvalue));
-                        break;
-                    }
-                    case 'StoreContext':
-                    case 'StoreLocal': {
-                        env.set(instr.value.lvalue.place.identifier.id, (_c = env.get(instr.value.value.identifier.id)) !== null && _c !== void 0 ? _c : refTypeOfType(instr.value.lvalue.place));
-                        env.set(instr.lvalue.identifier.id, (_d = env.get(instr.value.value.identifier.id)) !== null && _d !== void 0 ? _d : refTypeOfType(instr.lvalue));
-                        break;
-                    }
-                    case 'Destructure': {
-                        const objType = env.get(instr.value.value.identifier.id);
-                        let lookupType = null;
-                        if ((objType === null || objType === void 0 ? void 0 : objType.kind) === 'Structure') {
-                            lookupType = objType.value;
-                        }
-                        env.set(instr.lvalue.identifier.id, lookupType !== null && lookupType !== void 0 ? lookupType : refTypeOfType(instr.lvalue));
-                        for (const lval of eachPatternOperand(instr.value.lvalue.pattern)) {
-                            env.set(lval.identifier.id, lookupType !== null && lookupType !== void 0 ? lookupType : refTypeOfType(lval));
-                        }
-                        break;
-                    }
-                    case 'ObjectMethod':
-                    case 'FunctionExpression': {
-                        let returnType = { kind: 'None' };
-                        let readRefEffect = false;
-                        const result = validateNoRefAccessInRenderImpl(instr.value.loweredFunc.func, env);
-                        if (result.isOk()) {
-                            returnType = result.unwrap();
-                        }
-                        else if (result.isErr()) {
-                            readRefEffect = true;
-                        }
-                        env.set(instr.lvalue.identifier.id, {
-                            kind: 'Structure',
-                            fn: {
-                                readRefEffect,
-                                returnType,
-                            },
-                            value: null,
-                        });
-                        break;
-                    }
-                    case 'MethodCall':
-                    case 'CallExpression': {
-                        const callee = instr.value.kind === 'CallExpression'
-                            ? instr.value.callee
-                            : instr.value.property;
-                        const hookKind = getHookKindForType(fn.env, callee.identifier.type);
-                        let returnType = { kind: 'None' };
-                        const fnType = env.get(callee.identifier.id);
-                        let didError = false;
-                        if ((fnType === null || fnType === void 0 ? void 0 : fnType.kind) === 'Structure' && fnType.fn !== null) {
-                            returnType = fnType.fn.returnType;
-                            if (fnType.fn.readRefEffect) {
-                                didError = true;
-                                errors.pushDiagnostic(CompilerDiagnostic.create({
-                                    category: ErrorCategory.Refs,
-                                    reason: 'Cannot access refs during render',
-                                    description: ERROR_DESCRIPTION,
-                                }).withDetails({
-                                    kind: 'error',
-                                    loc: callee.loc,
-                                    message: `This function accesses a ref value`,
-                                }));
-                            }
-                        }
-                        if (!didError) {
-                            const isRefLValue = isUseRefType(instr.lvalue.identifier);
-                            const isEventHandlerLValue = isEventHandlerType(instr.lvalue.identifier);
-                            for (const operand of eachInstructionValueOperand(instr.value)) {
-                                if (isRefLValue ||
-                                    isEventHandlerLValue ||
-                                    (hookKind != null &&
-                                        hookKind !== 'useState' &&
-                                        hookKind !== 'useReducer')) {
-                                    validateNoDirectRefValueAccess(errors, operand, env);
-                                }
-                                else if (interpolatedAsJsx.has(instr.lvalue.identifier.id)) {
-                                    validateNoRefValueAccess(errors, env, operand);
-                                }
-                                else {
-                                    validateNoRefPassedToFunction(errors, env, operand, operand.loc);
-                                }
-                            }
-                        }
-                        env.set(instr.lvalue.identifier.id, returnType);
-                        break;
-                    }
-                    case 'ObjectExpression':
-                    case 'ArrayExpression': {
-                        const types = [];
-                        for (const operand of eachInstructionValueOperand(instr.value)) {
-                            validateNoDirectRefValueAccess(errors, operand, env);
-                            types.push((_e = env.get(operand.identifier.id)) !== null && _e !== void 0 ? _e : { kind: 'None' });
-                        }
-                        const value = joinRefAccessTypes(...types);
-                        if (value.kind === 'None' ||
-                            value.kind === 'Guard' ||
-                            value.kind === 'Nullable') {
-                            env.set(instr.lvalue.identifier.id, { kind: 'None' });
-                        }
-                        else {
-                            env.set(instr.lvalue.identifier.id, {
-                                kind: 'Structure',
-                                value,
-                                fn: null,
-                            });
-                        }
-                        break;
-                    }
-                    case 'PropertyDelete':
-                    case 'PropertyStore':
-                    case 'ComputedDelete':
-                    case 'ComputedStore': {
-                        const target = env.get(instr.value.object.identifier.id);
-                        let safe = null;
-                        if (instr.value.kind === 'PropertyStore' &&
-                            target != null &&
-                            target.kind === 'Ref') {
-                            safe = safeBlocks.find(entry => entry.ref === target.refId);
-                        }
-                        if (safe != null) {
-                            retainWhere(safeBlocks, entry => entry !== safe);
-                        }
-                        else {
-                            validateNoRefUpdate(errors, env, instr.value.object, instr.loc);
-                        }
-                        if (instr.value.kind === 'ComputedDelete' ||
-                            instr.value.kind === 'ComputedStore') {
-                            validateNoRefValueAccess(errors, env, instr.value.property);
-                        }
-                        if (instr.value.kind === 'ComputedStore' ||
-                            instr.value.kind === 'PropertyStore') {
-                            validateNoDirectRefValueAccess(errors, instr.value.value, env);
-                            const type = env.get(instr.value.value.identifier.id);
-                            if (type != null && type.kind === 'Structure') {
-                                let objectType = type;
-                                if (target != null) {
-                                    objectType = joinRefAccessTypes(objectType, target);
-                                }
-                                env.set(instr.value.object.identifier.id, objectType);
-                            }
-                        }
-                        break;
-                    }
-                    case 'StartMemoize':
-                    case 'FinishMemoize':
-                        break;
-                    case 'LoadGlobal': {
-                        if (instr.value.binding.name === 'undefined') {
-                            env.set(instr.lvalue.identifier.id, { kind: 'Nullable' });
-                        }
-                        break;
-                    }
-                    case 'Primitive': {
-                        if (instr.value.value == null) {
-                            env.set(instr.lvalue.identifier.id, { kind: 'Nullable' });
-                        }
-                        break;
-                    }
-                    case 'UnaryExpression': {
-                        if (instr.value.operator === '!') {
-                            const value = env.get(instr.value.value.identifier.id);
-                            const refId = (value === null || value === void 0 ? void 0 : value.kind) === 'RefValue' && value.refId != null
-                                ? value.refId
-                                : null;
-                            if (refId !== null) {
-                                env.set(instr.lvalue.identifier.id, { kind: 'Guard', refId });
-                                errors.pushDiagnostic(CompilerDiagnostic.create({
-                                    category: ErrorCategory.Refs,
-                                    reason: 'Cannot access refs during render',
-                                    description: ERROR_DESCRIPTION,
-                                })
-                                    .withDetails({
-                                    kind: 'error',
-                                    loc: instr.value.value.loc,
-                                    message: `Cannot access ref value during render`,
-                                })
-                                    .withDetails({
-                                    kind: 'hint',
-                                    message: 'To initialize a ref only once, check that the ref is null with the pattern `if (ref.current == null) { ref.current = ... }`',
-                                }));
-                                break;
-                            }
-                        }
-                        validateNoRefValueAccess(errors, env, instr.value.value);
-                        break;
-                    }
-                    case 'BinaryExpression': {
-                        const left = env.get(instr.value.left.identifier.id);
-                        const right = env.get(instr.value.right.identifier.id);
-                        let nullish = false;
-                        let refId = null;
-                        if ((left === null || left === void 0 ? void 0 : left.kind) === 'RefValue' && left.refId != null) {
-                            refId = left.refId;
-                        }
-                        else if ((right === null || right === void 0 ? void 0 : right.kind) === 'RefValue' && right.refId != null) {
-                            refId = right.refId;
-                        }
-                        if ((left === null || left === void 0 ? void 0 : left.kind) === 'Nullable') {
-                            nullish = true;
-                        }
-                        else if ((right === null || right === void 0 ? void 0 : right.kind) === 'Nullable') {
-                            nullish = true;
-                        }
-                        if (refId !== null && nullish) {
-                            env.set(instr.lvalue.identifier.id, { kind: 'Guard', refId });
-                        }
-                        else {
-                            for (const operand of eachInstructionValueOperand(instr.value)) {
-                                validateNoRefValueAccess(errors, env, operand);
-                            }
-                        }
-                        break;
-                    }
-                    default: {
-                        for (const operand of eachInstructionValueOperand(instr.value)) {
-                            validateNoRefValueAccess(errors, env, operand);
-                        }
-                        break;
-                    }
-                }
-                for (const operand of eachInstructionOperand(instr)) {
-                    guardCheck(errors, operand, env);
-                }
-                if (isUseRefType(instr.lvalue.identifier) &&
-                    ((_f = env.get(instr.lvalue.identifier.id)) === null || _f === void 0 ? void 0 : _f.kind) !== 'Ref') {
-                    env.set(instr.lvalue.identifier.id, joinRefAccessTypes((_g = env.get(instr.lvalue.identifier.id)) !== null && _g !== void 0 ? _g : { kind: 'None' }, { kind: 'Ref', refId: nextRefId() }));
-                }
-                if (isRefValueType(instr.lvalue.identifier) &&
-                    ((_h = env.get(instr.lvalue.identifier.id)) === null || _h === void 0 ? void 0 : _h.kind) !== 'RefValue') {
-                    env.set(instr.lvalue.identifier.id, joinRefAccessTypes((_j = env.get(instr.lvalue.identifier.id)) !== null && _j !== void 0 ? _j : { kind: 'None' }, { kind: 'RefValue', loc: instr.loc }));
-                }
-            }
-            if (block.terminal.kind === 'if') {
-                const test = env.get(block.terminal.test.identifier.id);
-                if ((test === null || test === void 0 ? void 0 : test.kind) === 'Guard' &&
-                    safeBlocks.find(entry => entry.ref === test.refId) == null) {
-                    safeBlocks.push({ block: block.terminal.fallthrough, ref: test.refId });
-                }
-            }
-            for (const operand of eachTerminalOperand(block.terminal)) {
-                if (block.terminal.kind !== 'return') {
-                    validateNoRefValueAccess(errors, env, operand);
-                    if (block.terminal.kind !== 'if') {
-                        guardCheck(errors, operand, env);
-                    }
-                }
-                else {
-                    validateNoDirectRefValueAccess(errors, operand, env);
-                    guardCheck(errors, operand, env);
-                    returnValues.push(env.get(operand.identifier.id));
-                }
-            }
-        }
-        if (errors.hasAnyErrors()) {
-            return Err(errors);
-        }
-    }
-    CompilerError.invariant(!env.hasChanged(), {
-        reason: 'Ref type environment did not converge',
-        loc: GeneratedSource,
-    });
-    return Ok(joinRefAccessTypes(...returnValues.filter((env) => env !== undefined)));
-}
-function destructure(type) {
-    if ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && type.value !== null) {
-        return destructure(type.value);
-    }
-    return type;
-}
-function guardCheck(errors, operand, env) {
-    var _a;
-    if (((_a = env.get(operand.identifier.id)) === null || _a === void 0 ? void 0 : _a.kind) === 'Guard') {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Refs,
-            reason: 'Cannot access refs during render',
-            description: ERROR_DESCRIPTION,
-        }).withDetails({
-            kind: 'error',
-            loc: operand.loc,
-            message: `Cannot access ref value during render`,
-        }));
-    }
-}
-function validateNoRefValueAccess(errors, env, operand) {
-    var _a;
-    const type = destructure(env.get(operand.identifier.id));
-    if ((type === null || type === void 0 ? void 0 : type.kind) === 'RefValue' ||
-        ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && ((_a = type.fn) === null || _a === void 0 ? void 0 : _a.readRefEffect))) {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Refs,
-            reason: 'Cannot access refs during render',
-            description: ERROR_DESCRIPTION,
-        }).withDetails({
-            kind: 'error',
-            loc: (type.kind === 'RefValue' && type.loc) || operand.loc,
-            message: `Cannot access ref value during render`,
-        }));
-    }
-}
-function validateNoRefPassedToFunction(errors, env, operand, loc) {
-    var _a;
-    const type = destructure(env.get(operand.identifier.id));
-    if ((type === null || type === void 0 ? void 0 : type.kind) === 'Ref' ||
-        (type === null || type === void 0 ? void 0 : type.kind) === 'RefValue' ||
-        ((type === null || type === void 0 ? void 0 : type.kind) === 'Structure' && ((_a = type.fn) === null || _a === void 0 ? void 0 : _a.readRefEffect))) {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Refs,
-            reason: 'Cannot access refs during render',
-            description: ERROR_DESCRIPTION,
-        }).withDetails({
-            kind: 'error',
-            loc: (type.kind === 'RefValue' && type.loc) || loc,
-            message: `Passing a ref to a function may read its value during render`,
-        }));
-    }
-}
-function validateNoRefUpdate(errors, env, operand, loc) {
-    const type = destructure(env.get(operand.identifier.id));
-    if ((type === null || type === void 0 ? void 0 : type.kind) === 'Ref' || (type === null || type === void 0 ? void 0 : type.kind) === 'RefValue') {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Refs,
-            reason: 'Cannot access refs during render',
-            description: ERROR_DESCRIPTION,
-        }).withDetails({
-            kind: 'error',
-            loc: (type.kind === 'RefValue' && type.loc) || loc,
-            message: `Cannot update ref during render`,
-        }));
-    }
-}
-function validateNoDirectRefValueAccess(errors, operand, env) {
-    var _a;
-    const type = destructure(env.get(operand.identifier.id));
-    if ((type === null || type === void 0 ? void 0 : type.kind) === 'RefValue') {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Refs,
-            reason: 'Cannot access refs during render',
-            description: ERROR_DESCRIPTION,
-        }).withDetails({
-            kind: 'error',
-            loc: (_a = type.loc) !== null && _a !== void 0 ? _a : operand.loc,
-            message: `Cannot access ref value during render`,
-        }));
-    }
-}
-const ERROR_DESCRIPTION = 'React refs are values that are not needed for rendering. Refs should only be accessed ' +
-    'outside of render, such as in event handlers or effects. ' +
-    'Accessing a ref value (the `current` property) during render can cause your component ' +
-    'not to update as expected (https://react.dev/reference/react/useRef)';
-
-function validateNoSetStateInRender(fn) {
-    const unconditionalSetStateFunctions = new Set();
-    return validateNoSetStateInRenderImpl(fn, unconditionalSetStateFunctions);
-}
-function validateNoSetStateInRenderImpl(fn, unconditionalSetStateFunctions) {
-    const unconditionalBlocks = computeUnconditionalBlocks(fn);
-    let activeManualMemoId = null;
-    const errors = new CompilerError();
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            switch (instr.value.kind) {
-                case 'LoadLocal': {
-                    if (unconditionalSetStateFunctions.has(instr.value.place.identifier.id)) {
-                        unconditionalSetStateFunctions.add(instr.lvalue.identifier.id);
-                    }
-                    break;
-                }
-                case 'StoreLocal': {
-                    if (unconditionalSetStateFunctions.has(instr.value.value.identifier.id)) {
-                        unconditionalSetStateFunctions.add(instr.value.lvalue.place.identifier.id);
-                        unconditionalSetStateFunctions.add(instr.lvalue.identifier.id);
-                    }
-                    break;
-                }
-                case 'ObjectMethod':
-                case 'FunctionExpression': {
-                    if ([...eachInstructionValueOperand(instr.value)].some(operand => isSetStateType(operand.identifier) ||
-                        unconditionalSetStateFunctions.has(operand.identifier.id)) &&
-                        validateNoSetStateInRenderImpl(instr.value.loweredFunc.func, unconditionalSetStateFunctions).isErr()) {
-                        unconditionalSetStateFunctions.add(instr.lvalue.identifier.id);
-                    }
-                    break;
-                }
-                case 'StartMemoize': {
-                    CompilerError.invariant(activeManualMemoId === null, {
-                        reason: 'Unexpected nested StartMemoize instructions',
-                        loc: instr.value.loc,
-                    });
-                    activeManualMemoId = instr.value.manualMemoId;
-                    break;
-                }
-                case 'FinishMemoize': {
-                    CompilerError.invariant(activeManualMemoId === instr.value.manualMemoId, {
-                        reason: 'Expected FinishMemoize to align with previous StartMemoize instruction',
-                        loc: instr.value.loc,
-                    });
-                    activeManualMemoId = null;
-                    break;
-                }
-                case 'CallExpression': {
-                    const callee = instr.value.callee;
-                    if (isSetStateType(callee.identifier) ||
-                        unconditionalSetStateFunctions.has(callee.identifier.id)) {
-                        if (activeManualMemoId !== null) {
-                            errors.pushDiagnostic(CompilerDiagnostic.create({
-                                category: ErrorCategory.RenderSetState,
-                                reason: 'Calling setState from useMemo may trigger an infinite loop',
-                                description: 'Each time the memo callback is evaluated it will change state. This can cause a memoization dependency to change, running the memo function again and causing an infinite loop. Instead of setting state in useMemo(), prefer deriving the value during render. (https://react.dev/reference/react/useState)',
-                                suggestions: null,
-                            }).withDetails({
-                                kind: 'error',
-                                loc: callee.loc,
-                                message: 'Found setState() within useMemo()',
-                            }));
-                        }
-                        else if (unconditionalBlocks.has(block.id)) {
-                            const enableUseKeyedState = fn.env.config.enableUseKeyedState;
-                            if (enableUseKeyedState) {
-                                errors.pushDiagnostic(CompilerDiagnostic.create({
-                                    category: ErrorCategory.RenderSetState,
-                                    reason: 'Cannot call setState during render',
-                                    description: 'Calling setState during render may trigger an infinite loop.\n' +
-                                        '* To reset state when other state/props change, use `const [state, setState] = useKeyedState(initialState, key)` to reset `state` when `key` changes.\n' +
-                                        '* To derive data from other state/props, compute the derived data during render without using state',
-                                    suggestions: null,
-                                }).withDetails({
-                                    kind: 'error',
-                                    loc: callee.loc,
-                                    message: 'Found setState() in render',
-                                }));
-                            }
-                            else {
-                                errors.pushDiagnostic(CompilerDiagnostic.create({
-                                    category: ErrorCategory.RenderSetState,
-                                    reason: 'Cannot call setState during render',
-                                    description: 'Calling setState during render may trigger an infinite loop.\n' +
-                                        '* To reset state when other state/props change, store the previous value in state and update conditionally: https://react.dev/reference/react/useState#storing-information-from-previous-renders\n' +
-                                        '* To derive data from other state/props, compute the derived data during render without using state',
-                                    suggestions: null,
-                                }).withDetails({
-                                    kind: 'error',
-                                    loc: callee.loc,
-                                    message: 'Found setState() in render',
-                                }));
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-    return errors.asResult();
-}
-
-function validatePreservedManualMemoization(fn) {
-    const state = {
-        errors: new CompilerError(),
-        manualMemoState: null,
-    };
-    visitReactiveFunction(fn, new Visitor(), state);
-    return state.errors.asResult();
-}
-function prettyPrintScopeDependency(val) {
-    var _a;
-    let rootStr;
-    if (((_a = val.identifier.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named') {
-        rootStr = val.identifier.name.value;
-    }
-    else {
-        rootStr = '[unnamed]';
-    }
-    return `${rootStr}${val.path.map(v => `${v.optional ? '?.' : '.'}${v.property}`).join('')}`;
-}
-var CompareDependencyResult;
-(function (CompareDependencyResult) {
-    CompareDependencyResult[CompareDependencyResult["Ok"] = 0] = "Ok";
-    CompareDependencyResult[CompareDependencyResult["RootDifference"] = 1] = "RootDifference";
-    CompareDependencyResult[CompareDependencyResult["PathDifference"] = 2] = "PathDifference";
-    CompareDependencyResult[CompareDependencyResult["Subpath"] = 3] = "Subpath";
-    CompareDependencyResult[CompareDependencyResult["RefAccessDifference"] = 4] = "RefAccessDifference";
-})(CompareDependencyResult || (CompareDependencyResult = {}));
-function merge(a, b) {
-    return Math.max(a, b);
-}
-function getCompareDependencyResultDescription(result) {
-    switch (result) {
-        case CompareDependencyResult.Ok:
-            return 'Dependencies equal';
-        case CompareDependencyResult.RootDifference:
-        case CompareDependencyResult.PathDifference:
-            return 'Inferred different dependency than source';
-        case CompareDependencyResult.RefAccessDifference:
-            return 'Differences in ref.current access';
-        case CompareDependencyResult.Subpath:
-            return 'Inferred less specific property than source';
-    }
-}
-function compareDeps(inferred, source) {
-    const rootsEqual = (inferred.root.kind === 'Global' &&
-        source.root.kind === 'Global' &&
-        inferred.root.identifierName === source.root.identifierName) ||
-        (inferred.root.kind === 'NamedLocal' &&
-            source.root.kind === 'NamedLocal' &&
-            inferred.root.value.identifier.id === source.root.value.identifier.id);
-    if (!rootsEqual) {
-        return CompareDependencyResult.RootDifference;
-    }
-    let isSubpath = true;
-    for (let i = 0; i < Math.min(inferred.path.length, source.path.length); i++) {
-        if (inferred.path[i].property !== source.path[i].property) {
-            isSubpath = false;
-            break;
-        }
-        else if (inferred.path[i].optional !== source.path[i].optional) {
-            return CompareDependencyResult.PathDifference;
-        }
-    }
-    if (isSubpath &&
-        (source.path.length === inferred.path.length ||
-            (inferred.path.length >= source.path.length &&
-                !inferred.path.some(token => token.property === 'current')))) {
-        return CompareDependencyResult.Ok;
-    }
-    else {
-        if (isSubpath) {
-            if (source.path.some(token => token.property === 'current') ||
-                inferred.path.some(token => token.property === 'current')) {
-                return CompareDependencyResult.RefAccessDifference;
-            }
-            else {
-                return CompareDependencyResult.Subpath;
-            }
-        }
-        else {
-            return CompareDependencyResult.PathDifference;
-        }
-    }
-}
-function validateInferredDep(dep, temporaries, declsWithinMemoBlock, validDepsInMemoBlock, errorState, memoLocation) {
-    var _a;
-    let normalizedDep;
-    const maybeNormalizedRoot = temporaries.get(dep.identifier.id);
-    if (maybeNormalizedRoot != null) {
-        normalizedDep = {
-            root: maybeNormalizedRoot.root,
-            path: [...maybeNormalizedRoot.path, ...dep.path],
-            loc: maybeNormalizedRoot.loc,
-        };
-    }
-    else {
-        CompilerError.invariant(((_a = dep.identifier.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named', {
-            reason: 'ValidatePreservedManualMemoization: expected scope dependency to be named',
-            loc: GeneratedSource,
-        });
-        normalizedDep = {
-            root: {
-                kind: 'NamedLocal',
-                value: {
-                    kind: 'Identifier',
-                    identifier: dep.identifier,
-                    loc: GeneratedSource,
-                    effect: Effect.Read,
-                    reactive: false,
-                },
-                constant: false,
-            },
-            path: [...dep.path],
-            loc: GeneratedSource,
-        };
-    }
-    for (const decl of declsWithinMemoBlock) {
-        if (normalizedDep.root.kind === 'NamedLocal' &&
-            decl === normalizedDep.root.value.identifier.declarationId) {
-            return;
-        }
-    }
-    let errorDiagnostic = null;
-    for (const originalDep of validDepsInMemoBlock) {
-        const compareResult = compareDeps(normalizedDep, originalDep);
-        if (compareResult === CompareDependencyResult.Ok) {
-            return;
-        }
-        else {
-            errorDiagnostic = merge(errorDiagnostic !== null && errorDiagnostic !== void 0 ? errorDiagnostic : compareResult, compareResult);
-        }
-    }
-    errorState.pushDiagnostic(CompilerDiagnostic.create({
-        category: ErrorCategory.PreserveManualMemo,
-        reason: 'Existing memoization could not be preserved',
-        description: [
-            'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. ',
-            'The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. ',
-            (dep.identifier.name != null && dep.identifier.name.kind === 'named')
-                ? `The inferred dependency was \`${prettyPrintScopeDependency(dep)}\`, but the source dependencies were [${validDepsInMemoBlock
-                    .map(dep => printManualMemoDependency$1(dep, true))
-                    .join(', ')}]. ${errorDiagnostic
-                    ? getCompareDependencyResultDescription(errorDiagnostic)
-                    : 'Inferred dependency not present in source'}`
-                : '',
-        ]
-            .join('')
-            .trim(),
-        suggestions: null,
-    }).withDetails({
-        kind: 'error',
-        loc: memoLocation,
-        message: 'Could not preserve existing manual memoization',
-    }));
-}
-class Visitor extends ReactiveFunctionVisitor {
-    constructor() {
-        super(...arguments);
-        this.scopes = new Set();
-        this.prunedScopes = new Set();
-        this.temporaries = new Map();
-    }
-    recordDepsInValue(value, state) {
-        var _a, _b;
-        switch (value.kind) {
-            case 'SequenceExpression': {
-                for (const instr of value.instructions) {
-                    this.visitInstruction(instr, state);
-                }
-                this.recordDepsInValue(value.value, state);
-                break;
-            }
-            case 'OptionalExpression': {
-                this.recordDepsInValue(value.value, state);
-                break;
-            }
-            case 'ConditionalExpression': {
-                this.recordDepsInValue(value.test, state);
-                this.recordDepsInValue(value.consequent, state);
-                this.recordDepsInValue(value.alternate, state);
-                break;
-            }
-            case 'LogicalExpression': {
-                this.recordDepsInValue(value.left, state);
-                this.recordDepsInValue(value.right, state);
-                break;
-            }
-            default: {
-                collectMaybeMemoDependencies(value, this.temporaries, false);
-                if (value.kind === 'StoreLocal' ||
-                    value.kind === 'StoreContext' ||
-                    value.kind === 'Destructure') {
-                    for (const storeTarget of eachInstructionValueLValue(value)) {
-                        (_a = state.manualMemoState) === null || _a === void 0 ? void 0 : _a.decls.add(storeTarget.identifier.declarationId);
-                        if (((_b = storeTarget.identifier.name) === null || _b === void 0 ? void 0 : _b.kind) === 'named') {
-                            this.temporaries.set(storeTarget.identifier.id, {
-                                root: {
-                                    kind: 'NamedLocal',
-                                    value: storeTarget,
-                                    constant: false,
-                                },
-                                path: [],
-                                loc: storeTarget.loc,
-                            });
-                        }
-                    }
-                }
-                break;
-            }
-        }
-    }
-    recordTemporaries(instr, state) {
-        var _a;
-        const temporaries = this.temporaries;
-        const { lvalue, value } = instr;
-        const lvalId = lvalue === null || lvalue === void 0 ? void 0 : lvalue.identifier.id;
-        if (lvalId != null && temporaries.has(lvalId)) {
-            return;
-        }
-        const isNamedLocal = ((_a = lvalue === null || lvalue === void 0 ? void 0 : lvalue.identifier.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named';
-        if (lvalue !== null && isNamedLocal && state.manualMemoState != null) {
-            state.manualMemoState.decls.add(lvalue.identifier.declarationId);
-        }
-        this.recordDepsInValue(value, state);
-        if (lvalue != null) {
-            temporaries.set(lvalue.identifier.id, {
-                root: {
-                    kind: 'NamedLocal',
-                    value: Object.assign({}, lvalue),
-                    constant: false,
-                },
-                path: [],
-                loc: lvalue.loc,
-            });
-        }
-    }
-    visitScope(scopeBlock, state) {
-        this.traverseScope(scopeBlock, state);
-        if (state.manualMemoState != null &&
-            state.manualMemoState.depsFromSource != null) {
-            for (const dep of scopeBlock.scope.dependencies) {
-                validateInferredDep(dep, this.temporaries, state.manualMemoState.decls, state.manualMemoState.depsFromSource, state.errors, state.manualMemoState.loc);
-            }
-        }
-        this.scopes.add(scopeBlock.scope.id);
-        for (const id of scopeBlock.scope.merged) {
-            this.scopes.add(id);
-        }
-    }
-    visitPrunedScope(scopeBlock, state) {
-        this.traversePrunedScope(scopeBlock, state);
-        this.prunedScopes.add(scopeBlock.scope.id);
-    }
-    visitInstruction(instruction, state) {
-        var _a, _b, _c;
-        this.recordTemporaries(instruction, state);
-        const value = instruction.value;
-        if (value.kind === 'StoreLocal' &&
-            value.lvalue.kind === 'Reassign' &&
-            state.manualMemoState != null) {
-            const ids = getOrInsertDefault(state.manualMemoState.reassignments, value.lvalue.place.identifier.declarationId, new Set());
-            ids.add(value.value.identifier);
-        }
-        if (value.kind === 'LoadLocal' &&
-            value.place.identifier.scope != null &&
-            instruction.lvalue != null &&
-            instruction.lvalue.identifier.scope == null &&
-            state.manualMemoState != null) {
-            const ids = getOrInsertDefault(state.manualMemoState.reassignments, instruction.lvalue.identifier.declarationId, new Set());
-            ids.add(value.place.identifier);
-        }
-        if (value.kind === 'StartMemoize') {
-            let depsFromSource = null;
-            if (value.deps != null) {
-                depsFromSource = value.deps;
-            }
-            CompilerError.invariant(state.manualMemoState == null, {
-                reason: 'Unexpected nested StartMemoize instructions',
-                description: `Bad manual memoization ids: ${(_a = state.manualMemoState) === null || _a === void 0 ? void 0 : _a.manualMemoId}, ${value.manualMemoId}`,
-                loc: value.loc,
-            });
-            state.manualMemoState = {
-                loc: instruction.loc,
-                decls: new Set(),
-                depsFromSource,
-                manualMemoId: value.manualMemoId,
-                reassignments: new Map(),
-            };
-            for (const { identifier, loc } of eachInstructionValueOperand(value)) {
-                if (identifier.scope != null &&
-                    !this.scopes.has(identifier.scope.id) &&
-                    !this.prunedScopes.has(identifier.scope.id)) {
-                    state.errors.pushDiagnostic(CompilerDiagnostic.create({
-                        category: ErrorCategory.PreserveManualMemo,
-                        reason: 'Existing memoization could not be preserved',
-                        description: [
-                            'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. ',
-                            'This dependency may be mutated later, which could cause the value to change unexpectedly',
-                        ].join(''),
-                    }).withDetails({
-                        kind: 'error',
-                        loc,
-                        message: 'This dependency may be modified later',
-                    }));
-                }
-            }
-        }
-        if (value.kind === 'FinishMemoize') {
-            CompilerError.invariant(state.manualMemoState != null &&
-                state.manualMemoState.manualMemoId === value.manualMemoId, {
-                reason: 'Unexpected mismatch between StartMemoize and FinishMemoize',
-                description: `Encountered StartMemoize id=${(_b = state.manualMemoState) === null || _b === void 0 ? void 0 : _b.manualMemoId} followed by FinishMemoize id=${value.manualMemoId}`,
-                loc: value.loc,
-            });
-            const reassignments = state.manualMemoState.reassignments;
-            state.manualMemoState = null;
-            if (!value.pruned) {
-                for (const { identifier, loc } of eachInstructionValueOperand(value)) {
-                    let decls;
-                    if (identifier.scope == null) {
-                        decls = (_c = reassignments.get(identifier.declarationId)) !== null && _c !== void 0 ? _c : [identifier];
-                    }
-                    else {
-                        decls = [identifier];
-                    }
-                    for (const identifier of decls) {
-                        if (isUnmemoized(identifier, this.scopes)) {
-                            state.errors.pushDiagnostic(CompilerDiagnostic.create({
-                                category: ErrorCategory.PreserveManualMemo,
-                                reason: 'Existing memoization could not be preserved',
-                                description: [
-                                    'React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output',
-                                    '',
-                                ]
-                                    .join('')
-                                    .trim(),
-                            }).withDetails({
-                                kind: 'error',
-                                loc,
-                                message: 'Could not preserve existing memoization',
-                            }));
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-function isUnmemoized(operand, scopes) {
-    return operand.scope != null && !scopes.has(operand.scope.id);
-}
-
-const IMPORTANT_INSTRUMENTED_TYPES = new Set([
-    'ArrowFunctionExpression',
-    'AssignmentPattern',
-    'ObjectMethod',
-    'ExpressionStatement',
-    'BreakStatement',
-    'ContinueStatement',
-    'ReturnStatement',
-    'ThrowStatement',
-    'TryStatement',
-    'VariableDeclarator',
-    'IfStatement',
-    'ForStatement',
-    'ForInStatement',
-    'ForOfStatement',
-    'WhileStatement',
-    'DoWhileStatement',
-    'SwitchStatement',
-    'SwitchCase',
-    'WithStatement',
-    'FunctionDeclaration',
-    'FunctionExpression',
-    'LabeledStatement',
-    'ConditionalExpression',
-    'LogicalExpression',
-    'VariableDeclaration',
-    'Identifier',
-]);
-function isManualMemoization(node) {
-    if (libExports$1.isCallExpression(node)) {
-        const callee = node.callee;
-        if (libExports$1.isIdentifier(callee)) {
-            return callee.name === 'useMemo' || callee.name === 'useCallback';
-        }
-        if (libExports$1.isMemberExpression(callee) &&
-            libExports$1.isIdentifier(callee.property) &&
-            libExports$1.isIdentifier(callee.object)) {
-            return (callee.object.name === 'React' &&
-                (callee.property.name === 'useMemo' ||
-                    callee.property.name === 'useCallback'));
-        }
-    }
-    return false;
-}
-function locationKey(loc) {
-    return `${loc.start.line}:${loc.start.column}-${loc.end.line}:${loc.end.column}`;
-}
-function validateSourceLocations(func, generatedAst) {
-    const errors = new CompilerError();
-    const importantOriginalLocations = new Map();
-    func.traverse({
-        enter(path) {
-            const node = path.node;
-            if (!IMPORTANT_INSTRUMENTED_TYPES.has(node.type)) {
-                return;
-            }
-            if (isManualMemoization(node)) {
-                return;
-            }
-            if (libExports$1.isReturnStatement(node) && node.argument != null) {
-                const parentBody = path.parentPath;
-                const parentFunc = parentBody === null || parentBody === void 0 ? void 0 : parentBody.parentPath;
-                if ((parentBody === null || parentBody === void 0 ? void 0 : parentBody.isBlockStatement()) &&
-                    (parentFunc === null || parentFunc === void 0 ? void 0 : parentFunc.isArrowFunctionExpression()) &&
-                    parentBody.node.body.length === 1 &&
-                    parentBody.node.directives.length === 0) {
-                    return;
-                }
-            }
-            if (node.loc) {
-                const key = locationKey(node.loc);
-                const existing = importantOriginalLocations.get(key);
-                if (existing) {
-                    existing.nodeTypes.add(node.type);
-                }
-                else {
-                    importantOriginalLocations.set(key, {
-                        loc: node.loc,
-                        nodeTypes: new Set([node.type]),
-                    });
-                }
-            }
-        },
-    });
-    const generatedLocations = new Map();
-    function collectGeneratedLocations(node) {
-        if (node.loc) {
-            const key = locationKey(node.loc);
-            const nodeTypes = generatedLocations.get(key);
-            if (nodeTypes) {
-                nodeTypes.add(node.type);
-            }
-            else {
-                generatedLocations.set(key, new Set([node.type]));
-            }
-        }
-        const keys = libExports$1.VISITOR_KEYS[node.type];
-        if (!keys) {
-            return;
-        }
-        for (const key of keys) {
-            const value = node[key];
-            if (Array.isArray(value)) {
-                for (const item of value) {
-                    if (libExports$1.isNode(item)) {
-                        collectGeneratedLocations(item);
-                    }
-                }
-            }
-            else if (libExports$1.isNode(value)) {
-                collectGeneratedLocations(value);
-            }
-        }
-    }
-    collectGeneratedLocations(generatedAst.body);
-    for (const outlined of generatedAst.outlined) {
-        collectGeneratedLocations(outlined.fn.body);
-    }
-    const strictNodeTypes = new Set([
-        'VariableDeclaration',
-        'VariableDeclarator',
-        'Identifier',
-    ]);
-    const reportMissingLocation = (loc, nodeType) => {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Todo,
-            reason: 'Important source location missing in generated code',
-            description: `Source location for ${nodeType} is missing in the generated output. This can cause coverage instrumentation ` +
-                `to fail to track this code properly, resulting in inaccurate coverage reports.`,
-        }).withDetails({
-            kind: 'error',
-            loc,
-            message: null,
-        }));
-    };
-    const reportWrongNodeType = (loc, expectedType, actualTypes) => {
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Todo,
-            reason: 'Important source location has wrong node type in generated code',
-            description: `Source location for ${expectedType} exists in the generated output but with wrong node type(s): ${Array.from(actualTypes).join(', ')}. ` +
-                `This can cause coverage instrumentation to fail to track this code properly, resulting in inaccurate coverage reports.`,
-        }).withDetails({
-            kind: 'error',
-            loc,
-            message: null,
-        }));
-    };
-    for (const [key, { loc, nodeTypes }] of importantOriginalLocations) {
-        const generatedNodeTypes = generatedLocations.get(key);
-        if (!generatedNodeTypes) {
-            reportMissingLocation(loc, Array.from(nodeTypes).join(', '));
-        }
-        else {
-            for (const nodeType of nodeTypes) {
-                if (strictNodeTypes.has(nodeType) &&
-                    !generatedNodeTypes.has(nodeType)) {
-                    const hasValidNodeType = Array.from(generatedNodeTypes).some(genType => nodeTypes.has(genType));
-                    if (hasValidNodeType) {
-                        reportMissingLocation(loc, nodeType);
-                    }
-                    else {
-                        reportWrongNodeType(loc, nodeType, generatedNodeTypes);
-                    }
-                }
-            }
-        }
-    }
-    return errors.asResult();
-}
-
-function validateUseMemo(fn) {
-    const errors = new CompilerError();
-    const voidMemoErrors = new CompilerError();
-    const useMemos = new Set();
-    const react = new Set();
-    const functions = new Map();
-    const unusedUseMemos = new Map();
-    for (const [, block] of fn.body.blocks) {
-        for (const { lvalue, value } of block.instructions) {
-            if (unusedUseMemos.size !== 0) {
-                for (const operand of eachInstructionValueOperand(value)) {
-                    unusedUseMemos.delete(operand.identifier.id);
-                }
-            }
-            switch (value.kind) {
-                case 'LoadGlobal': {
-                    if (value.binding.name === 'useMemo') {
-                        useMemos.add(lvalue.identifier.id);
-                    }
-                    else if (value.binding.name === 'React') {
-                        react.add(lvalue.identifier.id);
-                    }
-                    break;
-                }
-                case 'PropertyLoad': {
-                    if (react.has(value.object.identifier.id)) {
-                        if (value.property === 'useMemo') {
-                            useMemos.add(lvalue.identifier.id);
-                        }
-                    }
-                    break;
-                }
-                case 'FunctionExpression': {
-                    functions.set(lvalue.identifier.id, value);
-                    break;
-                }
-                case 'MethodCall':
-                case 'CallExpression': {
-                    const callee = value.kind === 'CallExpression' ? value.callee : value.property;
-                    const isUseMemo = useMemos.has(callee.identifier.id);
-                    if (!isUseMemo || value.args.length === 0) {
-                        continue;
-                    }
-                    const [arg] = value.args;
-                    if (arg.kind !== 'Identifier') {
-                        continue;
-                    }
-                    const body = functions.get(arg.identifier.id);
-                    if (body === undefined) {
-                        continue;
-                    }
-                    if (body.loweredFunc.func.params.length > 0) {
-                        const firstParam = body.loweredFunc.func.params[0];
-                        const loc = firstParam.kind === 'Identifier'
-                            ? firstParam.loc
-                            : firstParam.place.loc;
-                        errors.pushDiagnostic(CompilerDiagnostic.create({
-                            category: ErrorCategory.UseMemo,
-                            reason: 'useMemo() callbacks may not accept parameters',
-                            description: 'useMemo() callbacks are called by React to cache calculations across re-renders. They should not take parameters. Instead, directly reference the props, state, or local variables needed for the computation',
-                            suggestions: null,
-                        }).withDetails({
-                            kind: 'error',
-                            loc,
-                            message: 'Callbacks with parameters are not supported',
-                        }));
-                    }
-                    if (body.loweredFunc.func.async || body.loweredFunc.func.generator) {
-                        errors.pushDiagnostic(CompilerDiagnostic.create({
-                            category: ErrorCategory.UseMemo,
-                            reason: 'useMemo() callbacks may not be async or generator functions',
-                            description: 'useMemo() callbacks are called once and must synchronously return a value',
-                            suggestions: null,
-                        }).withDetails({
-                            kind: 'error',
-                            loc: body.loc,
-                            message: 'Async and generator functions are not supported',
-                        }));
-                    }
-                    validateNoContextVariableAssignment(body.loweredFunc.func, errors);
-                    if (fn.env.config.validateNoVoidUseMemo) {
-                        if (!hasNonVoidReturn(body.loweredFunc.func)) {
-                            voidMemoErrors.pushDiagnostic(CompilerDiagnostic.create({
-                                category: ErrorCategory.VoidUseMemo,
-                                reason: 'useMemo() callbacks must return a value',
-                                description: `This useMemo() callback doesn't return a value. useMemo() is for computing and caching values, not for arbitrary side effects`,
-                                suggestions: null,
-                            }).withDetails({
-                                kind: 'error',
-                                loc: body.loc,
-                                message: 'useMemo() callbacks must return a value',
-                            }));
-                        }
-                        else {
-                            unusedUseMemos.set(lvalue.identifier.id, callee.loc);
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        if (unusedUseMemos.size !== 0) {
-            for (const operand of eachTerminalOperand(block.terminal)) {
-                unusedUseMemos.delete(operand.identifier.id);
-            }
-        }
-    }
-    if (unusedUseMemos.size !== 0) {
-        for (const loc of unusedUseMemos.values()) {
-            voidMemoErrors.pushDiagnostic(CompilerDiagnostic.create({
-                category: ErrorCategory.VoidUseMemo,
-                reason: 'useMemo() result is unused',
-                description: `This useMemo() value is unused. useMemo() is for computing and caching values, not for arbitrary side effects`,
-                suggestions: null,
-            }).withDetails({
-                kind: 'error',
-                loc,
-                message: 'useMemo() result is unused',
-            }));
-        }
-    }
-    fn.env.logErrors(voidMemoErrors.asResult());
-    return errors.asResult();
-}
-function validateNoContextVariableAssignment(fn, errors) {
-    const context = new Set(fn.context.map(place => place.identifier.id));
-    for (const block of fn.body.blocks.values()) {
-        for (const instr of block.instructions) {
-            const value = instr.value;
-            switch (value.kind) {
-                case 'StoreContext': {
-                    if (context.has(value.lvalue.place.identifier.id)) {
-                        errors.pushDiagnostic(CompilerDiagnostic.create({
-                            category: ErrorCategory.UseMemo,
-                            reason: 'useMemo() callbacks may not reassign variables declared outside of the callback',
-                            description: 'useMemo() callbacks must be pure functions and cannot reassign variables defined outside of the callback function',
-                            suggestions: null,
-                        }).withDetails({
-                            kind: 'error',
-                            loc: value.lvalue.place.loc,
-                            message: 'Cannot reassign variable',
-                        }));
-                    }
-                    break;
-                }
-            }
-        }
-    }
-}
-function hasNonVoidReturn(func) {
-    for (const [, block] of func.body.blocks) {
-        if (block.terminal.kind === 'return') {
-            if (block.terminal.returnVariant === 'Explicit' ||
-                block.terminal.returnVariant === 'Implicit') {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-function validateLocalsNotReassignedAfterRender(fn) {
-    const contextVariables = new Set();
-    const reassignment = getContextReassignment(fn, contextVariables, false, false);
-    if (reassignment !== null) {
-        const errors = new CompilerError();
-        const variable = reassignment.identifier.name != null &&
-            reassignment.identifier.name.kind === 'named'
-            ? `\`${reassignment.identifier.name.value}\``
-            : 'variable';
-        errors.pushDiagnostic(CompilerDiagnostic.create({
-            category: ErrorCategory.Immutability,
-            reason: 'Cannot reassign variable after render completes',
-            description: `Reassigning ${variable} after render has completed can cause inconsistent behavior on subsequent renders. Consider using state instead`,
-        }).withDetails({
-            kind: 'error',
-            loc: reassignment.loc,
-            message: `Cannot reassign ${variable} after render completes`,
-        }));
-        throw errors;
-    }
-}
-function getContextReassignment(fn, contextVariables, isFunctionExpression, isAsync) {
-    const reassigningFunctions = new Map();
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            const { lvalue, value } = instr;
-            switch (value.kind) {
-                case 'FunctionExpression':
-                case 'ObjectMethod': {
-                    let reassignment = getContextReassignment(value.loweredFunc.func, contextVariables, true, isAsync || value.loweredFunc.func.async);
-                    if (reassignment === null) {
-                        for (const operand of eachInstructionValueOperand(value)) {
-                            const reassignmentFromOperand = reassigningFunctions.get(operand.identifier.id);
-                            if (reassignmentFromOperand !== undefined) {
-                                reassignment = reassignmentFromOperand;
-                                break;
-                            }
-                        }
-                    }
-                    if (reassignment !== null) {
-                        if (isAsync || value.loweredFunc.func.async) {
-                            const errors = new CompilerError();
-                            const variable = reassignment.identifier.name !== null &&
-                                reassignment.identifier.name.kind === 'named'
-                                ? `\`${reassignment.identifier.name.value}\``
-                                : 'variable';
-                            errors.pushDiagnostic(CompilerDiagnostic.create({
-                                category: ErrorCategory.Immutability,
-                                reason: 'Cannot reassign variable in async function',
-                                description: 'Reassigning a variable in an async function can cause inconsistent behavior on subsequent renders. Consider using state instead',
-                            }).withDetails({
-                                kind: 'error',
-                                loc: reassignment.loc,
-                                message: `Cannot reassign ${variable}`,
-                            }));
-                            throw errors;
-                        }
-                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
-                    }
-                    break;
-                }
-                case 'StoreLocal': {
-                    const reassignment = reassigningFunctions.get(value.value.identifier.id);
-                    if (reassignment !== undefined) {
-                        reassigningFunctions.set(value.lvalue.place.identifier.id, reassignment);
-                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
-                    }
-                    break;
-                }
-                case 'LoadLocal': {
-                    const reassignment = reassigningFunctions.get(value.place.identifier.id);
-                    if (reassignment !== undefined) {
-                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
-                    }
-                    break;
-                }
-                case 'DeclareContext': {
-                    if (!isFunctionExpression) {
-                        contextVariables.add(value.lvalue.place.identifier.id);
-                    }
-                    break;
-                }
-                case 'StoreContext': {
-                    if (isFunctionExpression) {
-                        if (contextVariables.has(value.lvalue.place.identifier.id)) {
-                            return value.lvalue.place;
-                        }
-                    }
-                    else {
-                        contextVariables.add(value.lvalue.place.identifier.id);
-                    }
-                    const reassignment = reassigningFunctions.get(value.value.identifier.id);
-                    if (reassignment !== undefined) {
-                        reassigningFunctions.set(value.lvalue.place.identifier.id, reassignment);
-                        reassigningFunctions.set(lvalue.identifier.id, reassignment);
-                    }
-                    break;
-                }
-                default: {
-                    let operands = eachInstructionValueOperand(value);
-                    if (value.kind === 'CallExpression') {
-                        const signature = getFunctionCallSignature(fn.env, value.callee.identifier.type);
-                        if (signature === null || signature === void 0 ? void 0 : signature.noAlias) {
-                            operands = [value.callee];
-                        }
-                    }
-                    else if (value.kind === 'MethodCall') {
-                        const signature = getFunctionCallSignature(fn.env, value.property.identifier.type);
-                        if (signature === null || signature === void 0 ? void 0 : signature.noAlias) {
-                            operands = [value.receiver, value.property];
-                        }
-                    }
-                    else if (value.kind === 'TaggedTemplateExpression') {
-                        const signature = getFunctionCallSignature(fn.env, value.tag.identifier.type);
-                        if (signature === null || signature === void 0 ? void 0 : signature.noAlias) {
-                            operands = [value.tag];
-                        }
-                    }
-                    for (const operand of operands) {
-                        CompilerError.invariant(operand.effect !== Effect.Unknown, {
-                            reason: `Expected effects to be inferred prior to ValidateLocalsNotReassignedAfterRender`,
-                            loc: operand.loc,
-                        });
-                        const reassignment = reassigningFunctions.get(operand.identifier.id);
-                        if (reassignment !== undefined) {
-                            if (operand.effect === Effect.Freeze) {
-                                return reassignment;
-                            }
-                            else {
-                                for (const lval of eachInstructionLValue(instr)) {
-                                    reassigningFunctions.set(lval.identifier.id, reassignment);
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        for (const operand of eachTerminalOperand(block.terminal)) {
-            const reassignment = reassigningFunctions.get(operand.identifier.id);
-            if (reassignment !== undefined) {
-                return reassignment;
-            }
-        }
-    }
-    return null;
-}
-
-function outlineFunctions(fn, fbtOperands) {
-    var _a;
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            const { value, lvalue } = instr;
-            if (value.kind === 'FunctionExpression' ||
-                value.kind === 'ObjectMethod') {
-                outlineFunctions(value.loweredFunc.func, fbtOperands);
-            }
-            if (value.kind === 'FunctionExpression' &&
-                value.loweredFunc.func.context.length === 0 &&
-                value.loweredFunc.func.id === null &&
-                !fbtOperands.has(lvalue.identifier.id)) {
-                const loweredFunc = value.loweredFunc.func;
-                const id = fn.env.generateGloballyUniqueIdentifierName((_a = loweredFunc.id) !== null && _a !== void 0 ? _a : loweredFunc.nameHint);
-                loweredFunc.id = id.value;
-                fn.env.outlineFunction(loweredFunc, null);
-                instr.value = {
-                    kind: 'LoadGlobal',
-                    binding: {
-                        kind: 'Global',
-                        name: id.value,
-                    },
-                    loc: value.loc,
-                };
-            }
-        }
-    }
-}
-
-function lowerContextAccess(fn, loweredContextCalleeConfig) {
-    const contextAccess = new Map();
-    const contextKeys = new Map();
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            const { value, lvalue } = instr;
-            if (value.kind === 'CallExpression' &&
-                isUseContextHookType(value.callee.identifier)) {
-                contextAccess.set(lvalue.identifier.id, value);
-                continue;
-            }
-            if (value.kind !== 'Destructure') {
-                continue;
-            }
-            const destructureId = value.value.identifier.id;
-            if (!contextAccess.has(destructureId)) {
-                continue;
-            }
-            const keys = getContextKeys(value);
-            if (keys === null) {
-                return;
-            }
-            if (contextKeys.has(destructureId)) {
-                return;
-            }
-            else {
-                contextKeys.set(destructureId, keys);
-            }
-        }
-    }
-    let importLoweredContextCallee = null;
-    if (contextAccess.size > 0 && contextKeys.size > 0) {
-        for (const [, block] of fn.body.blocks) {
-            let nextInstructions = null;
-            for (let i = 0; i < block.instructions.length; i++) {
-                const instr = block.instructions[i];
-                const { lvalue, value } = instr;
-                if (value.kind === 'CallExpression' &&
-                    isUseContextHookType(value.callee.identifier) &&
-                    contextKeys.has(lvalue.identifier.id)) {
-                    importLoweredContextCallee !== null && importLoweredContextCallee !== void 0 ? importLoweredContextCallee : (importLoweredContextCallee = fn.env.programContext.addImportSpecifier(loweredContextCalleeConfig));
-                    const loweredContextCalleeInstr = emitLoadLoweredContextCallee(fn.env, importLoweredContextCallee);
-                    if (nextInstructions === null) {
-                        nextInstructions = block.instructions.slice(0, i);
-                    }
-                    nextInstructions.push(loweredContextCalleeInstr);
-                    const keys = contextKeys.get(lvalue.identifier.id);
-                    const selectorFnInstr = emitSelectorFn(fn.env, keys);
-                    nextInstructions.push(selectorFnInstr);
-                    const lowerContextCallId = loweredContextCalleeInstr.lvalue;
-                    value.callee = lowerContextCallId;
-                    const selectorFn = selectorFnInstr.lvalue;
-                    value.args.push(selectorFn);
-                }
-                if (nextInstructions) {
-                    nextInstructions.push(instr);
-                }
-            }
-            if (nextInstructions) {
-                block.instructions = nextInstructions;
-            }
-        }
-        markInstructionIds(fn.body);
-        inferTypes(fn);
-    }
-}
-function emitLoadLoweredContextCallee(env, importedLowerContextCallee) {
-    const loadGlobal = {
-        kind: 'LoadGlobal',
-        binding: Object.assign({}, importedLowerContextCallee),
-        loc: GeneratedSource,
-    };
-    return {
-        id: makeInstructionId(0),
-        loc: GeneratedSource,
-        lvalue: createTemporaryPlace(env, GeneratedSource),
-        effects: null,
-        value: loadGlobal,
-    };
-}
-function getContextKeys(value) {
-    const keys = [];
-    const pattern = value.lvalue.pattern;
-    switch (pattern.kind) {
-        case 'ArrayPattern': {
-            return null;
-        }
-        case 'ObjectPattern': {
-            for (const place of pattern.properties) {
-                if (place.kind !== 'ObjectProperty' ||
-                    place.type !== 'property' ||
-                    place.key.kind !== 'identifier' ||
-                    place.place.identifier.name === null ||
-                    place.place.identifier.name.kind !== 'named') {
-                    return null;
-                }
-                keys.push(place.key.name);
-            }
-            return keys;
-        }
-    }
-}
-function emitPropertyLoad(env, obj, property) {
-    const loadObj = {
-        kind: 'LoadLocal',
-        place: obj,
-        loc: GeneratedSource,
-    };
-    const object = createTemporaryPlace(env, GeneratedSource);
-    const loadLocalInstr = {
-        lvalue: object,
-        value: loadObj,
-        id: makeInstructionId(0),
-        effects: null,
-        loc: GeneratedSource,
-    };
-    const loadProp = {
-        kind: 'PropertyLoad',
-        object,
-        property: makePropertyLiteral(property),
-        loc: GeneratedSource,
-    };
-    const element = createTemporaryPlace(env, GeneratedSource);
-    const loadPropInstr = {
-        lvalue: element,
-        value: loadProp,
-        id: makeInstructionId(0),
-        effects: null,
-        loc: GeneratedSource,
-    };
-    return {
-        instructions: [loadLocalInstr, loadPropInstr],
-        element: element,
-    };
-}
-function emitSelectorFn(env, keys) {
-    const obj = createTemporaryPlace(env, GeneratedSource);
-    promoteTemporary(obj.identifier);
-    const instr = [];
-    const elements = [];
-    for (const key of keys) {
-        const { instructions, element: prop } = emitPropertyLoad(env, obj, key);
-        instr.push(...instructions);
-        elements.push(prop);
-    }
-    const arrayInstr = emitArrayInstr(elements, env);
-    instr.push(arrayInstr);
-    const block = {
-        kind: 'block',
-        id: makeBlockId(0),
-        instructions: instr,
-        terminal: {
-            id: makeInstructionId(0),
-            kind: 'return',
-            returnVariant: 'Explicit',
-            loc: GeneratedSource,
-            value: arrayInstr.lvalue,
-            effects: null,
-        },
-        preds: new Set(),
-        phis: new Set(),
-    };
-    const fn = {
-        loc: GeneratedSource,
-        id: null,
-        nameHint: null,
-        fnType: 'Other',
-        env,
-        params: [obj],
-        returnTypeAnnotation: null,
-        returns: createTemporaryPlace(env, GeneratedSource),
-        context: [],
-        body: {
-            entry: block.id,
-            blocks: new Map([[block.id, block]]),
-        },
-        generator: false,
-        async: false,
-        directives: [],
-        aliasingEffects: [],
-    };
-    reversePostorderBlocks(fn.body);
-    markInstructionIds(fn.body);
-    enterSSA(fn);
-    inferTypes(fn);
-    const fnInstr = {
-        id: makeInstructionId(0),
-        value: {
-            kind: 'FunctionExpression',
-            name: null,
-            nameHint: null,
-            loweredFunc: {
-                func: fn,
-            },
-            type: 'ArrowFunctionExpression',
-            loc: GeneratedSource,
-        },
-        lvalue: createTemporaryPlace(env, GeneratedSource),
-        effects: null,
-        loc: GeneratedSource,
-    };
-    return fnInstr;
-}
-function emitArrayInstr(elements, env) {
-    const array = {
-        kind: 'ArrayExpression',
-        elements,
-        loc: GeneratedSource,
-    };
-    const arrayLvalue = createTemporaryPlace(env, GeneratedSource);
-    const arrayInstr = {
-        id: makeInstructionId(0),
-        value: array,
-        lvalue: arrayLvalue,
-        effects: null,
-        loc: GeneratedSource,
-    };
-    return arrayInstr;
-}
-
-function validateNoSetStateInEffects(fn, env) {
-    const setStateFunctions = new Map();
-    const errors = new CompilerError();
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            switch (instr.value.kind) {
-                case 'LoadLocal': {
-                    if (setStateFunctions.has(instr.value.place.identifier.id)) {
-                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.place);
-                    }
-                    break;
-                }
-                case 'StoreLocal': {
-                    if (setStateFunctions.has(instr.value.value.identifier.id)) {
-                        setStateFunctions.set(instr.value.lvalue.place.identifier.id, instr.value.value);
-                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.value);
-                    }
-                    break;
-                }
-                case 'FunctionExpression': {
-                    if ([...eachInstructionValueOperand(instr.value)].some(operand => isSetStateType(operand.identifier) ||
-                        setStateFunctions.has(operand.identifier.id))) {
-                        const callee = getSetStateCall(instr.value.loweredFunc.func, setStateFunctions, env);
-                        if (callee !== null) {
-                            setStateFunctions.set(instr.lvalue.identifier.id, callee);
-                        }
-                    }
-                    break;
-                }
-                case 'MethodCall':
-                case 'CallExpression': {
-                    const callee = instr.value.kind === 'MethodCall'
-                        ? instr.value.property
-                        : instr.value.callee;
-                    if (isUseEffectEventType(callee.identifier)) {
-                        const arg = instr.value.args[0];
-                        if (arg !== undefined && arg.kind === 'Identifier') {
-                            const setState = setStateFunctions.get(arg.identifier.id);
-                            if (setState !== undefined) {
-                                setStateFunctions.set(instr.lvalue.identifier.id, setState);
-                            }
-                        }
-                    }
-                    else if (isUseEffectHookType(callee.identifier) ||
-                        isUseLayoutEffectHookType(callee.identifier) ||
-                        isUseInsertionEffectHookType(callee.identifier)) {
-                        const arg = instr.value.args[0];
-                        if (arg !== undefined && arg.kind === 'Identifier') {
-                            const setState = setStateFunctions.get(arg.identifier.id);
-                            if (setState !== undefined) {
-                                const enableVerbose = env.config.enableVerboseNoSetStateInEffect;
-                                if (enableVerbose) {
-                                    errors.pushDiagnostic(CompilerDiagnostic.create({
-                                        category: ErrorCategory.EffectSetState,
-                                        reason: 'Calling setState synchronously within an effect can trigger cascading renders',
-                                        description: 'Effects are intended to synchronize state between React and external systems. ' +
-                                            'Calling setState synchronously causes cascading renders that hurt performance.\n\n' +
-                                            'This pattern may indicate one of several issues:\n\n' +
-                                            '**1. Non-local derived data**: If the value being set could be computed from props/state ' +
-                                            'but requires data from a parent component, consider restructuring state ownership so the ' +
-                                            'derivation can happen during render in the component that owns the relevant state.\n\n' +
-                                            "**2. Derived event pattern**: If you're detecting when a prop changes (e.g., `isPlaying` " +
-                                            'transitioning from false to true), this often indicates the parent should provide an event ' +
-                                            'callback (like `onPlay`) instead of just the current state. Request access to the original event.\n\n' +
-                                            "**3. Force update / external sync**: If you're forcing a re-render to sync with an external " +
-                                            'data source (mutable values outside React), use `useSyncExternalStore` to properly subscribe ' +
-                                            'to external state changes.\n\n' +
-                                            'See: https://react.dev/learn/you-might-not-need-an-effect',
-                                        suggestions: null,
-                                    }).withDetails({
-                                        kind: 'error',
-                                        loc: setState.loc,
-                                        message: 'Avoid calling setState() directly within an effect',
-                                    }));
-                                }
-                                else {
-                                    errors.pushDiagnostic(CompilerDiagnostic.create({
-                                        category: ErrorCategory.EffectSetState,
-                                        reason: 'Calling setState synchronously within an effect can trigger cascading renders',
-                                        description: 'Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. ' +
-                                            'In general, the body of an effect should do one or both of the following:\n' +
-                                            '* Update external systems with the latest state from React.\n' +
-                                            '* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\n' +
-                                            'Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. ' +
-                                            '(https://react.dev/learn/you-might-not-need-an-effect)',
-                                        suggestions: null,
-                                    }).withDetails({
-                                        kind: 'error',
-                                        loc: setState.loc,
-                                        message: 'Avoid calling setState() directly within an effect',
-                                    }));
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-    }
-    return errors.asResult();
-}
-function getSetStateCall(fn, setStateFunctions, env) {
-    const enableAllowSetStateFromRefsInEffects = env.config.enableAllowSetStateFromRefsInEffects;
-    const refDerivedValues = new Set();
-    const isDerivedFromRef = (place) => {
-        return (refDerivedValues.has(place.identifier.id) ||
-            isUseRefType(place.identifier) ||
-            isRefValueType(place.identifier));
-    };
-    const isRefControlledBlock = enableAllowSetStateFromRefsInEffects
-        ? createControlDominators(fn, place => isDerivedFromRef(place))
-        : () => false;
-    for (const [, block] of fn.body.blocks) {
-        if (enableAllowSetStateFromRefsInEffects) {
-            for (const phi of block.phis) {
-                if (isDerivedFromRef(phi.place)) {
-                    continue;
-                }
-                let isPhiDerivedFromRef = false;
-                for (const [, operand] of phi.operands) {
-                    if (isDerivedFromRef(operand)) {
-                        isPhiDerivedFromRef = true;
-                        break;
-                    }
-                }
-                if (isPhiDerivedFromRef) {
-                    refDerivedValues.add(phi.place.identifier.id);
-                }
-                else {
-                    for (const [pred] of phi.operands) {
-                        if (isRefControlledBlock(pred)) {
-                            refDerivedValues.add(phi.place.identifier.id);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        for (const instr of block.instructions) {
-            if (enableAllowSetStateFromRefsInEffects) {
-                const hasRefOperand = Iterable_some(eachInstructionValueOperand(instr.value), isDerivedFromRef);
-                if (hasRefOperand) {
-                    for (const lvalue of eachInstructionLValue(instr)) {
-                        refDerivedValues.add(lvalue.identifier.id);
-                    }
-                    for (const operand of eachInstructionValueOperand(instr.value)) {
-                        switch (operand.effect) {
-                            case Effect.Capture:
-                            case Effect.Store:
-                            case Effect.ConditionallyMutate:
-                            case Effect.ConditionallyMutateIterator:
-                            case Effect.Mutate: {
-                                if (isMutable(instr, operand)) {
-                                    refDerivedValues.add(operand.identifier.id);
-                                }
-                                break;
-                            }
-                            case Effect.Freeze:
-                            case Effect.Read: {
-                                break;
-                            }
-                            case Effect.Unknown: {
-                                CompilerError.invariant(false, {
-                                    reason: 'Unexpected unknown effect',
-                                    loc: operand.loc,
-                                });
-                            }
-                            default: {
-                                assertExhaustive$1(operand.effect, `Unexpected effect kind \`${operand.effect}\``);
-                            }
-                        }
-                    }
-                }
-                if (instr.value.kind === 'PropertyLoad' &&
-                    instr.value.property === 'current' &&
-                    (isUseRefType(instr.value.object.identifier) ||
-                        isRefValueType(instr.value.object.identifier))) {
-                    refDerivedValues.add(instr.lvalue.identifier.id);
-                }
-            }
-            switch (instr.value.kind) {
-                case 'LoadLocal': {
-                    if (setStateFunctions.has(instr.value.place.identifier.id)) {
-                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.place);
-                    }
-                    break;
-                }
-                case 'StoreLocal': {
-                    if (setStateFunctions.has(instr.value.value.identifier.id)) {
-                        setStateFunctions.set(instr.value.lvalue.place.identifier.id, instr.value.value);
-                        setStateFunctions.set(instr.lvalue.identifier.id, instr.value.value);
-                    }
-                    break;
-                }
-                case 'CallExpression': {
-                    const callee = instr.value.callee;
-                    if (isSetStateType(callee.identifier) ||
-                        setStateFunctions.has(callee.identifier.id)) {
-                        if (enableAllowSetStateFromRefsInEffects) {
-                            const arg = instr.value.args.at(0);
-                            if (arg !== undefined &&
-                                arg.kind === 'Identifier' &&
-                                refDerivedValues.has(arg.identifier.id)) {
-                                return null;
-                            }
-                            else if (isRefControlledBlock(block.id)) {
-                                continue;
-                            }
-                        }
-                        return callee;
-                    }
-                }
-            }
-        }
-    }
-    return null;
-}
-
-function validateNoJSXInTryStatement(fn) {
-    const activeTryBlocks = [];
-    const errors = new CompilerError();
-    for (const [, block] of fn.body.blocks) {
-        retainWhere(activeTryBlocks, id => id !== block.id);
-        if (activeTryBlocks.length !== 0) {
-            for (const instr of block.instructions) {
-                const { value } = instr;
-                switch (value.kind) {
-                    case 'JsxExpression':
-                    case 'JsxFragment': {
-                        errors.pushDiagnostic(CompilerDiagnostic.create({
-                            category: ErrorCategory.ErrorBoundaries,
-                            reason: 'Avoid constructing JSX within try/catch',
-                            description: `React does not immediately render components when JSX is rendered, so any errors from this component will not be caught by the try/catch. To catch errors in rendering a given component, wrap that component in an error boundary. (https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary)`,
-                        }).withDetails({
-                            kind: 'error',
-                            loc: value.loc,
-                            message: 'Avoid constructing JSX within try/catch',
-                        }));
-                        break;
-                    }
-                }
-            }
-        }
-        if (block.terminal.kind === 'try') {
-            activeTryBlocks.push(block.terminal.handler);
-        }
-    }
-    return errors.asResult();
 }
 
 function outlineJSX(fn) {
@@ -50165,480 +48160,6 @@ function optimizePropsMethodCalls(fn) {
     }
 }
 
-var _Context_env, _Context_errors, _Context_callExpressions, _Context_functionExpressions, _Context_loadLocals, _Context_fireCalleesToFireFunctions, _Context_calleesWithInsertedFire, _Context_capturedCalleeIdentifierIds, _Context_inUseEffectLambda, _Context_loadGlobalInstructionIds, _Context_arrayExpressions;
-const CANNOT_COMPILE_FIRE = 'Cannot compile `fire`';
-function transformFire(fn) {
-    const context = new Context(fn.env);
-    replaceFireFunctions(fn, context);
-    if (!context.hasErrors()) {
-        ensureNoMoreFireUses(fn, context);
-    }
-    context.throwIfErrorsFound();
-}
-function replaceFireFunctions(fn, context) {
-    let importedUseFire = null;
-    let hasRewrite = false;
-    for (const [, block] of fn.body.blocks) {
-        const rewriteInstrs = new Map();
-        const deleteInstrs = new Set();
-        for (const instr of block.instructions) {
-            const { value, lvalue } = instr;
-            if (value.kind === 'CallExpression' &&
-                isUseEffectHookType(value.callee.identifier) &&
-                value.args.length > 0 &&
-                value.args[0].kind === 'Identifier') {
-                const lambda = context.getFunctionExpression(value.args[0].identifier.id);
-                if (lambda != null) {
-                    const capturedCallees = visitFunctionExpressionAndPropagateFireDependencies(lambda, context, true);
-                    const newInstrs = [];
-                    for (const [fireCalleePlace, fireCalleeInfo,] of capturedCallees.entries()) {
-                        if (!context.hasCalleeWithInsertedFire(fireCalleePlace)) {
-                            context.addCalleeWithInsertedFire(fireCalleePlace);
-                            importedUseFire !== null && importedUseFire !== void 0 ? importedUseFire : (importedUseFire = fn.env.programContext.addImportSpecifier({
-                                source: fn.env.programContext.reactRuntimeModule,
-                                importSpecifierName: USE_FIRE_FUNCTION_NAME,
-                            }));
-                            const loadUseFireInstr = makeLoadUseFireInstruction(fn.env, importedUseFire);
-                            const loadFireCalleeInstr = makeLoadFireCalleeInstruction(fn.env, fireCalleeInfo.capturedCalleeIdentifier);
-                            const callUseFireInstr = makeCallUseFireInstruction(fn.env, loadUseFireInstr.lvalue, loadFireCalleeInstr.lvalue);
-                            const storeUseFireInstr = makeStoreUseFireInstruction(fn.env, callUseFireInstr.lvalue, fireCalleeInfo.fireFunctionBinding);
-                            newInstrs.push(loadUseFireInstr, loadFireCalleeInstr, callUseFireInstr, storeUseFireInstr);
-                            const loadUseEffectInstrId = context.getLoadGlobalInstrId(value.callee.identifier.id);
-                            if (loadUseEffectInstrId == null) {
-                                context.pushError({
-                                    loc: value.loc,
-                                    description: null,
-                                    category: ErrorCategory.Invariant,
-                                    reason: '[InsertFire] No LoadGlobal found for useEffect call',
-                                    suggestions: null,
-                                });
-                                continue;
-                            }
-                            rewriteInstrs.set(loadUseEffectInstrId, newInstrs);
-                        }
-                    }
-                    ensureNoRemainingCalleeCaptures(lambda.loweredFunc.func, context, capturedCallees);
-                    if (value.args.length > 1 &&
-                        value.args[1] != null &&
-                        value.args[1].kind === 'Identifier') {
-                        const depArray = value.args[1];
-                        const depArrayExpression = context.getArrayExpression(depArray.identifier.id);
-                        if (depArrayExpression != null) {
-                            for (const dependency of depArrayExpression.elements) {
-                                if (dependency.kind === 'Identifier') {
-                                    const loadOfDependency = context.getLoadLocalInstr(dependency.identifier.id);
-                                    if (loadOfDependency != null) {
-                                        const replacedDepArrayItem = capturedCallees.get(loadOfDependency.place.identifier.id);
-                                        if (replacedDepArrayItem != null) {
-                                            loadOfDependency.place =
-                                                replacedDepArrayItem.fireFunctionBinding;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        else {
-                            context.pushError({
-                                loc: value.args[1].loc,
-                                description: 'You must use an array literal for an effect dependency array when that effect uses `fire()`',
-                                category: ErrorCategory.Fire,
-                                reason: CANNOT_COMPILE_FIRE,
-                                suggestions: null,
-                            });
-                        }
-                    }
-                    else if (value.args.length > 1 && value.args[1].kind === 'Spread') {
-                        context.pushError({
-                            loc: value.args[1].place.loc,
-                            description: 'You must use an array literal for an effect dependency array when that effect uses `fire()`',
-                            category: ErrorCategory.Fire,
-                            reason: CANNOT_COMPILE_FIRE,
-                            suggestions: null,
-                        });
-                    }
-                }
-            }
-            else if (value.kind === 'CallExpression' &&
-                value.callee.identifier.type.kind === 'Function' &&
-                value.callee.identifier.type.shapeId === BuiltInFireId &&
-                context.inUseEffectLambda()) {
-                if (value.args.length === 1 && value.args[0].kind === 'Identifier') {
-                    const callExpr = context.getCallExpression(value.args[0].identifier.id);
-                    if (callExpr != null) {
-                        const calleeId = callExpr.callee.identifier.id;
-                        const loadLocal = context.getLoadLocalInstr(calleeId);
-                        if (loadLocal == null) {
-                            context.pushError({
-                                loc: value.loc,
-                                description: null,
-                                category: ErrorCategory.Invariant,
-                                reason: '[InsertFire] No loadLocal found for fire call argument',
-                                suggestions: null,
-                            });
-                            continue;
-                        }
-                        const fireFunctionBinding = context.getOrGenerateFireFunctionBinding(loadLocal.place, value.loc);
-                        loadLocal.place = Object.assign({}, fireFunctionBinding);
-                        deleteInstrs.add(instr.id);
-                    }
-                    else {
-                        context.pushError({
-                            loc: value.loc,
-                            description: '`fire()` can only receive a function call such as `fire(fn(a,b)). Method calls and other expressions are not allowed',
-                            category: ErrorCategory.Fire,
-                            reason: CANNOT_COMPILE_FIRE,
-                            suggestions: null,
-                        });
-                    }
-                }
-                else {
-                    let description = 'fire() can only take in a single call expression as an argument';
-                    if (value.args.length === 0) {
-                        description += ' but received none';
-                    }
-                    else if (value.args.length > 1) {
-                        description += ' but received multiple arguments';
-                    }
-                    else if (value.args[0].kind === 'Spread') {
-                        description += ' but received a spread argument';
-                    }
-                    context.pushError({
-                        loc: value.loc,
-                        description,
-                        category: ErrorCategory.Fire,
-                        reason: CANNOT_COMPILE_FIRE,
-                        suggestions: null,
-                    });
-                }
-            }
-            else if (value.kind === 'CallExpression') {
-                context.addCallExpression(lvalue.identifier.id, value);
-            }
-            else if (value.kind === 'FunctionExpression' &&
-                context.inUseEffectLambda()) {
-                visitFunctionExpressionAndPropagateFireDependencies(value, context, false);
-            }
-            else if (value.kind === 'FunctionExpression') {
-                context.addFunctionExpression(lvalue.identifier.id, value);
-            }
-            else if (value.kind === 'LoadLocal') {
-                context.addLoadLocalInstr(lvalue.identifier.id, value);
-            }
-            else if (value.kind === 'LoadGlobal' &&
-                value.binding.kind === 'ImportSpecifier' &&
-                value.binding.module === 'react' &&
-                value.binding.imported === 'fire' &&
-                context.inUseEffectLambda()) {
-                deleteInstrs.add(instr.id);
-            }
-            else if (value.kind === 'LoadGlobal') {
-                context.addLoadGlobalInstrId(lvalue.identifier.id, instr.id);
-            }
-            else if (value.kind === 'ArrayExpression') {
-                context.addArrayExpression(lvalue.identifier.id, value);
-            }
-        }
-        block.instructions = rewriteInstructions(rewriteInstrs, block.instructions);
-        block.instructions = deleteInstructions(deleteInstrs, block.instructions);
-        if (rewriteInstrs.size > 0 || deleteInstrs.size > 0) {
-            hasRewrite = true;
-            fn.env.hasFireRewrite = true;
-        }
-    }
-    if (hasRewrite) {
-        markInstructionIds(fn.body);
-    }
-}
-function visitFunctionExpressionAndPropagateFireDependencies(fnExpr, context, enteringUseEffect) {
-    let withScope = enteringUseEffect
-        ? context.withUseEffectLambdaScope.bind(context)
-        : context.withFunctionScope.bind(context);
-    const calleesCapturedByFnExpression = withScope(() => replaceFireFunctions(fnExpr.loweredFunc.func, context));
-    for (let contextIdx = 0; contextIdx < fnExpr.loweredFunc.func.context.length; contextIdx++) {
-        const contextItem = fnExpr.loweredFunc.func.context[contextIdx];
-        const replacedCallee = calleesCapturedByFnExpression.get(contextItem.identifier.id);
-        if (replacedCallee != null) {
-            fnExpr.loweredFunc.func.context[contextIdx] = Object.assign({}, replacedCallee.fireFunctionBinding);
-        }
-    }
-    context.mergeCalleesFromInnerScope(calleesCapturedByFnExpression);
-    return calleesCapturedByFnExpression;
-}
-function* eachReachablePlace(fn) {
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            if (instr.value.kind === 'FunctionExpression' ||
-                instr.value.kind === 'ObjectMethod') {
-                yield* eachReachablePlace(instr.value.loweredFunc.func);
-            }
-            else {
-                yield* eachInstructionOperand(instr);
-            }
-        }
-    }
-}
-function ensureNoRemainingCalleeCaptures(fn, context, capturedCallees) {
-    var _a;
-    for (const place of eachReachablePlace(fn)) {
-        const calleeInfo = capturedCallees.get(place.identifier.id);
-        if (calleeInfo != null) {
-            const calleeName = ((_a = calleeInfo.capturedCalleeIdentifier.name) === null || _a === void 0 ? void 0 : _a.kind) === 'named'
-                ? calleeInfo.capturedCalleeIdentifier.name.value
-                : '<unknown>';
-            context.pushError({
-                loc: place.loc,
-                description: `All uses of ${calleeName} must be either used with a fire() call in \
-this effect or not used with a fire() call at all. ${calleeName} was used with fire() on line \
-${printSourceLocationLine(calleeInfo.fireLoc)} in this effect`,
-                category: ErrorCategory.Fire,
-                reason: CANNOT_COMPILE_FIRE,
-                suggestions: null,
-            });
-        }
-    }
-}
-function ensureNoMoreFireUses(fn, context) {
-    for (const place of eachReachablePlace(fn)) {
-        if (place.identifier.type.kind === 'Function' &&
-            place.identifier.type.shapeId === BuiltInFireId) {
-            context.pushError({
-                loc: place.identifier.loc,
-                description: 'Cannot use `fire` outside of a useEffect function',
-                category: ErrorCategory.Fire,
-                reason: CANNOT_COMPILE_FIRE,
-                suggestions: null,
-            });
-        }
-    }
-}
-function makeLoadUseFireInstruction(env, importedLoadUseFire) {
-    const useFirePlace = createTemporaryPlace(env, GeneratedSource);
-    useFirePlace.effect = Effect.Read;
-    useFirePlace.identifier.type = DefaultNonmutatingHook;
-    const instrValue = {
-        kind: 'LoadGlobal',
-        binding: Object.assign({}, importedLoadUseFire),
-        loc: GeneratedSource,
-    };
-    return {
-        id: makeInstructionId(0),
-        value: instrValue,
-        lvalue: Object.assign({}, useFirePlace),
-        loc: GeneratedSource,
-        effects: null,
-    };
-}
-function makeLoadFireCalleeInstruction(env, fireCalleeIdentifier) {
-    const loadedFireCallee = createTemporaryPlace(env, GeneratedSource);
-    const fireCallee = {
-        kind: 'Identifier',
-        identifier: fireCalleeIdentifier,
-        reactive: false,
-        effect: Effect.Unknown,
-        loc: fireCalleeIdentifier.loc,
-    };
-    return {
-        id: makeInstructionId(0),
-        value: {
-            kind: 'LoadLocal',
-            loc: GeneratedSource,
-            place: Object.assign({}, fireCallee),
-        },
-        lvalue: Object.assign({}, loadedFireCallee),
-        loc: GeneratedSource,
-        effects: null,
-    };
-}
-function makeCallUseFireInstruction(env, useFirePlace, argPlace) {
-    const useFireCallResultPlace = createTemporaryPlace(env, GeneratedSource);
-    useFireCallResultPlace.effect = Effect.Read;
-    const useFireCall = {
-        kind: 'CallExpression',
-        callee: Object.assign({}, useFirePlace),
-        args: [argPlace],
-        loc: GeneratedSource,
-    };
-    return {
-        id: makeInstructionId(0),
-        value: useFireCall,
-        lvalue: Object.assign({}, useFireCallResultPlace),
-        loc: GeneratedSource,
-        effects: null,
-    };
-}
-function makeStoreUseFireInstruction(env, useFireCallResultPlace, fireFunctionBindingPlace) {
-    promoteTemporary(fireFunctionBindingPlace.identifier);
-    const fireFunctionBindingLValuePlace = createTemporaryPlace(env, GeneratedSource);
-    return {
-        id: makeInstructionId(0),
-        value: {
-            kind: 'StoreLocal',
-            lvalue: {
-                kind: InstructionKind.Const,
-                place: Object.assign({}, fireFunctionBindingPlace),
-            },
-            value: Object.assign({}, useFireCallResultPlace),
-            type: null,
-            loc: GeneratedSource,
-        },
-        lvalue: fireFunctionBindingLValuePlace,
-        loc: GeneratedSource,
-        effects: null,
-    };
-}
-class Context {
-    constructor(env) {
-        _Context_env.set(this, void 0);
-        _Context_errors.set(this, new CompilerError());
-        _Context_callExpressions.set(this, new Map());
-        _Context_functionExpressions.set(this, new Map());
-        _Context_loadLocals.set(this, new Map());
-        _Context_fireCalleesToFireFunctions.set(this, new Map());
-        _Context_calleesWithInsertedFire.set(this, new Set());
-        _Context_capturedCalleeIdentifierIds.set(this, new Map());
-        _Context_inUseEffectLambda.set(this, false);
-        _Context_loadGlobalInstructionIds.set(this, new Map());
-        _Context_arrayExpressions.set(this, new Map());
-        __classPrivateFieldSet(this, _Context_env, env, "f");
-    }
-    pushError(error) {
-        __classPrivateFieldGet(this, _Context_errors, "f").push(error);
-    }
-    withFunctionScope(fn) {
-        fn();
-        return __classPrivateFieldGet(this, _Context_capturedCalleeIdentifierIds, "f");
-    }
-    withUseEffectLambdaScope(fn) {
-        const capturedCalleeIdentifierIds = __classPrivateFieldGet(this, _Context_capturedCalleeIdentifierIds, "f");
-        const inUseEffectLambda = __classPrivateFieldGet(this, _Context_inUseEffectLambda, "f");
-        __classPrivateFieldSet(this, _Context_capturedCalleeIdentifierIds, new Map(), "f");
-        __classPrivateFieldSet(this, _Context_inUseEffectLambda, true, "f");
-        const resultCapturedCalleeIdentifierIds = this.withFunctionScope(fn);
-        __classPrivateFieldSet(this, _Context_capturedCalleeIdentifierIds, capturedCalleeIdentifierIds, "f");
-        __classPrivateFieldSet(this, _Context_inUseEffectLambda, inUseEffectLambda, "f");
-        return resultCapturedCalleeIdentifierIds;
-    }
-    addCallExpression(id, callExpr) {
-        __classPrivateFieldGet(this, _Context_callExpressions, "f").set(id, callExpr);
-    }
-    getCallExpression(id) {
-        return __classPrivateFieldGet(this, _Context_callExpressions, "f").get(id);
-    }
-    addLoadLocalInstr(id, loadLocal) {
-        __classPrivateFieldGet(this, _Context_loadLocals, "f").set(id, loadLocal);
-    }
-    getLoadLocalInstr(id) {
-        return __classPrivateFieldGet(this, _Context_loadLocals, "f").get(id);
-    }
-    getOrGenerateFireFunctionBinding(callee, fireLoc) {
-        const fireFunctionBinding = getOrInsertWith(__classPrivateFieldGet(this, _Context_fireCalleesToFireFunctions, "f"), callee.identifier.id, () => createTemporaryPlace(__classPrivateFieldGet(this, _Context_env, "f"), GeneratedSource));
-        fireFunctionBinding.identifier.type = {
-            kind: 'Function',
-            shapeId: BuiltInFireFunctionId,
-            return: { kind: 'Poly' },
-            isConstructor: false,
-        };
-        __classPrivateFieldGet(this, _Context_capturedCalleeIdentifierIds, "f").set(callee.identifier.id, {
-            fireFunctionBinding,
-            capturedCalleeIdentifier: callee.identifier,
-            fireLoc,
-        });
-        return fireFunctionBinding;
-    }
-    mergeCalleesFromInnerScope(innerCallees) {
-        for (const [id, calleeInfo] of innerCallees.entries()) {
-            __classPrivateFieldGet(this, _Context_capturedCalleeIdentifierIds, "f").set(id, calleeInfo);
-        }
-    }
-    addCalleeWithInsertedFire(id) {
-        __classPrivateFieldGet(this, _Context_calleesWithInsertedFire, "f").add(id);
-    }
-    hasCalleeWithInsertedFire(id) {
-        return __classPrivateFieldGet(this, _Context_calleesWithInsertedFire, "f").has(id);
-    }
-    inUseEffectLambda() {
-        return __classPrivateFieldGet(this, _Context_inUseEffectLambda, "f");
-    }
-    addFunctionExpression(id, fn) {
-        __classPrivateFieldGet(this, _Context_functionExpressions, "f").set(id, fn);
-    }
-    getFunctionExpression(id) {
-        return __classPrivateFieldGet(this, _Context_functionExpressions, "f").get(id);
-    }
-    addLoadGlobalInstrId(id, instrId) {
-        __classPrivateFieldGet(this, _Context_loadGlobalInstructionIds, "f").set(id, instrId);
-    }
-    getLoadGlobalInstrId(id) {
-        return __classPrivateFieldGet(this, _Context_loadGlobalInstructionIds, "f").get(id);
-    }
-    addArrayExpression(id, array) {
-        __classPrivateFieldGet(this, _Context_arrayExpressions, "f").set(id, array);
-    }
-    getArrayExpression(id) {
-        return __classPrivateFieldGet(this, _Context_arrayExpressions, "f").get(id);
-    }
-    hasErrors() {
-        return __classPrivateFieldGet(this, _Context_errors, "f").hasAnyErrors();
-    }
-    throwIfErrorsFound() {
-        if (this.hasErrors())
-            throw __classPrivateFieldGet(this, _Context_errors, "f");
-    }
-}
-_Context_env = new WeakMap(), _Context_errors = new WeakMap(), _Context_callExpressions = new WeakMap(), _Context_functionExpressions = new WeakMap(), _Context_loadLocals = new WeakMap(), _Context_fireCalleesToFireFunctions = new WeakMap(), _Context_calleesWithInsertedFire = new WeakMap(), _Context_capturedCalleeIdentifierIds = new WeakMap(), _Context_inUseEffectLambda = new WeakMap(), _Context_loadGlobalInstructionIds = new WeakMap(), _Context_arrayExpressions = new WeakMap();
-function deleteInstructions(deleteInstrs, instructions) {
-    if (deleteInstrs.size > 0) {
-        const newInstrs = instructions.filter(instr => !deleteInstrs.has(instr.id));
-        return newInstrs;
-    }
-    return instructions;
-}
-function rewriteInstructions(rewriteInstrs, instructions) {
-    if (rewriteInstrs.size > 0) {
-        const newInstrs = [];
-        for (const instr of instructions) {
-            const newInstrsAtId = rewriteInstrs.get(instr.id);
-            if (newInstrsAtId != null) {
-                newInstrs.push(...newInstrsAtId, instr);
-            }
-            else {
-                newInstrs.push(instr);
-            }
-        }
-        return newInstrs;
-    }
-    return instructions;
-}
-
-function validateNoImpureFunctionsInRender(fn) {
-    const errors = new CompilerError();
-    for (const [, block] of fn.body.blocks) {
-        for (const instr of block.instructions) {
-            const value = instr.value;
-            if (value.kind === 'MethodCall' || value.kind == 'CallExpression') {
-                const callee = value.kind === 'MethodCall' ? value.property : value.callee;
-                const signature = getFunctionCallSignature(fn.env, callee.identifier.type);
-                if (signature != null && signature.impure === true) {
-                    errors.pushDiagnostic(CompilerDiagnostic.create({
-                        category: ErrorCategory.Purity,
-                        reason: 'Cannot call impure function during render',
-                        description: (signature.canonicalName != null
-                            ? `\`${signature.canonicalName}\` is an impure function. `
-                            : '') +
-                            'Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent)',
-                        suggestions: null,
-                    }).withDetails({
-                        kind: 'error',
-                        loc: callee.loc,
-                        message: 'Cannot call impure function',
-                    }));
-                }
-            }
-        }
-    }
-    return errors.asResult();
-}
-
 function validateStaticComponents(fn) {
     const error = new CompilerError();
     const knownDynamicComponents = new Map();
@@ -50706,7 +48227,6 @@ function validateStaticComponents(fn) {
 }
 
 function validateNoFreezingKnownMutableFunctions(fn) {
-    const errors = new CompilerError();
     const contextMutationEffects = new Map();
     function visitOperand(operand) {
         if (operand.effect === Effect.Freeze) {
@@ -50718,7 +48238,7 @@ function validateNoFreezingKnownMutableFunctions(fn) {
                     place.identifier.name.kind === 'named'
                     ? `\`${place.identifier.name.value}\``
                     : 'a local variable';
-                errors.pushDiagnostic(CompilerDiagnostic.create({
+                fn.env.recordError(CompilerDiagnostic.create({
                     category: ErrorCategory.Immutability,
                     reason: 'Cannot modify local variables after render completes',
                     description: `This argument is a function which may reassign or mutate ${variable} after render, which can cause inconsistent behavior on subsequent renders. Consider using state instead`,
@@ -50798,14 +48318,12 @@ function validateNoFreezingKnownMutableFunctions(fn) {
             visitOperand(operand);
         }
     }
-    return errors.asResult();
 }
 
 function validateNoDerivedComputationsInEffects(fn) {
     const candidateDependencies = new Map();
     const functions = new Map();
     const locals = new Map();
-    const errors = new CompilerError();
     for (const block of fn.body.blocks.values()) {
         for (const instr of block.instructions) {
             const { lvalue, value } = instr;
@@ -50839,17 +48357,14 @@ function validateNoDerivedComputationsInEffects(fn) {
                             });
                             return (_a = locals.get(dep.identifier.id)) !== null && _a !== void 0 ? _a : dep.identifier.id;
                         });
-                        validateEffect$1(effectFunction.loweredFunc.func, dependencies, errors);
+                        validateEffect$1(effectFunction.loweredFunc.func, dependencies, fn.env);
                     }
                 }
             }
         }
     }
-    if (errors.hasAnyErrors()) {
-        throw errors;
-    }
 }
-function validateEffect$1(effectFunction, effectDeps, errors) {
+function validateEffect$1(effectFunction, effectDeps, env) {
     for (const operand of effectFunction.context) {
         if (isSetStateType(operand.identifier)) {
             continue;
@@ -50952,13 +48467,13 @@ function validateEffect$1(effectFunction, effectDeps, errors) {
         seenBlocks.add(block.id);
     }
     for (const loc of setStateLocations) {
-        errors.push({
+        env.recordError(new CompilerErrorDetail({
             category: ErrorCategory.EffectDerivationsOfState,
             reason: 'Values derived from props and state should be calculated during render, not in an effect. (https://react.dev/learn/you-might-not-need-an-effect#updating-state-based-on-props-or-state)',
             description: null,
             loc,
             suggestions: null,
-        });
+        }));
     }
 }
 
@@ -51826,7 +49341,6 @@ function validateExhaustiveDependencies(fn) {
             loc: place.loc,
         });
     }
-    const error = new CompilerError();
     let startMemo = null;
     function onStartMemoize(value, dependencies, locals) {
         CompilerError.invariant(startMemo == null, {
@@ -51848,7 +49362,8 @@ function validateExhaustiveDependencies(fn) {
             const inferred = Array.from(dependencies);
             const diagnostic = validateDependencies(inferred, (_a = startMemo.deps) !== null && _a !== void 0 ? _a : [], reactive, startMemo.depsLoc, ErrorCategory.MemoDependencies, 'all');
             if (diagnostic != null) {
-                error.pushDiagnostic(diagnostic);
+                fn.env.recordError(diagnostic);
+                startMemo.hasInvalidDeps = true;
             }
         }
         dependencies.clear();
@@ -51897,11 +49412,10 @@ function validateExhaustiveDependencies(fn) {
                 : 'all';
             const diagnostic = validateDependencies(Array.from(inferred), manualDeps, reactive, manualMemoLoc, ErrorCategory.EffectExhaustiveDependencies, effectReportMode);
             if (diagnostic != null) {
-                error.pushDiagnostic(diagnostic);
+                fn.env.recordError(diagnostic);
             }
         },
     }, false);
-    return error.asResult();
 }
 function validateDependencies(inferred, manualDependencies, reactive, manualMemoLoc, category, exhaustiveDepsReportMode) {
     var _a, _b, _c, _d;
@@ -52557,6 +50071,11 @@ function createDiagnostic(category, missing, extra, suggestion) {
         suggestions: suggestion != null ? [suggestion] : null,
     });
 }
+function isEffectHook(identifier) {
+    return (isUseEffectHookType(identifier) ||
+        isUseLayoutEffectHookType(identifier) ||
+        isUseInsertionEffectHookType(identifier));
+}
 
 function run(func, config, fnType, mode, programContext, logger, filename, code) {
     var _a, _b;
@@ -52574,17 +50093,14 @@ function runWithEnvironment(func, env) {
         var _a, _b;
         (_b = (_a = env.logger) === null || _a === void 0 ? void 0 : _a.debugLogIRs) === null || _b === void 0 ? void 0 : _b.call(_a, value);
     };
-    const hir = lower(func, env).unwrap();
+    const hir = lower(func, env);
     log({ kind: 'hir', name: 'HIR', value: hir });
     pruneMaybeThrows(hir);
     log({ kind: 'hir', name: 'PruneMaybeThrows', value: hir });
     validateContextVariableLValues(hir);
-    validateUseMemo(hir).unwrap();
-    if (env.enableDropManualMemoization &&
-        !env.config.enablePreserveExistingManualUseMemo &&
-        !env.config.disableMemoizationForDebugging &&
-        !env.config.enableChangeDetectionForDebugging) {
-        dropManualMemoization(hir).unwrap();
+    validateUseMemo(hir);
+    if (env.enableDropManualMemoization) {
+        dropManualMemoization(hir);
         log({ kind: 'hir', name: 'DropManualMemoization', value: hir });
     }
     inlineImmediatelyInvokedFunctionExpressions(hir);
@@ -52608,61 +50124,40 @@ function runWithEnvironment(func, env) {
     log({ kind: 'hir', name: 'InferTypes', value: hir });
     if (env.enableValidations) {
         if (env.config.validateHooksUsage) {
-            validateHooksUsage(hir).unwrap();
+            validateHooksUsage(hir);
         }
         if (env.config.validateNoCapitalizedCalls) {
-            validateNoCapitalizedCalls(hir).unwrap();
+            validateNoCapitalizedCalls(hir);
         }
-    }
-    if (env.config.enableFire) {
-        transformFire(hir);
-        log({ kind: 'hir', name: 'TransformFire', value: hir });
-    }
-    if (env.config.lowerContextAccess) {
-        lowerContextAccess(hir, env.config.lowerContextAccess);
     }
     optimizePropsMethodCalls(hir);
     log({ kind: 'hir', name: 'OptimizePropsMethodCalls', value: hir });
     analyseFunctions(hir);
     log({ kind: 'hir', name: 'AnalyseFunctions', value: hir });
-    const mutabilityAliasingErrors = inferMutationAliasingEffects(hir);
+    inferMutationAliasingEffects(hir);
     log({ kind: 'hir', name: 'InferMutationAliasingEffects', value: hir });
-    if (env.enableValidations) {
-        if (mutabilityAliasingErrors.isErr()) {
-            throw mutabilityAliasingErrors.unwrapErr();
-        }
-    }
     if (env.outputMode === 'ssr') {
         optimizeForSSR(hir);
         log({ kind: 'hir', name: 'OptimizeForSSR', value: hir });
     }
     deadCodeElimination(hir);
     log({ kind: 'hir', name: 'DeadCodeElimination', value: hir });
-    if (env.config.enableInstructionReordering) {
-        instructionReordering(hir);
-        log({ kind: 'hir', name: 'InstructionReordering', value: hir });
-    }
     pruneMaybeThrows(hir);
     log({ kind: 'hir', name: 'PruneMaybeThrows', value: hir });
-    const mutabilityAliasingRangeErrors = inferMutationAliasingRanges(hir, {
+    inferMutationAliasingRanges(hir, {
         isFunctionExpression: false,
     });
     log({ kind: 'hir', name: 'InferMutationAliasingRanges', value: hir });
     if (env.enableValidations) {
-        if (mutabilityAliasingRangeErrors.isErr()) {
-            throw mutabilityAliasingRangeErrors.unwrapErr();
-        }
         validateLocalsNotReassignedAfterRender(hir);
-    }
-    if (env.enableValidations) {
         if (env.config.assertValidMutableRanges) {
             assertValidMutableRanges(hir);
         }
         if (env.config.validateRefAccessDuringRender) {
-            validateNoRefAccessInRender(hir).unwrap();
+            validateNoRefAccessInRender(hir);
         }
         if (env.config.validateNoSetStateInRender) {
-            validateNoSetStateInRender(hir).unwrap();
+            validateNoSetStateInRender(hir);
         }
         if (env.config.validateNoDerivedComputationsInEffects_exp &&
             env.outputMode === 'lint') {
@@ -52677,17 +50172,14 @@ function runWithEnvironment(func, env) {
         if (env.config.validateNoJSXInTryStatements && env.outputMode === 'lint') {
             env.logErrors(validateNoJSXInTryStatement(hir));
         }
-        if (env.config.validateNoImpureFunctionsInRender) {
-            validateNoImpureFunctionsInRender(hir).unwrap();
-        }
-        validateNoFreezingKnownMutableFunctions(hir).unwrap();
+        validateNoFreezingKnownMutableFunctions(hir);
     }
     inferReactivePlaces(hir);
     log({ kind: 'hir', name: 'InferReactivePlaces', value: hir });
     if (env.enableValidations) {
         if (env.config.validateExhaustiveMemoizationDependencies ||
             env.config.validateExhaustiveEffectDependencies) {
-            validateExhaustiveDependencies(hir).unwrap();
+            validateExhaustiveDependencies(hir);
         }
     }
     rewriteInstructionKindsBasedOnReassignment(hir);
@@ -52784,22 +50276,6 @@ function runWithEnvironment(func, env) {
         name: 'PropagateScopeDependenciesHIR',
         value: hir,
     });
-    if (env.config.inferEffectDependencies) {
-        inferEffectDependencies(hir);
-        log({
-            kind: 'hir',
-            name: 'InferEffectDependencies',
-            value: hir,
-        });
-    }
-    if (env.config.inlineJsxTransform) {
-        inlineJsxTransform(hir, env.config.inlineJsxTransform);
-        log({
-            kind: 'hir',
-            name: 'inlineJsxTransform',
-            value: hir,
-        });
-    }
     const reactiveFunction = buildReactiveFunction(hir);
     log({
         kind: 'reactive',
@@ -52844,14 +50320,6 @@ function runWithEnvironment(func, env) {
         name: 'PruneAlwaysInvalidatingScopes',
         value: reactiveFunction,
     });
-    if (env.config.enableChangeDetectionForDebugging != null) {
-        pruneInitializationDependencies(reactiveFunction);
-        log({
-            kind: 'reactive',
-            name: 'PruneInitializationDependencies',
-            value: reactiveFunction,
-        });
-    }
     propagateEarlyReturns(reactiveFunction);
     log({
         kind: 'reactive',
@@ -52894,28 +50362,28 @@ function runWithEnvironment(func, env) {
         name: 'PruneHoistedContexts',
         value: reactiveFunction,
     });
-    if (env.config.validateMemoizedEffectDependencies) {
-        validateMemoizedEffectDependencies(reactiveFunction).unwrap();
-    }
     if (env.config.enablePreserveExistingMemoizationGuarantees ||
         env.config.validatePreserveExistingMemoizationGuarantees) {
-        validatePreservedManualMemoization(reactiveFunction).unwrap();
+        validatePreservedManualMemoization(reactiveFunction);
     }
     const ast = codegenFunction(reactiveFunction, {
         uniqueIdentifiers,
         fbtOperands,
-    }).unwrap();
+    });
     log({ kind: 'ast', name: 'Codegen', value: ast });
     for (const outlined of ast.outlined) {
         log({ kind: 'ast', name: 'Codegen (outlined)', value: outlined.fn });
     }
     if (env.config.validateSourceLocations) {
-        validateSourceLocations(func, ast).unwrap();
+        validateSourceLocations(func, ast, env);
     }
     if (env.config.throwUnknownException__testonly) {
         throw new Error('unexpected error');
     }
-    return ast;
+    if (env.hasErrors()) {
+        return Err(env.aggregateErrors());
+    }
+    return Ok(ast);
 }
 function compileFn(func, config, fnType, mode, programContext, logger, filename, code) {
     return run(func, config, fnType, mode, programContext, logger, filename, code);
@@ -53270,12 +50738,12 @@ function isFilePartOfSources(sources, filename) {
 function compileProgram(program, pass) {
     var _a, _b;
     if (shouldSkipCompilation(program, pass)) {
-        return null;
+        return;
     }
     const restrictedImportsErr = validateRestrictedImports(program, pass.opts.environment);
     if (restrictedImportsErr) {
         handleError(restrictedImportsErr, pass, null);
-        return null;
+        return;
     }
     const suppressions = findProgramSuppressions(pass.comments, pass.opts.environment.validateExhaustiveMemoizationDependencies &&
         pass.opts.environment.validateHooksUsage
@@ -53330,13 +50798,9 @@ function compileProgram(program, pass) {
             }));
             handleError(error, programContext, null);
         }
-        return null;
+        return;
     }
     applyCompiledFunctions(program, compiledFns, pass, programContext);
-    return {
-        retryErrors: programContext.retryErrors,
-        inferredEffectLocations: programContext.inferredEffectLocations,
-    };
 }
 function findFunctionsToCompile(program, pass, programContext) {
     var _a;
@@ -53347,9 +50811,6 @@ function findFunctionsToCompile(program, pass, programContext) {
             return;
         }
         const fnType = getReactFunctionType(fn, pass);
-        if (pass.opts.environment.validateNoDynamicallyCreatedComponentsOrHooks) {
-            validateNoDynamicallyCreatedComponentsOrHooks(fn, pass, programContext);
-        }
         if (fnType === null || programContext.alreadyCompiled.has(fn.node)) {
             return;
         }
@@ -53399,16 +50860,7 @@ function processFn(fn, fnType, programContext, outputMode) {
         else {
             handleError(compileResult.error, programContext, (_c = fn.node.loc) !== null && _c !== void 0 ? _c : null);
         }
-        if (outputMode === 'client') {
-            const retryResult = retryCompileFunction(fn, fnType, programContext);
-            if (retryResult == null) {
-                return null;
-            }
-            compiledFn = retryResult;
-        }
-        else {
-            return null;
-        }
+        return null;
     }
     else {
         compiledFn = compileResult.compiledFn;
@@ -53437,11 +50889,6 @@ function processFn(fn, fnType, programContext, outputMode) {
         return null;
     }
     else if (programContext.opts.outputMode === 'lint') {
-        for (const loc of compiledFn.inferredEffectLocations) {
-            if (loc !== GeneratedSource) {
-                programContext.inferredEffectLocations.add(loc);
-            }
-        }
         return null;
     }
     else if (programContext.opts.compilationMode === 'annotation' &&
@@ -53453,6 +50900,7 @@ function processFn(fn, fnType, programContext, outputMode) {
     }
 }
 function tryCompileFunction(fn, fnType, programContext, outputMode) {
+    var _a;
     const suppressionsInFunction = filterSuppressionsThatAffectFunction(programContext.suppressions, fn);
     if (suppressionsInFunction.length > 0) {
         return {
@@ -53461,32 +50909,24 @@ function tryCompileFunction(fn, fnType, programContext, outputMode) {
         };
     }
     try {
-        return {
-            kind: 'compile',
-            compiledFn: compileFn(fn, programContext.opts.environment, fnType, outputMode, programContext, programContext.opts.logger, programContext.filename, programContext.code),
-        };
+        const result = compileFn(fn, programContext.opts.environment, fnType, outputMode, programContext, programContext.opts.logger, programContext.filename, programContext.code);
+        if (result.isOk()) {
+            return { kind: 'compile', compiledFn: result.unwrap() };
+        }
+        else {
+            return { kind: 'error', error: result.unwrapErr() };
+        }
     }
     catch (err) {
+        if (err instanceof CompilerError &&
+            err.details.every(detail => detail.category !== ErrorCategory.Invariant)) {
+            programContext.logEvent({
+                kind: 'CompileUnexpectedThrow',
+                fnLoc: (_a = fn.node.loc) !== null && _a !== void 0 ? _a : null,
+                data: err.toString(),
+            });
+        }
         return { kind: 'error', error: err };
-    }
-}
-function retryCompileFunction(fn, fnType, programContext) {
-    const environment = programContext.opts.environment;
-    if (!(environment.enableFire || environment.inferEffectDependencies != null)) {
-        return null;
-    }
-    try {
-        const retryResult = compileFn(fn, environment, fnType, 'client-no-memo', programContext, programContext.opts.logger, programContext.filename, programContext.code);
-        if (!retryResult.hasFireRewrite && !retryResult.hasInferredEffect) {
-            return null;
-        }
-        return retryResult;
-    }
-    catch (err) {
-        if (err instanceof CompilerError) {
-            programContext.retryErrors.push({ fn, error: err });
-        }
-        return null;
     }
 }
 function applyCompiledFunctions(program, compiledFns, pass, programContext) {
@@ -53538,58 +50978,12 @@ function shouldSkipCompilation(program, pass) {
     }
     return false;
 }
-function validateNoDynamicallyCreatedComponentsOrHooks(fn, pass, programContext) {
-    const parentNameExpr = getFunctionName$1(fn);
-    const parentName = parentNameExpr !== null && parentNameExpr.isIdentifier()
-        ? parentNameExpr.node.name
-        : '<anonymous>';
-    const validateNestedFunction = (nestedFn) => {
-        var _a, _b, _c, _d;
-        if (nestedFn.node === fn.node ||
-            programContext.alreadyCompiled.has(nestedFn.node)) {
-            return;
-        }
-        if (nestedFn.scope.getProgramParent() !== nestedFn.scope.parent) {
-            const nestedFnType = getReactFunctionType(nestedFn, pass);
-            const nestedFnNameExpr = getFunctionName$1(nestedFn);
-            const nestedName = nestedFnNameExpr !== null && nestedFnNameExpr.isIdentifier()
-                ? nestedFnNameExpr.node.name
-                : '<anonymous>';
-            if (nestedFnType === 'Component' || nestedFnType === 'Hook') {
-                CompilerError.throwDiagnostic({
-                    category: ErrorCategory.Factories,
-                    reason: `Components and hooks cannot be created dynamically`,
-                    description: `The function \`${nestedName}\` appears to be a React ${nestedFnType.toLowerCase()}, but it's defined inside \`${parentName}\`. Components and Hooks should always be declared at module scope`,
-                    details: [
-                        {
-                            kind: 'error',
-                            message: 'this function dynamically created a component/hook',
-                            loc: (_b = (_a = parentNameExpr === null || parentNameExpr === void 0 ? void 0 : parentNameExpr.node.loc) !== null && _a !== void 0 ? _a : fn.node.loc) !== null && _b !== void 0 ? _b : null,
-                        },
-                        {
-                            kind: 'error',
-                            message: 'the component is created here',
-                            loc: (_d = (_c = nestedFnNameExpr === null || nestedFnNameExpr === void 0 ? void 0 : nestedFnNameExpr.node.loc) !== null && _c !== void 0 ? _c : nestedFn.node.loc) !== null && _d !== void 0 ? _d : null,
-                        },
-                    ],
-                });
-            }
-        }
-        nestedFn.skip();
-    };
-    fn.traverse({
-        FunctionDeclaration: validateNestedFunction,
-        FunctionExpression: validateNestedFunction,
-        ArrowFunctionExpression: validateNestedFunction,
-    });
-}
 function getReactFunctionType(fn, pass) {
     var _a, _b;
-    const hookPattern = pass.opts.environment.hookPattern;
     if (fn.node.body.type === 'BlockStatement') {
         const optInDirectives = tryFindDirectiveEnablingMemoization(fn.node.body.directives, pass.opts);
         if (optInDirectives.unwrapOr(null) != null) {
-            return (_a = getComponentOrHookLike(fn, hookPattern)) !== null && _a !== void 0 ? _a : 'Other';
+            return (_a = getComponentOrHookLike(fn)) !== null && _a !== void 0 ? _a : 'Other';
         }
     }
     let componentSyntaxType = null;
@@ -53606,13 +51000,13 @@ function getReactFunctionType(fn, pass) {
             return null;
         }
         case 'infer': {
-            return componentSyntaxType !== null && componentSyntaxType !== void 0 ? componentSyntaxType : getComponentOrHookLike(fn, hookPattern);
+            return componentSyntaxType !== null && componentSyntaxType !== void 0 ? componentSyntaxType : getComponentOrHookLike(fn);
         }
         case 'syntax': {
             return componentSyntaxType;
         }
         case 'all': {
-            return (_b = getComponentOrHookLike(fn, hookPattern)) !== null && _b !== void 0 ? _b : 'Other';
+            return (_b = getComponentOrHookLike(fn)) !== null && _b !== void 0 ? _b : 'Other';
         }
         default: {
             assertExhaustive$1(pass.opts.compilationMode, `Unexpected compilationMode \`${pass.opts.compilationMode}\``);
@@ -53640,19 +51034,16 @@ function hasMemoCacheFunctionImport(program, moduleName) {
     });
     return hasUseMemoCache;
 }
-function isHookName$1(s, hookPattern) {
-    if (hookPattern !== null) {
-        return new RegExp(hookPattern).test(s);
-    }
+function isHookName$1(s) {
     return /^use[A-Z0-9]/.test(s);
 }
-function isHook$1(path, hookPattern) {
+function isHook$1(path) {
     if (path.isIdentifier()) {
-        return isHookName$1(path.node.name, hookPattern);
+        return isHookName$1(path.node.name);
     }
     else if (path.isMemberExpression() &&
         !path.node.computed &&
-        isHook$1(path.get('property'), hookPattern)) {
+        isHook$1(path.get('property'))) {
         const obj = path.get('object').node;
         const isPascalCaseNameSpace = /^[A-Z].*/;
         return obj.type === 'Identifier' && isPascalCaseNameSpace.test(obj.name);
@@ -53750,20 +51141,20 @@ function isValidComponentParams(params) {
     }
     return false;
 }
-function getComponentOrHookLike(node, hookPattern) {
+function getComponentOrHookLike(node) {
     const functionName = getFunctionName$1(node);
     if (functionName !== null && isComponentName$1(functionName)) {
-        let isComponent = callsHooksOrCreatesJsx(node, hookPattern) &&
+        let isComponent = callsHooksOrCreatesJsx(node) &&
             isValidComponentParams(node.get('params')) &&
             !returnsNonNode(node);
         return isComponent ? 'Component' : null;
     }
-    else if (functionName !== null && isHook$1(functionName, hookPattern)) {
-        return callsHooksOrCreatesJsx(node, hookPattern) ? 'Hook' : null;
+    else if (functionName !== null && isHook$1(functionName)) {
+        return callsHooksOrCreatesJsx(node) ? 'Hook' : null;
     }
     if (node.isFunctionExpression() || node.isArrowFunctionExpression()) {
         if (isForwardRefCallback$1(node) || isMemoCallback$1(node)) {
-            return callsHooksOrCreatesJsx(node, hookPattern) ? 'Component' : null;
+            return callsHooksOrCreatesJsx(node) ? 'Component' : null;
         }
     }
     return null;
@@ -53775,7 +51166,7 @@ function skipNestedFunctions(node) {
         }
     };
 }
-function callsHooksOrCreatesJsx(node, hookPattern) {
+function callsHooksOrCreatesJsx(node) {
     let invokesHooks = false;
     let createsJsx = false;
     node.traverse({
@@ -53784,7 +51175,7 @@ function callsHooksOrCreatesJsx(node, hookPattern) {
         },
         CallExpression(call) {
             const callee = call.get('callee');
-            if (callee.isExpression() && isHook$1(callee, hookPattern)) {
+            if (callee.isExpression() && isHook$1(callee)) {
                 invokesHooks = true;
             }
         },
@@ -53951,8 +51342,6 @@ class ProgramContext {
         this.alreadyCompiled = new (WeakSet !== null && WeakSet !== void 0 ? WeakSet : Set)();
         this.knownReferencedNames = new Set();
         this.imports = new Map();
-        this.retryErrors = [];
-        this.inferredEffectLocations = new Set();
         this.scope = program.scope;
         this.opts = opts;
         this.filename = filename;
@@ -53962,13 +51351,7 @@ class ProgramContext {
         this.hasModuleScopeOptOut = hasModuleScopeOptOut;
     }
     isHookName(name) {
-        if (this.opts.environment.hookPattern == null) {
-            return isHookName$2(name);
-        }
-        else {
-            const match = new RegExp(this.opts.environment.hookPattern).exec(name);
-            return (match != null && typeof match[1] === 'string' && isHookName$2(match[1]));
-        }
+        return isHookName$2(name);
     }
     hasReference(name) {
         return (this.knownReferencedNames.has(name) ||
@@ -54134,7 +51517,6 @@ v4.z.enum([
 v4.z.enum([
     'ssr',
     'client',
-    'client-no-memo',
     'lint',
 ]);
 const defaultOptions = {
@@ -54287,197 +51669,6 @@ function injectReanimatedFlag(options) {
     return Object.assign(Object.assign({}, options), { environment: Object.assign(Object.assign({}, options.environment), { enableCustomTypeDefinitionForReanimated: true }) });
 }
 
-function throwInvalidReact(options, { logger, filename }) {
-    logger === null || logger === void 0 ? void 0 : logger.logEvent(filename, {
-        kind: 'CompileError',
-        fnLoc: null,
-        detail: new CompilerDiagnostic(options),
-    });
-    CompilerError.throwDiagnostic(options);
-}
-function isAutodepsSigil(arg) {
-    if (arg.isIdentifier() && arg.node.name === 'AUTODEPS') {
-        const binding = arg.scope.getBinding(arg.node.name);
-        if (binding && binding.path.isImportSpecifier()) {
-            const importSpecifier = binding.path.node;
-            if (importSpecifier.imported.type === 'Identifier') {
-                return importSpecifier.imported.name === 'AUTODEPS';
-            }
-        }
-        return false;
-    }
-    if (arg.isMemberExpression() && !arg.node.computed) {
-        const object = arg.get('object');
-        const property = arg.get('property');
-        if (object.isIdentifier() &&
-            object.node.name === 'React' &&
-            property.isIdentifier() &&
-            property.node.name === 'AUTODEPS') {
-            return true;
-        }
-    }
-    return false;
-}
-function assertValidEffectImportReference(autodepsIndex, paths, context) {
-    var _a;
-    for (const path of paths) {
-        const parent = path.parentPath;
-        if (parent != null && parent.isCallExpression()) {
-            const args = parent.get('arguments');
-            const maybeCalleeLoc = path.node.loc;
-            const hasInferredEffect = maybeCalleeLoc != null &&
-                context.inferredEffectLocations.has(maybeCalleeLoc);
-            const hasAutodepsArg = args.some(isAutodepsSigil);
-            if (hasAutodepsArg && !hasInferredEffect) {
-                const maybeErrorDiagnostic = matchCompilerDiagnostic(path, context.transformErrors);
-                throwInvalidReact({
-                    category: ErrorCategory.AutomaticEffectDependencies,
-                    reason: 'Cannot infer dependencies of this effect. This will break your build!',
-                    description: 'To resolve, either pass a dependency array or fix reported compiler bailout diagnostics' +
-                        (maybeErrorDiagnostic ? ` ${maybeErrorDiagnostic}` : ''),
-                    details: [
-                        {
-                            kind: 'error',
-                            message: 'Cannot infer dependencies',
-                            loc: (_a = parent.node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
-                        },
-                    ],
-                }, context);
-            }
-        }
-    }
-}
-function assertValidFireImportReference(paths, context) {
-    var _a;
-    if (paths.length > 0) {
-        const maybeErrorDiagnostic = matchCompilerDiagnostic(paths[0], context.transformErrors);
-        throwInvalidReact({
-            category: ErrorCategory.Fire,
-            reason: '[Fire] Untransformed reference to compiler-required feature.',
-            description: 'Either remove this `fire` call or ensure it is successfully transformed by the compiler' +
-                (maybeErrorDiagnostic != null ? ` ${maybeErrorDiagnostic}` : ''),
-            details: [
-                {
-                    kind: 'error',
-                    message: 'Untransformed `fire` call',
-                    loc: (_a = paths[0].node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
-                },
-            ],
-        }, context);
-    }
-}
-function validateNoUntransformedReferences(path, filename, logger, env, compileResult) {
-    const moduleLoadChecks = new Map();
-    if (env.enableFire) {
-        for (const module of Environment.knownReactModules) {
-            const react = getOrInsertWith(moduleLoadChecks, module, () => new Map());
-            react.set('fire', assertValidFireImportReference);
-        }
-    }
-    if (env.inferEffectDependencies) {
-        for (const { function: { source, importSpecifierName }, autodepsIndex, } of env.inferEffectDependencies) {
-            const module = getOrInsertWith(moduleLoadChecks, source, () => new Map());
-            module.set(importSpecifierName, assertValidEffectImportReference.bind(null, autodepsIndex));
-        }
-    }
-    if (moduleLoadChecks.size > 0) {
-        transformProgram(path, moduleLoadChecks, filename, logger, compileResult);
-    }
-}
-function validateImportSpecifier(specifier, importSpecifierChecks, state) {
-    var _a;
-    const imported = specifier.get('imported');
-    const specifierName = imported.node.type === 'Identifier'
-        ? imported.node.name
-        : imported.node.value;
-    const checkFn = importSpecifierChecks.get(specifierName);
-    if (checkFn == null) {
-        return;
-    }
-    if (state.shouldInvalidateScopes) {
-        state.shouldInvalidateScopes = false;
-        state.program.scope.crawl();
-    }
-    const local = specifier.get('local');
-    const binding = local.scope.getBinding(local.node.name);
-    CompilerError.invariant(binding != null, {
-        reason: 'Expected binding to be found for import specifier',
-        loc: (_a = local.node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
-    });
-    checkFn(binding.referencePaths, state);
-}
-function validateNamespacedImport(specifier, importSpecifierChecks, state) {
-    var _a;
-    if (state.shouldInvalidateScopes) {
-        state.shouldInvalidateScopes = false;
-        state.program.scope.crawl();
-    }
-    const local = specifier.get('local');
-    const binding = local.scope.getBinding(local.node.name);
-    const defaultCheckFn = importSpecifierChecks.get(DEFAULT_EXPORT);
-    CompilerError.invariant(binding != null, {
-        reason: 'Expected binding to be found for import specifier',
-        loc: (_a = local.node.loc) !== null && _a !== void 0 ? _a : GeneratedSource,
-    });
-    const filteredReferences = new Map();
-    for (const reference of binding.referencePaths) {
-        if (defaultCheckFn != null) {
-            getOrInsertWith(filteredReferences, defaultCheckFn, () => []).push(reference);
-        }
-        const parent = reference.parentPath;
-        if (parent != null &&
-            parent.isMemberExpression() &&
-            parent.get('object') === reference) {
-            if (parent.node.computed || parent.node.property.type !== 'Identifier') {
-                continue;
-            }
-            const checkFn = importSpecifierChecks.get(parent.node.property.name);
-            if (checkFn != null) {
-                getOrInsertWith(filteredReferences, checkFn, () => []).push(parent);
-            }
-        }
-    }
-    for (const [checkFn, references] of filteredReferences) {
-        checkFn(references, state);
-    }
-}
-function transformProgram(path, moduleLoadChecks, filename, logger, compileResult) {
-    var _a, _b;
-    const traversalState = {
-        shouldInvalidateScopes: true,
-        program: path,
-        filename,
-        logger,
-        transformErrors: (_a = compileResult === null || compileResult === void 0 ? void 0 : compileResult.retryErrors) !== null && _a !== void 0 ? _a : [],
-        inferredEffectLocations: (_b = compileResult === null || compileResult === void 0 ? void 0 : compileResult.inferredEffectLocations) !== null && _b !== void 0 ? _b : new Set(),
-    };
-    path.traverse({
-        ImportDeclaration(path) {
-            const importSpecifierChecks = moduleLoadChecks.get(path.node.source.value);
-            if (importSpecifierChecks == null) {
-                return;
-            }
-            const specifiers = path.get('specifiers');
-            for (const specifier of specifiers) {
-                if (specifier.isImportSpecifier()) {
-                    validateImportSpecifier(specifier, importSpecifierChecks, traversalState);
-                }
-                else {
-                    validateNamespacedImport(specifier, importSpecifierChecks, traversalState);
-                }
-            }
-        },
-    });
-}
-function matchCompilerDiagnostic(badReference, transformErrors) {
-    for (const { fn, error } of transformErrors) {
-        if (fn.isAncestor(badReference)) {
-            return error.toString();
-        }
-    }
-    return null;
-}
-
 const ENABLE_REACT_COMPILER_TIMINGS = process.env['ENABLE_REACT_COMPILER_TIMINGS'] === '1';
 function BabelPluginReactCompiler(_babel) {
     return {
@@ -54485,7 +51676,7 @@ function BabelPluginReactCompiler(_babel) {
         visitor: {
             Program: {
                 enter(prog, pass) {
-                    var _a, _b, _c, _d;
+                    var _a, _b, _c;
                     try {
                         const filename = (_a = pass.filename) !== null && _a !== void 0 ? _a : 'unknown';
                         if (ENABLE_REACT_COMPILER_TIMINGS === true) {
@@ -54504,13 +51695,12 @@ function BabelPluginReactCompiler(_babel) {
                             isDev) {
                             opts = Object.assign(Object.assign({}, opts), { environment: Object.assign(Object.assign({}, opts.environment), { enableResetCacheOnSourceFileChanges: true }) });
                         }
-                        const result = compileProgram(prog, {
+                        compileProgram(prog, {
                             opts,
                             filename: (_b = pass.filename) !== null && _b !== void 0 ? _b : null,
                             comments: (_c = pass.file.ast.comments) !== null && _c !== void 0 ? _c : [],
                             code: pass.file.code,
                         });
-                        validateNoUntransformedReferences(prog, (_d = pass.filename) !== null && _d !== void 0 ? _d : null, opts.logger, opts.environment, result);
                         if (ENABLE_REACT_COMPILER_TIMINGS === true) {
                             performance.mark(`${filename}:end`, {
                                 detail: 'BabelPlugin:Program:end',
