@@ -7,7 +7,7 @@
  * @noflow
  * @nolint
  * @preventMunge
- * @generated SignedSource<<f1f9126028a1995cd2e6b35e7f1ac990>>
+ * @generated SignedSource<<f4411a5f59508652ec76d116e5a6ff64>>
  */
 
 "use strict";
@@ -5057,7 +5057,7 @@ __DEV__ &&
       payload
     ) {
       if (isRenderPhaseUpdate(fiber))
-        throw Error("Cannot update form state while rendering.");
+        throw Error("Cannot update action state while rendering.");
       fiber = actionQueue.action;
       if (null !== fiber) {
         var actionNode = {
@@ -16153,10 +16153,10 @@ __DEV__ &&
     (function () {
       var internals = {
         bundleType: 1,
-        version: "19.3.0-native-fb-e0cc7202-20260227",
+        version: "19.3.0-native-fb-46103596-20260305",
         rendererPackageName: "react-test-renderer",
         currentDispatcherRef: ReactSharedInternals,
-        reconcilerVersion: "19.3.0-native-fb-e0cc7202-20260227"
+        reconcilerVersion: "19.3.0-native-fb-46103596-20260305"
       };
       internals.overrideHookState = overrideHookState;
       internals.overrideHookStateDeletePath = overrideHookStateDeletePath;
@@ -16302,5 +16302,5 @@ __DEV__ &&
             flushSyncWorkAcrossRoots_impl(0, !0));
       }
     };
-    exports.version = "19.3.0-native-fb-e0cc7202-20260227";
+    exports.version = "19.3.0-native-fb-46103596-20260305";
   })();
